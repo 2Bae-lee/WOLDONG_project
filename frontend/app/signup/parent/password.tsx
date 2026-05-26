@@ -1,15 +1,15 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
-    Image,
-    Keyboard,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableWithoutFeedback,
-    View,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableWithoutFeedback,
+  View,
 } from 'react-native';
 import SmallButton from '../../../components/SmallButton';
 import { Colors } from '../../../constants/Colors';

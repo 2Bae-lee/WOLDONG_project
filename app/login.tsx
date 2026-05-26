@@ -53,7 +53,7 @@ export default function Login() {
         setIdError('');
         setPasswordError('');
         
-        router.push('/signup/parent/main' as any);
+        router.push('childprofile/childname' as any);
         }
     
     return (

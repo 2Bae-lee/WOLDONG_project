@@ -33,25 +33,22 @@ export default function CompanionSignupPhoneNumber() {
     };
 
     const handleNext = () => {
-        console.log('전화번호 계속 버튼 눌림');
         console.log('현재 전화번호:', phoneNumber);
     
         const phoneRegex = /^010-\d{4}-\d{4}$/;
     
         if (phoneNumber.trim() === '') {
-        console.log('전화번호 비어 있음');
         setPhoneError('전화번호를 입력해 주세요.');
         return;
         }
     
         if (!phoneRegex.test(phoneNumber)) {
-        console.log('전화번호 형식 틀림');
         setPhoneError('전화번호 형식을 확인해 주세요.');
         return;
         }
     
         setPhoneError('');
-        router.push('/signup/signupsuccess' as any);
+        router.push('/signup/companion/signupsuccess' as any);
     };
     
 

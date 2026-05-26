@@ -1,15 +1,15 @@
 import { router } from 'expo-router';
 import { Image, StyleSheet, Text, View } from 'react-native';
-import PrimaryButton from '../../components/PrimaryButton';
-import { Colors } from '../../constants/Colors';
-import { Fonts } from '../../constants/Fonts';
+import PrimaryButton from '../../../components/PrimaryButton';
+import { Colors } from '../../../constants/Colors';
+import { Fonts } from '../../../constants/Fonts';
 
 export default function OnboardingOne() {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
         <Image
-          source={require('../../assets/images/canola_sprig_vertical.png')}
+          source={require('../../../assets/images/canola_sprig_vertical.png')}
           style={styles.flower}
         />
         <Text style={styles.title}>월동</Text>
@@ -21,7 +21,7 @@ export default function OnboardingOne() {
 
       <PrimaryButton
         label="이동"
-        onPress={() => router.push('../../login')}
+        onPress={() => router.push('/login')}
       />
     </View>
   );

@@ -39,6 +39,8 @@ lib64/
 .venv
 env/
 venv/
+venv311/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
+uvicorn-warning*.log

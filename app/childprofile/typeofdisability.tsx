@@ -29,7 +29,7 @@ export default function SignupRole() {
         }
 
         router.push({
-            pathname: '/childprofile/characteristic',        
+            pathname: '/childprofile/howtointeracte',        
             params: {        
               name: childName,        
               profileImage,        

@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pydantic
+python-dotenv
+openai
+numpy
+pandas
+joblib
+tensorflow
+msvc-runtime

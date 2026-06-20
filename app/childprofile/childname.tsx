@@ -43,8 +43,6 @@ export default function SignupRole() {
       };
     
     const isValidBirthDate = (birth: string) => {
-        const birthRegex = /^\d{4}\.\d{2}\.\d{2}$/;
-
         const year = Number(birth.slice(0, 4));
         const month = Number(birth.slice(5, 7));
         const day = Number(birth.slice(8, 10));

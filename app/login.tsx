@@ -1,16 +1,16 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
-    Image,
-    Keyboard,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableWithoutFeedback,
-    View,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableWithoutFeedback,
+  View,
 } from 'react-native';
 import PrimaryButton from '../components/PrimaryButton';
 import { Colors } from '../constants/Colors';

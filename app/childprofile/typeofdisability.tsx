@@ -1,11 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
-    Image,
-    Pressable,
-    StyleSheet,
-    Text,
-    View,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import PrimaryButton from '../../components/PrimaryButton';
 import { Colors } from '../../constants/Colors';
@@ -29,7 +29,7 @@ export default function SignupRole() {
         }
 
         router.push({
-            pathname: '/childprofile/characteristic',        
+            pathname: '/childprofile/intellectual/howtointeracte',        
             params: {        
               name: childName,        
               profileImage,        

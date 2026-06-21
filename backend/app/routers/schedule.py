@@ -21,22 +21,28 @@ class ScheduleCreateRequest(BaseModel):
     title: str
     date: date
     start_time: str
-    destination: str
-    transport: str
+    place_type: str                     # 장소 유형 (병원, 마트, 공원 등)
+    transport_type: str                 # 이동수단 (버스, 지하철, 택시 등)
+    activities: list[str] = []          # 활동 목록 (진료, 주사 등)
+    wait_possible: bool = False         # 대기 가능성
+    crowd_possible: bool = False        # 혼잡 가능성
     preparations: list[str] = []
-    checklist: list[str] = []          # 텍스트 목록으로 받아서 ChecklistItem으로 변환
+    checklist: list[str] = []
 
     class Config:
         json_schema_extra = {
             "example": {
-                "child_id": "6651f3a2c1d2e3f4a5b6c7d8",
-                "companion_id": "6651f3a2c1d2e3f4a5b6c7d9",
-                "title": "병원 외출",
-                "date": "2026-05-28",
+                "child_id": "6a11374a0d58a12be7dfbd0a",
+                "companion_id": "6a12a747ff493593beee803c",
+                "title": "병원 정기검진",
+                "date": "2026-06-01",
                 "start_time": "10:00",
-                "destination": "서울대병원",
-                "transport": "택시",
-                "preparations": ["선글라스", "이어폰", "간식"],
+                "place_type": "병원",
+                "transport_type": "버스",
+                "activities": ["진료", "주사"],
+                "wait_possible": True,
+                "crowd_possible": True,
+                "preparations": ["선글라스", "이어폰"],
                 "checklist": ["10분 전 일정 알려주기", "손 잡고 이동하기"]
             }
         }
@@ -46,8 +52,11 @@ class ScheduleUpdateRequest(BaseModel):
     title: Optional[str] = None
     date: Optional[date] = None
     start_time: Optional[str] = None
-    destination: Optional[str] = None
-    transport: Optional[str] = None
+    place_type: Optional[str] = None
+    transport_type: Optional[str] = None
+    activities: Optional[list[str]] = None
+    wait_possible: Optional[bool] = None
+    crowd_possible: Optional[bool] = None
     companion_id: Optional[str] = None
     preparations: Optional[list[str]] = None
     checklist: Optional[list[str]] = None
@@ -60,9 +69,9 @@ class ChecklistUpdateRequest(BaseModel):
 
 
 class JournalCreateRequest(BaseModel):
-    reaction: str                      # 아이의 이동 반응
-    difficulties: str                  # 어려웠던 점
-    memo: Optional[str] = None         # 기타 메모
+    reaction: str
+    difficulties: str
+    memo: Optional[str] = None
 
 
 # ─── 라우트 ────────────────────────────────────────────
@@ -70,7 +79,6 @@ class JournalCreateRequest(BaseModel):
 # POST /api/schedules - 일정 등록 (부모 전용)
 @router.post("")
 async def create_schedule(body: ScheduleCreateRequest, user: User = Depends(parent_only)):
-    # 아동 확인
     try:
         oid = PydanticObjectId(body.child_id)
     except Exception:
@@ -82,7 +90,6 @@ async def create_schedule(body: ScheduleCreateRequest, user: User = Depends(pare
     if child.guardian_id != str(user.id):
         return error("접근 권한이 없습니다", 403)
 
-    # 체크리스트 텍스트 → ChecklistItem 변환
     checklist_items = [
         ChecklistItem(item_id=str(uuid.uuid4()), content=c)
         for c in body.checklist
@@ -95,8 +102,11 @@ async def create_schedule(body: ScheduleCreateRequest, user: User = Depends(pare
         title=body.title,
         date=body.date.isoformat(),
         start_time=body.start_time,
-        destination=body.destination,
-        transport=body.transport,
+        place_type=body.place_type,
+        transport_type=body.transport_type,
+        activities=body.activities,
+        wait_possible=body.wait_possible,
+        crowd_possible=body.crowd_possible,
         preparations=body.preparations,
         checklist=checklist_items,
     )
@@ -122,7 +132,8 @@ async def get_schedules(user: User = Depends(parent_only)):
             "title": s.title,
             "date": s.date,
             "start_time": s.start_time,
-            "destination": s.destination,
+            "place_type": s.place_type,
+            "transport_type": s.transport_type,
             "status": s.status,
             "child_id": s.child_id,
         }
@@ -152,7 +163,8 @@ async def get_today_schedules(user: User = Depends(get_current_user)):
             "title": s.title,
             "date": s.date,
             "start_time": s.start_time,
-            "destination": s.destination,
+            "place_type": s.place_type,
+            "transport_type": s.transport_type,
             "status": s.status,
             "child_id": s.child_id,
         }
@@ -172,13 +184,11 @@ async def get_schedule(schedule_id: str, user: User = Depends(get_current_user))
     if not schedule:
         return error("일정을 찾을 수 없습니다", 404)
 
-    # 부모 또는 담당 동행인만 접근 가능
     if user.role == "parent" and schedule.guardian_id != str(user.id):
         return error("접근 권한이 없습니다", 403)
     if user.role == "companion" and schedule.companion_id != str(user.id):
         return error("접근 권한이 없습니다", 403)
 
-    # 아동 특성 가져오기
     child_traits = {}
     try:
         child_oid = PydanticObjectId(schedule.child_id)
@@ -200,8 +210,11 @@ async def get_schedule(schedule_id: str, user: User = Depends(get_current_user))
         "title": schedule.title,
         "date": schedule.date,
         "start_time": schedule.start_time,
-        "destination": schedule.destination,
-        "transport": schedule.transport,
+        "place_type": schedule.place_type,
+        "transport_type": schedule.transport_type,
+        "activities": schedule.activities,
+        "wait_possible": schedule.wait_possible,
+        "crowd_possible": schedule.crowd_possible,
         "status": schedule.status,
         "child_id": schedule.child_id,
         "companion_id": schedule.companion_id,
@@ -235,21 +248,19 @@ async def update_schedule(schedule_id: str, body: ScheduleUpdateRequest, user: U
     if schedule.guardian_id != str(user.id):
         return error("접근 권한이 없습니다", 403)
 
-    # 업데이트 가능한 필드만 수정
-    update_data = body.dict(exclude_unset=True)
+    update_data = body.model_dump(exclude_none=True)
+    if "date" in update_data:
+        update_data["date"] = update_data["date"].isoformat()
     if "checklist" in update_data:
-        # 체크리스트 텍스트 → ChecklistItem 변환
         update_data["checklist"] = [
             ChecklistItem(item_id=str(uuid.uuid4()), content=c)
             for c in update_data["checklist"]
         ]
+    update_data["updated_at"] = datetime.utcnow()
 
-    for field, value in update_data.items():
-        setattr(schedule, field, value)
-    schedule.updated_at = datetime.utcnow()
     await schedule.set(update_data)
-
     return success(None, "일정이 수정되었습니다")
+
 
 # DELETE /api/schedules/{schedule_id} - 일정 삭제 (부모 전용)
 @router.delete("/{schedule_id}")
@@ -269,7 +280,7 @@ async def delete_schedule(schedule_id: str, user: User = Depends(parent_only)):
     return success(None, "일정이 삭제되었습니다")
 
 
-# PATCH /api/schedules/{schedule_id}/checklist - 체크리스트 완료 체크 (동행인/부모)
+# PATCH /api/schedules/{schedule_id}/checklist - 체크리스트 완료 체크
 @router.patch("/{schedule_id}/checklist")
 async def update_checklist(schedule_id: str, body: ChecklistUpdateRequest, user: User = Depends(get_current_user)):
     try:
@@ -286,7 +297,6 @@ async def update_checklist(schedule_id: str, body: ChecklistUpdateRequest, user:
     if user.role == "companion" and schedule.companion_id != str(user.id):
         return error("접근 권한이 없습니다", 403)
 
-    # 체크리스트 아이템 업데이트
     updated = False
     for item in schedule.checklist:
         if item.item_id == body.item_id:

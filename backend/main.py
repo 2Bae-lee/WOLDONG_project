@@ -7,6 +7,8 @@ from app.routers.child import router as child_router
 from app.routers.invite import router as invite_router
 from app.routers.notification import router as notification_router
 from app.routers.home import router as home_router
+from app.routers.companion import router as companion_router 
+from app.routers.schedule import router as schedule_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -49,3 +51,5 @@ app.include_router(child_router)
 app.include_router(invite_router)
 app.include_router(notification_router)
 app.include_router(home_router)
+app.include_router(companion_router) 
+app.include_router(schedule_router)

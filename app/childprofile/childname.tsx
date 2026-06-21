@@ -90,6 +90,9 @@ export default function SignupRole() {
             params: {
                 name: trimmedname,                        
                 profileImage: profileImage ?? '',
+                gender,
+                birth,
+                relationship,
             
               }, 
             } as any);

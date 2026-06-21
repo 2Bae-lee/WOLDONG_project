@@ -133,7 +133,7 @@ export default function CommunicationProfile() {
           <View style={styles.logoRow}>
             <Text style={styles.logoTitle}>월동</Text>
             <Image
-              source={require('../../assets/images/canola_flower_small.png')}
+              source={require('../../../assets/images/canola_flower_small.png')}
               style={styles.logoFlower}
               resizeMode="contain"
             />

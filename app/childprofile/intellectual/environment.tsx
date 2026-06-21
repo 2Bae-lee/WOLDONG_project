@@ -55,16 +55,10 @@ const sensoryOptions: Option[] = [
         label: '대기 ',
         value: 'wait',
     },
-    {   
-        icon: '🚌',
-        label: '대중교통',
-        value: 'transportation',
-    },
     ];
 
 const placeOptions = [
     '지하철',
-    '차', 
     '새로운 장소',
     '병원',
     '식당',
@@ -120,7 +114,7 @@ export default function EnvironmentProfile() {
 }
 
         router.push({
-        pathname: '/childprofile/intellectual/dangerduringoutdoor',
+        pathname: '/childprofile/intellectual/schedulechange',
         params: {
             name: params.name ?? '',
             profileImage: params.profileImage ?? '',
@@ -149,7 +143,7 @@ export default function EnvironmentProfile() {
             <View style={styles.logoRow}>
                 <Text style={styles.logoTitle}>월동</Text>
                 <Image
-                source={require('../../assets/images/canola_flower_small.png')}
+                source={require('../../../assets/images/canola_flower_small.png')}
                 style={styles.logoFlower}
                 resizeMode="contain"
                 />

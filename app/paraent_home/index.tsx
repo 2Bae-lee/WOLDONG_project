@@ -870,7 +870,13 @@ export default function ParentHome() {
                         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                         keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
                     >
-                        <Pressable style={styles.editModal} onPress={(event) => event.stopPropagation()}>
+                        <Pressable
+                            style={[
+                                styles.editModal,
+                                editTarget?.type === 'schedule' && styles.todayEditModalOffset,
+                            ]}
+                            onPress={(event) => event.stopPropagation()}
+                        >
                             <Text style={styles.modalTitle}>
                                 {editTarget?.type === 'handoff' ? '인수인계 자료 수정하기' : '일정 수정하기'}
                             </Text>
@@ -1582,6 +1588,10 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#E8DDC8',
         padding: 20,
+    },
+
+    todayEditModalOffset: {
+        transform: [{ translateY: 28 }],
     },
 
     modalTitle: {

@@ -461,6 +461,11 @@ export default function CompanionChildHome() {
                         </Pressable>
                     </View>
                 )}
+
+                <Pressable style={styles.socialStoryButton}>
+                    <Ionicons name="book-outline" size={20} color={Colors.text} />
+                    <Text style={styles.socialStoryButtonText}>소셜 스토리 만들기</Text>
+                </Pressable>
             </ScrollView>
 
             <View style={styles.bottomTabWrap}>
@@ -885,6 +890,25 @@ const styles = StyleSheet.create({
         fontFamily: Fonts.body,
         fontSize: 14,
         color: Colors.textShadow,
+    },
+
+    socialStoryButton: {
+        width: '100%',
+        minHeight: 52,
+        borderRadius: 26,
+        backgroundColor: Colors.highlight1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        marginTop: 2,
+    },
+
+    socialStoryButtonText: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 16,
+        fontWeight: '900',
+        color: Colors.text,
     },
 
     bottomTabWrap: {

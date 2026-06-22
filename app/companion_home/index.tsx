@@ -88,6 +88,19 @@ export default function CompanionChildren() {
         requestSent?: string;
         requestedInviteCode?: string;
         requestedChildName?: string;
+        updatedEventId?: string;
+        updatedEventTitle?: string;
+        updatedEventTodos?: string;
+        deletedEventId?: string;
+        addedEventId?: string;
+        addedEventYear?: string;
+        addedEventMonth?: string;
+        addedEventDay?: string;
+        addedEventTitle?: string;
+        addedEventChildName?: string;
+        addedEventGuardian?: string;
+        addedEventTodos?: string;
+        tab?: string;
     }>();
     const companionName = params.companionName || '박민지';
     const companionJob = params.companionJob || params.companionRelation || '담임 선생님';
@@ -202,6 +215,145 @@ export default function CompanionChildren() {
 
         setRequestMessage(`${params.requestedChildName} 보호자에게 승인 요청을 보냈어요.`);
     }, [params.requestSent, params.requestedChildName, params.requestedInviteCode]);
+
+    useEffect(() => {
+        if (params.tab === 'calendar') {
+            setActiveTab('calendar');
+        }
+    }, [params.tab]);
+
+    useEffect(() => {
+        if (
+            !params.addedEventId ||
+            !params.addedEventYear ||
+            !params.addedEventMonth ||
+            !params.addedEventDay ||
+            !params.addedEventTitle ||
+            !params.addedEventChildName ||
+            !params.addedEventGuardian
+        ) {
+            return;
+        }
+
+        const addedEventId = Number(params.addedEventId);
+        const addedEventYear = Number(params.addedEventYear);
+        const addedEventMonth = Number(params.addedEventMonth);
+        const addedEventDay = Number(params.addedEventDay);
+
+        if (
+            Number.isNaN(addedEventId) ||
+            Number.isNaN(addedEventYear) ||
+            Number.isNaN(addedEventMonth) ||
+            Number.isNaN(addedEventDay)
+        ) {
+            return;
+        }
+
+        let parsedTodos: CalendarTodo[] = [];
+
+        try {
+            const parsed = params.addedEventTodos ? JSON.parse(params.addedEventTodos) : [];
+            parsedTodos = Array.isArray(parsed)
+                ? parsed
+                    .filter((item) => typeof item === 'string' && item.trim())
+                    .map((item, index) => ({
+                        id: addedEventId + index + 1,
+                        text: item.trim(),
+                        done: false,
+                    }))
+                : [];
+        } catch {
+            parsedTodos = [];
+        }
+
+        setCalendarEvents((current) => {
+            if (current.some((event) => event.id === addedEventId)) return current;
+
+            return [
+                ...current,
+                {
+                    id: addedEventId,
+                    year: addedEventYear,
+                    month: addedEventMonth,
+                    day: addedEventDay,
+                    childName: params.addedEventChildName ?? '김월동',
+                    guardian: params.addedEventGuardian ?? '김보호자',
+                    title: params.addedEventTitle ?? '새 일정',
+                    todos: parsedTodos,
+                },
+            ];
+        });
+        setCalendarYear(addedEventYear);
+        setCalendarMonth(addedEventMonth);
+        setSelectedDay(addedEventDay);
+        setActiveTab('calendar');
+    }, [
+        params.addedEventChildName,
+        params.addedEventDay,
+        params.addedEventGuardian,
+        params.addedEventId,
+        params.addedEventMonth,
+        params.addedEventTitle,
+        params.addedEventTodos,
+        params.addedEventYear,
+    ]);
+
+    useEffect(() => {
+        if (params.deletedEventId) {
+            const deletedEventId = Number(params.deletedEventId);
+
+            if (!Number.isNaN(deletedEventId)) {
+                setCalendarEvents((current) => current.filter((event) => event.id !== deletedEventId));
+                setActiveTab('calendar');
+            }
+
+            return;
+        }
+
+        if (!params.updatedEventId || !params.updatedEventTitle) {
+            return;
+        }
+
+        const updatedEventId = Number(params.updatedEventId);
+        if (Number.isNaN(updatedEventId)) return;
+
+        let parsedTodos: CalendarTodo[] = [];
+
+        try {
+            const parsed = params.updatedEventTodos ? JSON.parse(params.updatedEventTodos) : [];
+            parsedTodos = Array.isArray(parsed)
+                ? parsed
+                    .filter((item) => (
+                        typeof item?.id === 'number' &&
+                        typeof item?.text === 'string' &&
+                        typeof item?.done === 'boolean'
+                    ))
+                    .map((item) => ({
+                        id: item.id,
+                        text: item.text,
+                        done: item.done,
+                    }))
+                : [];
+        } catch {
+            parsedTodos = [];
+        }
+
+        setCalendarEvents((current) => current.map((event) => (
+            event.id === updatedEventId
+                ? {
+                    ...event,
+                    title: params.updatedEventTitle ?? event.title,
+                    todos: parsedTodos,
+                }
+                : event
+        )));
+        setActiveTab('calendar');
+    }, [
+        params.deletedEventId,
+        params.updatedEventId,
+        params.updatedEventTitle,
+        params.updatedEventTodos,
+    ]);
     const calendarDays = useMemo(() => {
         const firstDay = new Date(calendarYear, calendarMonth - 1, 1).getDay();
         const daysInMonth = new Date(calendarYear, calendarMonth, 0).getDate();
@@ -254,27 +406,30 @@ export default function CompanionChildren() {
     };
 
     const openNewCalendarEvent = () => {
-        const defaultChild = connectedChildren[0];
-
-        setEditingEvent(null);
-        setEditTitle('');
-        setEditChildName(defaultChild?.name ?? '');
-        setEditTodos([]);
-        setEditTodoText('');
-        setEditError('');
-        setIsChildPickerOpen(false);
-        setIsCalendarEditorOpen(true);
+        router.push({
+            pathname: '/companion_home/calendar_create',
+            params: {
+                year: String(calendarYear),
+                month: String(calendarMonth),
+                day: String(selectedDay),
+            },
+        } as any);
     };
 
     const openCalendarEventEditor = (event: CalendarEvent) => {
-        setEditingEvent(event);
-        setEditTitle(event.title);
-        setEditChildName(event.childName);
-        setEditTodos(event.todos);
-        setEditTodoText('');
-        setEditError('');
-        setIsChildPickerOpen(false);
-        setIsCalendarEditorOpen(true);
+        router.push({
+            pathname: '/companion_home/calendar_edit',
+            params: {
+                eventId: String(event.id),
+                year: String(event.year),
+                month: String(event.month),
+                day: String(event.day),
+                childName: event.childName,
+                guardian: event.guardian,
+                title: event.title,
+                todos: JSON.stringify(event.todos),
+            },
+        } as any);
     };
 
     const closeCalendarEditor = () => {
@@ -738,195 +893,6 @@ export default function CompanionChildren() {
                     </Pressable>
                 </View>
             </View>
-
-            <Modal
-                visible={isCalendarEditorOpen}
-                transparent
-                animationType="fade"
-                onRequestClose={closeCalendarEditor}
-            >
-                <Pressable style={styles.modalBackdrop} onPress={closeCalendarEditor}>
-                    <KeyboardAvoidingView
-                        style={styles.modalKeyboardArea}
-                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
-                    >
-                        <Pressable style={styles.calendarEditModal} onPress={(event) => event.stopPropagation()}>
-                            <ScrollView
-                                style={styles.calendarEditScroll}
-                                contentContainerStyle={styles.calendarEditInner}
-                                keyboardShouldPersistTaps="handled"
-                                showsVerticalScrollIndicator={false}
-                            >
-                                <Text style={styles.modalTitle}>
-                                    {editingEvent ? '일정 수정하기' : '일정 추가하기'}
-                                </Text>
-                                <Text style={styles.modalDescription}>
-                                    {calendarMonth}월 {selectedDay}일에 공유할 일정과 세부 Todo를 정리해주세요.
-                                </Text>
-
-                                <Text style={styles.modalSubTitle}>어린이 선택</Text>
-                                <Pressable
-                                    style={styles.childPickerTrigger}
-                                    onPress={() => {
-                                        Keyboard.dismiss();
-                                        setIsChildPickerOpen((current) => !current);
-                                    }}
-                                >
-                                    <View style={styles.childSelectAvatar}>
-                                        <Image
-                                            source={require('../../assets/images/icon_child.png')}
-                                            style={styles.childSelectImage}
-                                            resizeMode="contain"
-                                        />
-                                    </View>
-                                    <View style={styles.childPickerTextArea}>
-                                        <Text style={[
-                                            styles.childPickerValue,
-                                            !selectedEditChild && styles.childPickerPlaceholder,
-                                        ]}>
-                                            {selectedEditChild?.name ?? '어린이를 선택해주세요'}
-                                        </Text>
-                                        <Text style={styles.childPickerMeta}>
-                                            {selectedEditChild
-                                                ? `${selectedEditChild.guardian} 보호자와 연결됨`
-                                                : '담당 어린이 목록에서 선택'}
-                                        </Text>
-                                    </View>
-                                    <Ionicons
-                                        name={isChildPickerOpen ? 'chevron-up' : 'chevron-down'}
-                                        size={20}
-                                        color={Colors.text}
-                                    />
-                                </Pressable>
-
-                                {isChildPickerOpen ? (
-                                    <View style={styles.childPickerPanel}>
-                                        <ScrollView
-                                            style={styles.childPickerScroll}
-                                            nestedScrollEnabled
-                                            keyboardShouldPersistTaps="handled"
-                                            showsVerticalScrollIndicator={false}
-                                        >
-                                            {connectedChildren.map((child) => {
-                                                const selected = editChildName === child.name;
-
-                                                return (
-                                                    <Pressable
-                                                        key={child.id}
-                                                        style={[
-                                                            styles.childSelectRow,
-                                                            selected && styles.childSelectRowSelected,
-                                                        ]}
-                                                        onPress={() => {
-                                                            setEditChildName(child.name);
-                                                            setIsChildPickerOpen(false);
-                                                            if (editError) setEditError('');
-                                                        }}
-                                                    >
-                                                        <View style={styles.childSelectAvatar}>
-                                                            <Image
-                                                                source={require('../../assets/images/icon_child.png')}
-                                                                style={styles.childSelectImage}
-                                                                resizeMode="contain"
-                                                            />
-                                                        </View>
-                                                        <View style={styles.childSelectTextArea}>
-                                                            <Text style={styles.childSelectName}>{child.name}</Text>
-                                                            <Text style={styles.childSelectMeta}>
-                                                                {child.guardian} 보호자와 연결됨
-                                                            </Text>
-                                                        </View>
-                                                        {selected ? (
-                                                            <Ionicons
-                                                                name="checkmark-circle"
-                                                                size={22}
-                                                                color={Colors.highlight1}
-                                                            />
-                                                        ) : null}
-                                                    </Pressable>
-                                                );
-                                            })}
-                                        </ScrollView>
-                                    </View>
-                                ) : null}
-
-                                <Text style={styles.modalSubTitle}>일정 이름</Text>
-                                <TextInput
-                                    style={styles.modalInput}
-                                    value={editTitle}
-                                    onChangeText={(text) => {
-                                        setEditTitle(text);
-                                        if (editError) setEditError('');
-                                    }}
-                                    placeholder="ex) 병원 진료"
-                                    placeholderTextColor={Colors.textShadow}
-                                    returnKeyType="done"
-                                />
-
-                                <Text style={styles.modalSubTitle}>세부 Todo</Text>
-                                <View style={styles.todoEditorCard}>
-                                    {editTodos.map((todo) => (
-                                        <View key={todo.id} style={styles.todoEditorRow}>
-                                            <Pressable
-                                                style={[
-                                                    styles.todoEditorCheck,
-                                                    todo.done && styles.todoEditorCheckDone,
-                                                ]}
-                                                onPress={() => toggleEditTodo(todo.id)}
-                                            >
-                                                {todo.done ? (
-                                                    <Ionicons name="checkmark" size={14} color={Colors.realwhite} />
-                                                ) : null}
-                                            </Pressable>
-                                            <Text style={[
-                                                styles.todoEditorText,
-                                                todo.done && styles.todoEditorTextDone,
-                                            ]}>
-                                                {todo.text}
-                                            </Text>
-                                            <Pressable onPress={() => deleteEditTodo(todo.id)} hitSlop={8}>
-                                                <Ionicons name="close" size={18} color={Colors.textShadow} />
-                                            </Pressable>
-                                        </View>
-                                    ))}
-
-                                    <View style={styles.todoAddRow}>
-                                        <TextInput
-                                            style={styles.todoAddInput}
-                                            placeholder="세부 할 일을 입력해주세요"
-                                            placeholderTextColor={Colors.textShadow}
-                                            value={editTodoText}
-                                            onChangeText={setEditTodoText}
-                                            returnKeyType="done"
-                                            onSubmitEditing={addEditTodo}
-                                        />
-                                        <Pressable style={styles.todoAddButton} onPress={addEditTodo}>
-                                            <Ionicons name="add" size={18} color={Colors.text} />
-                                        </Pressable>
-                                    </View>
-                                </View>
-
-                                {editError ? <Text style={styles.errorText}>{editError}</Text> : null}
-
-                                <View style={styles.modalButtonRow}>
-                                    {editingEvent ? (
-                                        <Pressable style={styles.deleteButton} onPress={deleteCalendarEvent}>
-                                            <Text style={styles.deleteButtonText}>삭제</Text>
-                                        </Pressable>
-                                    ) : null}
-                                    <Pressable style={styles.cancelButton} onPress={closeCalendarEditor}>
-                                        <Text style={styles.cancelButtonText}>취소</Text>
-                                    </Pressable>
-                                    <Pressable style={styles.submitButton} onPress={saveCalendarEvent}>
-                                        <Text style={styles.submitButtonText}>저장</Text>
-                                    </Pressable>
-                                </View>
-                            </ScrollView>
-                        </Pressable>
-                    </KeyboardAvoidingView>
-                </Pressable>
-            </Modal>
 
             <Modal
                 visible={Boolean(editingTodayTodo)}
@@ -1712,6 +1678,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#E8DDC8',
         overflow: 'hidden',
+        transform: [{ translateY: 28 }],
     },
 
     calendarEditScroll: {
@@ -1909,13 +1876,13 @@ const styles = StyleSheet.create({
         backgroundColor: '#F7F4E8',
         padding: 12,
         marginBottom: 16,
-        gap: 10,
+        gap: 8,
     },
 
     todoEditorRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        minHeight: 28,
+        minHeight: 34,
     },
 
     todoEditorCheck: {
@@ -1937,7 +1904,7 @@ const styles = StyleSheet.create({
         fontFamily: Fonts.body,
         fontSize: 14,
         color: Colors.text,
-        lineHeight: 20,
+        lineHeight: 22,
     },
 
     todoEditorTextDone: {

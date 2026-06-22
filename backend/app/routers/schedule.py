@@ -4,6 +4,7 @@ from typing import Optional
 from datetime import datetime, date
 from beanie import PydanticObjectId
 import uuid
+import httpx
 
 from app.models.user import User
 from app.models.child import Child
@@ -11,6 +12,8 @@ from app.models.schedule import Schedule, ScheduleStatus, ChecklistItem
 from app.middleware.auth import parent_only, companion_only, get_current_user
 from app.utils.response import success, error
 from app.models.invite import CompanionRequest, RequestStatus
+from app.routers.ai import AI_SERVER_URL
+
 
 router = APIRouter(prefix="/api/schedules", tags=["외출 일정"])
 
@@ -358,3 +361,124 @@ async def create_journal(schedule_id: str, body: JournalCreateRequest, user: Use
     })
 
     return success(None, "동행일지가 등록되었습니다")
+
+# GET /api/schedules/{schedule_id}/warnings - 주의사항 예측
+@router.get("/{schedule_id}/warnings")
+async def get_warnings(schedule_id: str, user: User = Depends(get_current_user)):
+    try:
+        oid = PydanticObjectId(schedule_id)
+    except Exception:
+        return error("유효하지 않은 schedule_id입니다", 400)
+
+    schedule = await Schedule.get(oid)
+    if not schedule:
+        return error("일정을 찾을 수 없습니다", 404)
+
+    if user.role == "parent" and schedule.guardian_id != str(user.id):
+        return error("접근 권한이 없습니다", 403)
+    if user.role == "companion" and schedule.companion_id != str(user.id):
+        return error("접근 권한이 없습니다", 403)
+
+    # 아동 특성 가져오기
+    child = None
+    try:
+        child_oid = PydanticObjectId(schedule.child_id)
+        child = await Child.get(child_oid)
+    except Exception:
+        pass
+
+    # checked_items 만들기
+    checked_items = []
+
+    # 일정 정보 변환
+    place_map = {
+        "병원": "일정_장소_병원방문",
+        "학교": "일정_장소_학교방문",
+        "마트": "일정_장소_마트방문",
+        "공공기관": "일정_장소_공공기관방문",
+        "새로운 장소": "일정_장소_새로운장소",
+        "야외": "일정_장소_야외활동",
+    }
+    transport_map = {
+        "버스": "일정_이동_버스이용",
+        "지하철": "일정_이동_지하철이용",
+        "택시": "일정_이동_차량이동",
+        "도보": "일정_이동_도보이동",
+    }
+    activity_map = {
+        "진료": "일정_활동_진료있음",
+        "검사": "일정_활동_검사있음",
+        "주사": "일정_활동_주사또는치료있음",
+        "식사": "일정_활동_식사있음",
+        "구매": "일정_활동_구매또는계산있음",
+        "상담": "일정_활동_상담또는설명듣기",
+    }
+
+    if schedule.place_type in place_map:
+        checked_items.append(place_map[schedule.place_type])
+    if schedule.transport_type in transport_map:
+        checked_items.append(transport_map[schedule.transport_type])
+    for activity in schedule.activities:
+        if activity in activity_map:
+            checked_items.append(activity_map[activity])
+    if schedule.wait_possible:
+        checked_items.append("일정_환경_대기시간있음")
+    if schedule.crowd_possible:
+        checked_items.append("일정_환경_사람많음")
+
+    # 아동 특성 변환
+    if child:
+        env_map = {
+            "큰 소리": "아동_환경_큰 소리",
+            "사람 많은 곳": "아동_환경_사람 많은 곳",
+            "밝은 빛": "아동_환경_밝은 빛",
+            "냄새": "아동_환경_냄새",
+            "신체 접촉": "아동_환경_신체 접촉",
+            "갑작스러운 움직임": "아동_환경_갑작스러운 움직임",
+            "대기": "아동_환경_대기",
+        }
+        caution_map = {
+            "차도/차량 위험 인지를 어려워해요": "아동_외출주의_차도/차량 위험 인지를 어려워해요",
+            "신호등/횡단보도 규칙을 어려워해요": "아동_외출주의_신호등/횡단보도 규칙을 어려워해요",
+            "낯선 사람을 쉽게 따라갈 수 있어요": "아동_외출주의_낯선 사람을 쉽게 따라갈 수 있어요",
+            "동행인과 떨어지면 위험을 잘 인지하지 못해요": "아동_외출주의_동행인과 떨어지면 위험을 잘 인지하지 못해요",
+            "갑자기 뛰어갈 수 있어요": "아동_외출주의_갑자기 뛰어갈 수 있어요",
+            "위험한 물건을 만질 수 있어요": "아동_외출주의_위험한 물건을 만질 수 있어요",
+        }
+        place_difficult_map = {
+            "지하철": "아동_장소_지하철",
+            "새로운 장소": "아동_장소_새로운 장소",
+            "병원": "아동_장소_병원",
+            "식당": "아동_장소_식당",
+            "버스": "아동_장소_버스",
+            "마트": "아동_장소_마트",
+            "놀이공원": "아동_장소_놀이공원",
+            "영화관/공연장": "아동_장소_영화관/공연장",
+        }
+
+        for env in child.difficult_environments:
+            if env in env_map:
+                checked_items.append(env_map[env])
+        for caution in child.caution_situations:
+            if caution in caution_map:
+                checked_items.append(caution_map[caution])
+        for place in child.difficult_places:
+            if place in place_difficult_map:
+                checked_items.append(place_difficult_map[place])
+
+    # AI 서버로 전송
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{AI_SERVER_URL}/predict-warning",
+                json={
+                    "checked_items": checked_items,
+                    "threshold": 0.5
+                },
+                timeout=30.0
+            )
+        return success(response.json(), "주의사항 예측 완료")
+    except httpx.ConnectError:
+        return error("AI 서버에 연결할 수 없습니다", 503)
+    except Exception as e:
+        return error(f"AI 서버 오류: {str(e)}", 500)

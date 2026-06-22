@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useMemo, useRef, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Image,
     Keyboard,
@@ -31,6 +31,8 @@ type ActiveTab = 'today' | 'calendar';
 
 type CalendarEvent = {
     id: number;
+    year: number;
+    month: number;
     day: number;
     title: string;
     companion: string;
@@ -65,29 +67,40 @@ function getTodayTitle() {
 }
 
 export default function ParentHome() {
+    const params = useLocalSearchParams<{
+        tab?: string;
+        addedEventId?: string;
+        addedEventYear?: string;
+        addedEventMonth?: string;
+        addedEventDay?: string;
+        addedEventTitle?: string;
+        addedEventCompanion?: string;
+    }>();
     const todayTitle = useMemo(() => getTodayTitle(), []);
     const today = useMemo(() => new Date(), []);
     const currentMonth = today.getMonth() + 1;
     const currentYear = today.getFullYear();
     const todayDay = today.getDate();
+    const [calendarYear, setCalendarYear] = useState(currentYear);
+    const [calendarMonth, setCalendarMonth] = useState(currentMonth);
     const calendarDays = useMemo(() => {
-        const firstDay = new Date(currentYear, currentMonth - 1, 1).getDay();
-        const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+        const firstDay = new Date(calendarYear, calendarMonth - 1, 1).getDay();
+        const daysInMonth = new Date(calendarYear, calendarMonth, 0).getDate();
 
         return [
             ...Array.from({ length: firstDay }, () => null),
             ...Array.from({ length: daysInMonth }, (_, index) => index + 1),
         ];
-    }, [currentMonth, currentYear]);
+    }, [calendarMonth, calendarYear]);
     const scrollViewRef = useRef<ScrollView>(null);
     const [activeTab, setActiveTab] = useState<ActiveTab>('today');
     const [selectedCalendarDay, setSelectedCalendarDay] = useState(todayDay);
     const [schedules, setSchedules] = useState(initialSchedules);
     const [handoffs, setHandoffs] = useState(initialHandoffs);
-    const [calendarEvents] = useState<CalendarEvent[]>([
-        { id: 1, day: todayDay, title: '병원 진료', companion: '박민지' },
-        { id: 2, day: todayDay, title: '진료 후 쉬는 시간', companion: '이하늘' },
-        { id: 3, day: Math.min(todayDay + 3, new Date(currentYear, currentMonth, 0).getDate()), title: '언어 치료', companion: '최서윤' },
+    const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([
+        { id: 1, year: currentYear, month: currentMonth, day: todayDay, title: '병원 진료', companion: '박민지' },
+        { id: 2, year: currentYear, month: currentMonth, day: todayDay, title: '진료 후 쉬는 시간', companion: '이하늘' },
+        { id: 3, year: currentYear, month: currentMonth, day: Math.min(todayDay + 3, new Date(currentYear, currentMonth, 0).getDate()), title: '언어 치료', companion: '최서윤' },
     ]);
     const [isScheduleInputOpen, setIsScheduleInputOpen] = useState(false);
     const [isHandoffInputOpen, setIsHandoffInputOpen] = useState(false);
@@ -95,7 +108,63 @@ export default function ParentHome() {
     const [handoffText, setHandoffText] = useState('');
     const [editTarget, setEditTarget] = useState<EditTarget>(null);
     const [editText, setEditText] = useState('');
-    const selectedCalendarEvents = calendarEvents.filter((event) => event.day === selectedCalendarDay);
+    const selectedCalendarEvents = calendarEvents.filter((event) => (
+        event.year === calendarYear &&
+        event.month === calendarMonth &&
+        event.day === selectedCalendarDay
+    ));
+
+    useEffect(() => {
+        if (params.tab === 'calendar') {
+            setActiveTab('calendar');
+        }
+
+        if (
+            !params.addedEventId ||
+            !params.addedEventTitle ||
+            !params.addedEventCompanion ||
+            !params.addedEventYear ||
+            !params.addedEventMonth ||
+            !params.addedEventDay
+        ) {
+            return;
+        }
+
+        const nextEvent = {
+            id: Number(params.addedEventId),
+            year: Number(params.addedEventYear),
+            month: Number(params.addedEventMonth),
+            day: Number(params.addedEventDay),
+            title: params.addedEventTitle,
+            companion: params.addedEventCompanion,
+        };
+
+        if (
+            Number.isNaN(nextEvent.id) ||
+            Number.isNaN(nextEvent.year) ||
+            Number.isNaN(nextEvent.month) ||
+            Number.isNaN(nextEvent.day)
+        ) {
+            return;
+        }
+
+        setCalendarYear(nextEvent.year);
+        setCalendarMonth(nextEvent.month);
+        setSelectedCalendarDay(nextEvent.day);
+        setCalendarEvents((current) => (
+            current.some((event) => event.id === nextEvent.id)
+                ? current
+                : [...current, nextEvent]
+        ));
+    }, [
+        params.addedEventCompanion,
+        params.addedEventDay,
+        params.addedEventId,
+        params.addedEventMonth,
+        params.addedEventTitle,
+        params.addedEventYear,
+        params.tab,
+    ]);
 
     const cancelAddInputs = () => {
         if (!isScheduleInputOpen && !isHandoffInputOpen) return;
@@ -377,10 +446,10 @@ export default function ParentHome() {
                     <View style={styles.section}>
                         <View style={styles.calendarHeader}>
                             <View>
-                                <Text style={styles.sectionTitle}>{currentMonth}월 캘린더</Text>
+                                <Text style={styles.sectionTitle}>{calendarMonth}월 캘린더</Text>
                                 <Text style={styles.calendarSubtitle}>동행인과 함께 보는 공유 일정이에요.</Text>
                             </View>
-                            <Text style={styles.calendarYear}>{currentYear}</Text>
+                            <Text style={styles.calendarYear}>{calendarYear}</Text>
                         </View>
 
                         <View style={styles.calendarCard}>
@@ -392,7 +461,11 @@ export default function ParentHome() {
 
                             <View style={styles.calendarGrid}>
                                 {calendarDays.map((day, index) => {
-                                    const hasEvent = day !== null && calendarEvents.some((event) => event.day === day);
+                                    const hasEvent = day !== null && calendarEvents.some((event) => (
+                                        event.year === calendarYear &&
+                                        event.month === calendarMonth &&
+                                        event.day === day
+                                    ));
                                     const selected = day === selectedCalendarDay;
                                     const isToday = day === todayDay;
 
@@ -431,7 +504,7 @@ export default function ParentHome() {
 
                         <View style={styles.calendarEventHeader}>
                             <Text style={styles.calendarEventTitle}>
-                                {currentMonth}월 {selectedCalendarDay}일 일정
+                                {calendarMonth}월 {selectedCalendarDay}일 일정
                             </Text>
                         </View>
 
@@ -461,8 +534,8 @@ export default function ParentHome() {
                                 router.push({
                                     pathname: '/paraent_home/calendar_add',
                                     params: {
-                                        year: String(currentYear),
-                                        month: String(currentMonth),
+                                        year: String(calendarYear),
+                                        month: String(calendarMonth),
                                         day: String(selectedCalendarDay),
                                     },
                                 } as any)

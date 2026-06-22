@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useMemo } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../components/BackButton';
 import { Colors } from '../../constants/Colors';
@@ -11,6 +12,7 @@ type Companion = {
     relation: string;
     phone: string;
     status: string;
+    permissions: string[];
 };
 
 const companions: Companion[] = [
@@ -20,6 +22,7 @@ const companions: Companion[] = [
         relation: '담임 선생님',
         phone: '010-1234-5678',
         status: '아이 프로필 공유 완료',
+        permissions: ['아이 프로필', '오늘 일정', '인수인계 자료'],
     },
     {
         id: 2,
@@ -27,6 +30,7 @@ const companions: Companion[] = [
         relation: '활동지원사',
         phone: '010-2345-6789',
         status: '오늘 일정 확인 가능',
+        permissions: ['오늘 일정', '공유 캘린더', '인수인계 자료'],
     },
     {
         id: 3,
@@ -34,10 +38,54 @@ const companions: Companion[] = [
         relation: '치료사',
         phone: '010-3456-7890',
         status: '인수인계 자료 공유 완료',
+        permissions: ['아이 프로필', '공유 캘린더'],
     },
 ];
 
 export default function Companions() {
+    const params = useLocalSearchParams<{
+        acceptedName?: string;
+        acceptedRelation?: string;
+        acceptedPhone?: string;
+        acceptedPermissions?: string;
+    }>();
+
+    const visibleCompanions = useMemo(() => {
+        if (!params.acceptedName) return companions;
+
+        const acceptedCompanion: Companion = {
+            id: Date.now(),
+            name: params.acceptedName,
+            relation: params.acceptedRelation || '동행인',
+            phone: params.acceptedPhone || '010-1234-5678',
+            permissions: params.acceptedPermissions
+                ? params.acceptedPermissions.split(',').filter(Boolean)
+                : ['아이 프로필'],
+            status: '부모님이 승인한 동행인',
+        };
+
+        const withoutDuplicate = companions.filter((companion) => companion.name !== acceptedCompanion.name);
+        return [acceptedCompanion, ...withoutDuplicate];
+    }, [
+        params.acceptedName,
+        params.acceptedPermissions,
+        params.acceptedPhone,
+        params.acceptedRelation,
+    ]);
+
+    const openCompanionProfile = (companion: Companion) => {
+        router.push({
+            pathname: '/paraent_home/companion_profile',
+            params: {
+                name: companion.name,
+                relation: companion.relation,
+                phone: companion.phone,
+                status: companion.status,
+                permissions: companion.permissions.join(','),
+            },
+        } as any);
+    };
+
     return (
         <ScrollView
             style={styles.scrollView}
@@ -62,8 +110,12 @@ export default function Companions() {
             </View>
 
             <View style={styles.listArea}>
-                {companions.map((companion) => (
-                    <View key={companion.id} style={styles.companionCard}>
+                {visibleCompanions.map((companion) => (
+                    <Pressable
+                        key={`${companion.id}-${companion.name}`}
+                        style={styles.companionCard}
+                        onPress={() => openCompanionProfile(companion)}
+                    >
                         <View style={styles.avatarCircle}>
                             <Image
                                 source={require('../../assets/images/icon_companion.png')}
@@ -88,7 +140,8 @@ export default function Companions() {
                                 <Text style={styles.infoText}>{companion.status}</Text>
                             </View>
                         </View>
-                    </View>
+                        <Ionicons name="chevron-forward" size={20} color={Colors.textShadow} />
+                    </Pressable>
                 ))}
             </View>
 

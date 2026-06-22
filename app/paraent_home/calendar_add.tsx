@@ -155,7 +155,18 @@ export default function CalendarAdd() {
         }
 
         Keyboard.dismiss();
-        router.replace('/paraent_home' as any);
+        router.replace({
+            pathname: '/paraent_home',
+            params: {
+                tab: 'calendar',
+                addedEventId: String(Date.now()),
+                addedEventYear: String(selectedYear),
+                addedEventMonth: String(selectedMonth),
+                addedEventDay: String(selectedDay),
+                addedEventTitle: scheduleTitle.trim(),
+                addedEventCompanion: selectedCompanion,
+            },
+        } as any);
     };
 
     const scrollToFormBottom = () => {

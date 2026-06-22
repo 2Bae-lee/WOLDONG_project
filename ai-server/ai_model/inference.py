@@ -2,7 +2,6 @@ from pathlib import Path
 import os
 import sys
 
-import joblib
 import numpy as np
 import pandas as pd
 
@@ -16,15 +15,51 @@ if sys.platform == "win32":
     except ImportError:
         pass
 
-from tensorflow.keras.models import load_model
-
-
 MODEL_DIR = Path(__file__).resolve().parent
 
 # 모델 파일 불러오기
-model = load_model(MODEL_DIR / "final_warning_model.h5")
-input_cols = joblib.load(MODEL_DIR / "final_input_columns.pkl")
-target_cols = joblib.load(MODEL_DIR / "final_target_columns.pkl")
+_model = None
+_input_cols = None
+_target_cols = None
+
+
+def get_warning_model():
+    global _model
+
+    if _model is not None:
+        return _model
+
+    model_path = MODEL_DIR / "final_warning_model.h5"
+
+    if not model_path.exists():
+        raise FileNotFoundError(f"Warning model not found: {model_path}")
+
+    from tensorflow.keras.models import load_model
+
+    _model = load_model(model_path)
+    return _model
+
+
+def get_warning_columns():
+    global _input_cols, _target_cols
+
+    if _input_cols is not None and _target_cols is not None:
+        return _input_cols, _target_cols
+
+    input_path = MODEL_DIR / "final_input_columns.pkl"
+    target_path = MODEL_DIR / "final_target_columns.pkl"
+
+    if not input_path.exists():
+        raise FileNotFoundError(f"Warning input columns not found: {input_path}")
+
+    if not target_path.exists():
+        raise FileNotFoundError(f"Warning target columns not found: {target_path}")
+
+    import joblib
+
+    _input_cols = joblib.load(input_path)
+    _target_cols = joblib.load(target_path)
+    return _input_cols, _target_cols
 
 warning_templates = {
     "출력_최종주의수준_낮음": "오늘 일정의 전체 주의 수준은 낮은 편입니다.",
@@ -54,6 +89,9 @@ warning_templates = {
 
 
 def predict_warnings(checked_items, threshold=0.5):
+    model = get_warning_model()
+    input_cols, target_cols = get_warning_columns()
+
     # 전체 입력값 0으로 초기화
     input_data = pd.DataFrame(
         np.zeros((1, len(input_cols))),

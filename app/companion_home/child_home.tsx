@@ -224,13 +224,21 @@ export default function CompanionChildHome() {
                         />
                     </View>
 
-                    <View style={styles.profileButton}>
+                    <Pressable
+                        style={styles.profileButton}
+                        onPress={() =>
+                            router.push({
+                                pathname: '/companion_home/child_profile',
+                                params: { childName },
+                            } as any)
+                        }
+                    >
                         <Image
                             source={require('../../assets/images/icon_child.png')}
                             style={styles.profileImage}
                             resizeMode="contain"
                         />
-                    </View>
+                    </Pressable>
                 </View>
 
                 <View style={styles.childSummary}>

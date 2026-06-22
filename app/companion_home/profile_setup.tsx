@@ -147,7 +147,7 @@ export default function CompanionProfileSetup() {
                         <Text style={styles.fieldTitle}>이름<Text style={styles.essential}> *</Text></Text>
                         <TextInput
                             style={[styles.input, nameError && styles.inputError]}
-                            placeholder="예) 박민지"
+                            placeholder="예) 김월동"
                             placeholderTextColor={Colors.textShadow}
                             value={name}
                             onChangeText={(text) => {
@@ -181,7 +181,7 @@ export default function CompanionProfileSetup() {
                         <Text style={styles.fieldTitle}>자기소개</Text>
                         <TextInput
                             style={styles.introInput}
-                            placeholder="예) 아이가 편안하게 이동할 수 있도록 차분하게 안내해요."
+                            placeholder=""
                             placeholderTextColor={Colors.textShadow}
                             value={intro}
                             onChangeText={setIntro}
@@ -193,7 +193,7 @@ export default function CompanionProfileSetup() {
                     <View style={styles.infoCard}>
                         <Ionicons name="information-circle-outline" size={20} color={Colors.text} />
                         <Text style={styles.infoText}>
-                            저장한 정보는 부모님이 동행인 목록과 승인 정보에서 확인하는 목데이터로 연결돼요.
+                            저장한 정보는 아이 부모님과 공유됩니다.
                         </Text>
                     </View>
 

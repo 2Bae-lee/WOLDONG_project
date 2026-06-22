@@ -36,6 +36,7 @@ type HomeTodo = {
     childName: string;
     title: string;
     guardian: string;
+    done: boolean;
     todos: { id: number; text: string; done: boolean }[];
 };
 
@@ -148,12 +149,13 @@ export default function CompanionChildren() {
     const [editTodos, setEditTodos] = useState<CalendarTodo[]>([]);
     const [editTodoText, setEditTodoText] = useState('');
     const [editError, setEditError] = useState('');
-    const todayTodos: HomeTodo[] = [
+    const [todayTodos, setTodayTodos] = useState<HomeTodo[]>([
         {
             id: 1,
             childName: '김월동',
             title: '병원 진료',
             guardian: '김보호자',
+            done: false,
             todos: [
                 { id: 11, text: '병원 접수하기', done: false },
                 { id: 12, text: '진료 전 짧게 설명하기', done: true },
@@ -164,11 +166,17 @@ export default function CompanionChildren() {
             childName: '이하준',
             title: '귀가 준비',
             guardian: '이보호자',
+            done: false,
             todos: [
                 { id: 21, text: '가방 챙기기', done: false },
             ],
         },
-    ];
+    ]);
+    const [editingTodayTodo, setEditingTodayTodo] = useState<HomeTodo | null>(null);
+    const [todayEditTitle, setTodayEditTitle] = useState('');
+    const [todayEditTodos, setTodayEditTodos] = useState<CalendarTodo[]>([]);
+    const [todayEditTodoText, setTodayEditTodoText] = useState('');
+    const [todayEditError, setTodayEditError] = useState('');
     const connectedChildren = children.filter((child) => child.status === 'connected');
     const calendarDays = useMemo(() => {
         const firstDay = new Date(calendarYear, calendarMonth - 1, 1).getDay();
@@ -360,6 +368,78 @@ export default function CompanionChildren() {
         closeCalendarEditor();
     };
 
+    const toggleTodaySchedule = (id: number) => {
+        setTodayTodos((current) => current.map((schedule) => (
+            schedule.id === id ? { ...schedule, done: !schedule.done } : schedule
+        )));
+    };
+
+    const toggleTodayTodo = (scheduleId: number, todoId: number) => {
+        setTodayTodos((current) => current.map((schedule) => (
+            schedule.id === scheduleId
+                ? {
+                    ...schedule,
+                    todos: schedule.todos.map((todo) => (
+                        todo.id === todoId ? { ...todo, done: !todo.done } : todo
+                    )),
+                }
+                : schedule
+        )));
+    };
+
+    const openTodayEditor = (schedule: HomeTodo) => {
+        setEditingTodayTodo(schedule);
+        setTodayEditTitle(schedule.title);
+        setTodayEditTodos(schedule.todos);
+        setTodayEditTodoText('');
+        setTodayEditError('');
+    };
+
+    const closeTodayEditor = () => {
+        setEditingTodayTodo(null);
+        setTodayEditTitle('');
+        setTodayEditTodos([]);
+        setTodayEditTodoText('');
+        setTodayEditError('');
+        Keyboard.dismiss();
+    };
+
+    const toggleTodayEditTodo = (id: number) => {
+        setTodayEditTodos((current) => current.map((todo) => (
+            todo.id === id ? { ...todo, done: !todo.done } : todo
+        )));
+    };
+
+    const deleteTodayEditTodo = (id: number) => {
+        setTodayEditTodos((current) => current.filter((todo) => todo.id !== id));
+    };
+
+    const addTodayEditTodo = () => {
+        const trimmedText = todayEditTodoText.trim();
+        if (!trimmedText) return;
+
+        setTodayEditTodos((current) => [
+            ...current,
+            { id: Date.now(), text: trimmedText, done: false },
+        ]);
+        setTodayEditTodoText('');
+    };
+
+    const saveTodayEdit = () => {
+        const trimmedTitle = todayEditTitle.trim();
+        if (!editingTodayTodo || !trimmedTitle) {
+            setTodayEditError('일정 이름을 입력해주세요.');
+            return;
+        }
+
+        setTodayTodos((current) => current.map((schedule) => (
+            schedule.id === editingTodayTodo.id
+                ? { ...schedule, title: trimmedTitle, todos: todayEditTodos }
+                : schedule
+        )));
+        closeTodayEditor();
+    };
+
     return (
         <SafeAreaView style={styles.safeArea}>
             <ScrollView
@@ -400,18 +480,45 @@ export default function CompanionChildren() {
                                 {todayTodos.map((schedule) => (
                                     <View key={schedule.id} style={styles.todoBlock}>
                                         <View style={styles.todoTitleRow}>
-                                            <Text style={styles.todoTitle}>{schedule.title}</Text>
+                                            <Pressable
+                                                style={[
+                                                    styles.todayScheduleCheck,
+                                                    schedule.done && styles.todayScheduleCheckDone,
+                                                ]}
+                                                onPress={() => toggleTodaySchedule(schedule.id)}
+                                                hitSlop={8}
+                                            >
+                                                {schedule.done ? (
+                                                    <Ionicons name="checkmark" size={14} color={Colors.realwhite} />
+                                                ) : null}
+                                            </Pressable>
+                                            <Pressable
+                                                style={styles.todayScheduleTextButton}
+                                                onPress={() => openTodayEditor(schedule)}
+                                            >
+                                                <Text style={[
+                                                    styles.todoTitle,
+                                                    schedule.done && styles.todoDoneText,
+                                                ]}>
+                                                    {schedule.title}
+                                                </Text>
+                                            </Pressable>
                                             <Text style={styles.childPill}>{schedule.childName}</Text>
                                         </View>
                                         <Text style={styles.todoMeta}>{schedule.guardian} 보호자와 공유 중</Text>
                                         <View style={styles.todoList}>
                                             {schedule.todos.map((todo) => (
                                                 <View key={todo.id} style={styles.todoRow}>
-                                                    <Ionicons
-                                                        name={todo.done ? 'checkmark-circle' : 'ellipse-outline'}
-                                                        size={16}
-                                                        color={todo.done ? Colors.highlight1 : Colors.textShadow}
-                                                    />
+                                                    <Pressable
+                                                        onPress={() => toggleTodayTodo(schedule.id, todo.id)}
+                                                        hitSlop={8}
+                                                    >
+                                                        <Ionicons
+                                                            name={todo.done ? 'checkmark-circle' : 'ellipse-outline'}
+                                                            size={16}
+                                                            color={todo.done ? Colors.highlight1 : Colors.textShadow}
+                                                        />
+                                                    </Pressable>
                                                     <Text style={[styles.todoText, todo.done && styles.todoDoneText]}>
                                                         {todo.text}
                                                     </Text>
@@ -805,6 +912,102 @@ export default function CompanionChildren() {
                     </KeyboardAvoidingView>
                 </Pressable>
             </Modal>
+
+            <Modal
+                visible={Boolean(editingTodayTodo)}
+                transparent
+                animationType="fade"
+                onRequestClose={closeTodayEditor}
+            >
+                <Pressable style={styles.modalBackdrop} onPress={Keyboard.dismiss}>
+                    <KeyboardAvoidingView
+                        style={styles.modalKeyboardArea}
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+                    >
+                        <Pressable style={styles.calendarEditModal} onPress={(event) => event.stopPropagation()}>
+                            <ScrollView
+                                style={styles.calendarEditScroll}
+                                contentContainerStyle={styles.calendarEditInner}
+                                keyboardShouldPersistTaps="handled"
+                                showsVerticalScrollIndicator={false}
+                            >
+                                <Text style={styles.modalTitle}>오늘 일정 수정하기</Text>
+                                <Text style={styles.modalDescription}>
+                                    일정 이름과 세부 Todo를 수정할 수 있어요.
+                                </Text>
+
+                                <Text style={styles.modalSubTitle}>일정 이름</Text>
+                                <TextInput
+                                    style={styles.modalInput}
+                                    value={todayEditTitle}
+                                    onChangeText={(text) => {
+                                        setTodayEditTitle(text);
+                                        if (todayEditError) setTodayEditError('');
+                                    }}
+                                    placeholder="ex) 병원 진료"
+                                    placeholderTextColor={Colors.textShadow}
+                                    returnKeyType="done"
+                                />
+
+                                <Text style={styles.modalSubTitle}>세부 Todo</Text>
+                                <View style={styles.todoEditorCard}>
+                                    {todayEditTodos.map((todo) => (
+                                        <View key={todo.id} style={styles.todoEditorRow}>
+                                            <Pressable
+                                                style={[
+                                                    styles.todoEditorCheck,
+                                                    todo.done && styles.todoEditorCheckDone,
+                                                ]}
+                                                onPress={() => toggleTodayEditTodo(todo.id)}
+                                            >
+                                                {todo.done ? (
+                                                    <Ionicons name="checkmark" size={14} color={Colors.realwhite} />
+                                                ) : null}
+                                            </Pressable>
+                                            <Text style={[
+                                                styles.todoEditorText,
+                                                todo.done && styles.todoEditorTextDone,
+                                            ]}>
+                                                {todo.text}
+                                            </Text>
+                                            <Pressable onPress={() => deleteTodayEditTodo(todo.id)} hitSlop={8}>
+                                                <Ionicons name="close" size={18} color={Colors.textShadow} />
+                                            </Pressable>
+                                        </View>
+                                    ))}
+
+                                    <View style={styles.todoAddRow}>
+                                        <TextInput
+                                            style={styles.todoAddInput}
+                                            placeholder="세부 할 일을 입력해주세요"
+                                            placeholderTextColor={Colors.textShadow}
+                                            value={todayEditTodoText}
+                                            onChangeText={setTodayEditTodoText}
+                                            returnKeyType="done"
+                                            onSubmitEditing={addTodayEditTodo}
+                                        />
+                                        <Pressable style={styles.todoAddButton} onPress={addTodayEditTodo}>
+                                            <Ionicons name="add" size={18} color={Colors.text} />
+                                        </Pressable>
+                                    </View>
+                                </View>
+
+                                {todayEditError ? <Text style={styles.errorText}>{todayEditError}</Text> : null}
+
+                                <View style={styles.modalButtonRow}>
+                                    <Pressable style={styles.cancelButton} onPress={closeTodayEditor}>
+                                        <Text style={styles.cancelButtonText}>취소</Text>
+                                    </Pressable>
+                                    <Pressable style={styles.submitButton} onPress={saveTodayEdit}>
+                                        <Text style={styles.submitButtonText}>저장</Text>
+                                    </Pressable>
+                                </View>
+                            </ScrollView>
+                        </Pressable>
+                    </KeyboardAvoidingView>
+                </Pressable>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -941,6 +1144,24 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '900',
         color: Colors.text,
+    },
+
+    todayScheduleCheck: {
+        width: 22,
+        height: 22,
+        borderRadius: 6,
+        backgroundColor: Colors.pageBg3,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 10,
+    },
+
+    todayScheduleCheckDone: {
+        backgroundColor: Colors.highlight1,
+    },
+
+    todayScheduleTextButton: {
+        flex: 1,
     },
 
     childPill: {

@@ -9,11 +9,6 @@ import time
 BASE_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(BASE_DIR / ".env")
 
-client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY")
-)
-
-
 #이게 프롬프트인데 이거 수정하면 됨
 BASE_STYLE = """
 cute pastel mascot character,
@@ -31,6 +26,15 @@ no logo
 """
 
 
+def get_openai_client():
+    api_key = os.getenv("OPENAI_API_KEY")
+
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY가 설정되어 있지 않습니다.")
+
+    return OpenAI(api_key=api_key)
+
+
 def create_character_image(traits: str) -> str:
     prompt = f"""
     {traits}
@@ -41,6 +45,8 @@ def create_character_image(traits: str) -> str:
     Clearly reflect all requested colors and accessories.
     Make the character cute, clean, child-friendly, and pastel toned.
     """
+
+    client = get_openai_client()
 
     result = client.images.generate(
         model="gpt-image-1",

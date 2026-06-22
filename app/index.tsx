@@ -1,22 +1,47 @@
 import { router } from 'expo-router';
-import { Image, Pressable, StyleSheet, Text } from 'react-native';
+import { useEffect } from 'react';
+import { Image, StyleSheet, Text, View } from 'react-native';
+import { checkStoredSession } from '../constants/Api';
 import { Colors } from '../constants/Colors';
 import { Fonts } from '../constants/Fonts';
 
 export default function SplashScreen() {
-  const handlePress = () => {
-    router.push('/onboarding/one' as any );
-  }
+  useEffect(() => {
+    let mounted = true;
+
+    const checkSession = async () => {
+      const user = await checkStoredSession();
+      if (!mounted) return;
+
+      if (user?.role === 'parent') {
+        router.replace('/paraent_home' as any);
+        return;
+      }
+
+      if (user?.role === 'companion') {
+        router.replace('/companion_home' as any);
+        return;
+      }
+
+      router.replace('/onboarding/one' as any);
+    };
+
+    checkSession();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
-    <Pressable style={styles.container} onPress={handlePress}>
+    <View style={styles.container}>
       <Image
         source={require('../assets/images/canola_flower_main.png')}
         style={styles.flower}
       />
       <Text style={styles.title}>월동</Text>
-      <Text style={styles.description}>화면을 눌러 시작하기</Text>
-    </Pressable>
+      <Text style={styles.description}>로그인 정보를 확인하고 있어요</Text>
+    </View>
   );
 }
 

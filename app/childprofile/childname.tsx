@@ -14,6 +14,7 @@ import {
     TouchableWithoutFeedback,
     View
 } from 'react-native';
+import BackButton from '../../components/BackButton';
 import PrimaryButton from '../../components/PrimaryButton';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
@@ -136,6 +137,7 @@ export default function SignupRole() {
                     <View style={styles.container}>
                         <View style={styles.logoArea}>
                             <View style={styles.logoRow}>
+                                <BackButton />
                                 <Text style={styles.logoTitle}>월동</Text>
                                 <Image
                                     source={require('../../assets/images/canola_flower_small.png')}

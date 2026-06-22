@@ -7,6 +7,7 @@ import {
     Text,
     View
 } from 'react-native';
+import BackButton from '../../../components/BackButton';
 import DangerOptionCard from '../../../components/DangerOptionCard';
 import PrimaryButton from '../../../components/PrimaryButton';
 import { Colors } from '../../../constants/Colors';
@@ -25,27 +26,27 @@ const noticeOptions: Option[] = [
         value: 'right_before',
     },
     {
-        icon: '5',
+        icon: '🕐',
         label: '5분 전에 알려주면 좋아요',
         value: 'five_minutes',
     },
     {
-        icon: '10',
+        icon: '🕑',
         label: '10분 전에 알려주면 좋아요',
         value: 'ten_minutes',
     },
     {
-        icon: '30',
+        icon: '🕒',
         label: '30분 전에 알려주면 좋아요',
         value: 'thirty_minutes',
     },
     {
-        icon: '1h',
+        icon: '☀️',
         label: '1시간 전에 알려주면 좋아요',
         value: 'one_hour',
     },
     {
-        icon: '3h',
+        icon: '🌤️',
         label: '3시간 전에 알려주면 좋아요',
         value: 'three_hours',
     },
@@ -73,11 +74,15 @@ export default function AdvanceNoticeProfile() {
         scheduleChangeOptions?: string;
     }>();
 
-    const [selectedNotice, setSelectedNotice] = useState('');
+    const [selectedNotices, setSelectedNotices] = useState<string[]>([]);
     const [optionError, setOptionError] = useState('');
 
     const handleSelect = (value: string) => {
-        setSelectedNotice(value);
+        if (selectedNotices.includes(value)) {
+            setSelectedNotices(selectedNotices.filter((item) => item !== value));
+        } else {
+            setSelectedNotices([...selectedNotices, value]);
+        }
 
         if (optionError) {
             setOptionError('');
@@ -85,13 +90,13 @@ export default function AdvanceNoticeProfile() {
     };
 
     const handleNext = () => {
-        if (!selectedNotice) {
+        if (selectedNotices.length === 0) {
             setOptionError('아이에게 맞는 미리 알림 시간을 선택해주세요.');
             return;
         }
 
         router.push({
-            pathname: '/childprofile/intellectual/profilecomplete',
+            pathname: '/childprofile/characteristics/profilecomplete',
             params: {
                 name: params.name ?? '',
                 profileImage: params.profileImage ?? '',
@@ -106,7 +111,7 @@ export default function AdvanceNoticeProfile() {
                 sensoryOptions: params.sensoryOptions ?? '',
                 placeOptions: params.placeOptions ?? '',
                 scheduleChangeOptions: params.scheduleChangeOptions ?? '',
-                advanceNoticeOptions: JSON.stringify([selectedNotice]),
+                advanceNoticeOptions: JSON.stringify(selectedNotices),
             },
         } as any);
     };
@@ -120,6 +125,7 @@ export default function AdvanceNoticeProfile() {
             <View style={styles.container}>
                 <View style={styles.logoArea}>
                     <View style={styles.logoRow}>
+                        <BackButton />
                         <Text style={styles.logoTitle}>월동</Text>
                         <Image
                             source={require('../../../assets/images/canola_flower_small.png')}
@@ -148,7 +154,7 @@ export default function AdvanceNoticeProfile() {
 
                     <View style={styles.optionGrid}>
                         {noticeOptions.map((option) => {
-                            const selected = selectedNotice === option.value;
+                            const selected = selectedNotices.includes(option.value);
 
                             return (
                                 <DangerOptionCard

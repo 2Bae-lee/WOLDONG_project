@@ -7,6 +7,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import BackButton from '../../components/BackButton';
 import PrimaryButton from '../../components/PrimaryButton';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
@@ -17,6 +18,9 @@ export default function SignupRole() {
     const params = useLocalSearchParams<{
         name?: string;
         profileImage?: string;
+        gender?: string;
+        birth?: string;
+        relationship?: string;
       }>();
       const childName = params.name ?? '김월동';
       const profileImage = params.profileImage ?? '';
@@ -29,10 +33,13 @@ export default function SignupRole() {
         }
 
         router.push({
-            pathname: '/childprofile/intellectual/howtointeracte',        
+            pathname: '/childprofile/characteristics/howtointeracte',        
             params: {        
               name: childName,        
               profileImage,        
+              gender: params.gender ?? '',
+              birth: params.birth ?? '',
+              relationship: params.relationship ?? '',
               typeofdisability,       
             },
         
@@ -46,6 +53,7 @@ export default function SignupRole() {
         <View style={styles.container}>
             <View style={styles.logoArea}>
                 <View style={styles.logoRow}>
+                    <BackButton />
                     <Text style={styles.logoTitle}>월동</Text>
                     <Image
                         source={require('../../assets/images/canola_flower_small.png')}
@@ -103,7 +111,7 @@ export default function SignupRole() {
                             setTypeOfDisabiltyError('');
                         }}
                         >
-                            <Text style={styles.selectButtonText}>자폐스퍽트럼</Text>
+                            <Text style={styles.selectButtonText}>자폐스펙트럼</Text>
                         </Pressable>
                     </View>
 

@@ -1,0 +1,120 @@
+import { router } from 'expo-router';
+import { Image, StyleSheet, Text, View } from 'react-native';
+import BackButton from '../../../components/BackButton';
+import PrimaryButton from '../../../components/PrimaryButton';
+import { Colors } from '../../../constants/Colors';
+import { Fonts } from '../../../constants/Fonts';
+
+export default function InviteAccepted() {
+    return (
+        <View style={styles.container}>
+            <View style={styles.logoArea}>
+                <View style={styles.logoRow}>
+                    <BackButton />
+                    <Text style={styles.logoTitle}>월동</Text>
+                    <Image
+                        source={require('../../../assets/images/canola_flower_small.png')}
+                        style={styles.logoFlower}
+                        resizeMode="contain"
+                    />
+                </View>
+            </View>
+
+            <View style={styles.content}>
+                <View style={styles.centerLogoRow}>
+                    <Text style={styles.centerLogo}>월동</Text>
+                    <Image
+                        source={require('../../../assets/images/canola_flower_small.png')}
+                        style={styles.centerFlower}
+                        resizeMode="contain"
+                    />
+                </View>
+
+                <Text style={styles.message}>
+                    동행인의 요청을{'\n'}수락하였습니다.
+                </Text>
+            </View>
+
+            <View style={styles.buttonArea}>
+                <PrimaryButton
+                    label="동행인 정보 확인하기"
+                    width="100%"
+                    onPress={() => router.push('/paraent_home/invite/profile' as any)}
+                />
+            </View>
+        </View>
+    );
+}
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: Colors.pageBg,
+        paddingTop: 10,
+        paddingHorizontal: 32,
+        paddingBottom: 54,
+    },
+
+    logoArea: {
+        alignItems: 'flex-start',
+        marginLeft: -20,
+    },
+
+    logoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+
+    logoTitle: {
+        fontFamily: Fonts.title,
+        fontSize: 32,
+        color: Colors.text,
+    },
+
+    logoFlower: {
+        width: 24,
+        height: 24,
+        marginLeft: -4,
+        marginTop: -20,
+        transform: [{ rotate: '-18deg' }],
+    },
+
+    content: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    centerLogoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 44,
+    },
+
+    centerLogo: {
+        fontFamily: Fonts.title,
+        fontSize: 64,
+        color: Colors.black,
+    },
+
+    centerFlower: {
+        width: 32,
+        height: 32,
+        marginLeft: -8,
+        marginTop: -38,
+        transform: [{ rotate: '-18deg' }],
+    },
+
+    message: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 18,
+        fontWeight: '900',
+        lineHeight: 27,
+        color: Colors.text,
+        textAlign: 'center',
+    },
+
+    buttonArea: {
+        width: '100%',
+    },
+});

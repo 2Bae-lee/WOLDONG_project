@@ -9,7 +9,7 @@ type SensoryOptionCardProps = {
     onPress: () => void;
 };
 
-    export default function SensoryOptionCard({
+export default function SensoryOptionCard({
     icon,
     label,
     selected,
@@ -23,38 +23,30 @@ type SensoryOptionCardProps = {
         ]}
         onPress={onPress}
         >
-        <Text style={styles.icon}>
-            {icon}
-        </Text>
+        <View style={styles.content}>
+            <Text style={styles.icon}>
+                {icon}
+            </Text>
 
-        <Text style={styles.label}>
-            {label}
-        </Text>
-
-        <View style={styles.checkArea}>
-            {selected ? (
-            <Text style={styles.checkText}>✓</Text>
-            ) : null}
+            <Text style={styles.label}>
+                {label}
+            </Text>
         </View>
+
         </Pressable>
     );
 }
 
 const styles = StyleSheet.create({
     container: {
-        width: '23%',
-        aspectRatio: 1,
-
+        width: '48%',
+        minHeight: 104,
         borderWidth: 1,
         borderColor: Colors.pageBg3,
-        borderRadius: 18,
-
+        borderRadius: 12,
         backgroundColor: Colors.pageBg,
-
-        alignItems: 'center',
-        justifyContent: 'center',
-
-        padding: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 12,
     },
 
     selectedContainer: {
@@ -62,27 +54,23 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFF8E3',
     },
 
+    content: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
     icon: {
-        fontSize: 32,
-        marginBottom: 16,
+        fontSize: 28,
+        marginBottom: 8,
     },
 
     label: {
         fontFamily: Fonts.body,
-        fontSize: 14,
+        fontSize: 13,
         color: Colors.text,
         textAlign: 'center',
-        lineHeight: 20,
+        lineHeight: 18,
     },
 
-    checkArea: {
-        height: 20,
-        marginTop: 10,
-    },
-
-    checkText: {
-        color: Colors.highlight1,
-        fontSize: 18,
-        fontWeight: 'bold',
-    },
 });

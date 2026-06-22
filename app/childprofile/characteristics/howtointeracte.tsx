@@ -7,6 +7,7 @@ import {
   Text,
   View
 } from 'react-native';
+import BackButton from '../../../components/BackButton';
 import OptionCard from '../../../components/OptionCard';
 import PrimaryButton from '../../../components/PrimaryButton';
 import { Colors } from '../../../constants/Colors';
@@ -108,7 +109,7 @@ export default function CommunicationProfile() {
     }
 
     router.push({
-      pathname: '/childprofile/intellectual/dangerduringoutdoor',
+      pathname: '/childprofile/characteristics/dangerduringoutdoor',
       params: {
         name: params.name ?? '',
         profileImage: params.profileImage ?? '',
@@ -131,6 +132,7 @@ export default function CommunicationProfile() {
       <View style={styles.container}>
         <View style={styles.logoArea}>
           <View style={styles.logoRow}>
+            <BackButton />
             <Text style={styles.logoTitle}>월동</Text>
             <Image
               source={require('../../../assets/images/canola_flower_small.png')}

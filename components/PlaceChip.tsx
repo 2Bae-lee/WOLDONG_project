@@ -44,7 +44,7 @@ const styles = StyleSheet.create({
     },
 
     selectedChip: {
-        backgroundColor: Colors.highlight1,
+        backgroundColor: '#5F6F16',
     },
 
     text: {
@@ -55,6 +55,6 @@ const styles = StyleSheet.create({
 
     selectedText: {
         fontFamily: Fonts.bodyBold,
-        color: Colors.text,
+        color: Colors.realwhite,
     },
 });

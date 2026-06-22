@@ -7,8 +7,10 @@ import {
     Text,
     View
 } from 'react-native';
+import BackButton from '../../../components/BackButton';
 import PlaceChip from '../../../components/PlaceChip';
 import PrimaryButton from '../../../components/PrimaryButton';
+import RequiredMark from '../../../components/RequiredMark';
 import SensoryOptionCard from '../../../components/SensoryOptionCard';
 import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
@@ -27,7 +29,7 @@ const sensoryOptions: Option[] = [
     },
     {
         icon: '👪',
-        label: '사람 많은 곳 ',
+        label: '사람 많은 곳',
         value: 'crowded_place',
     },
     {   
@@ -52,10 +54,10 @@ const sensoryOptions: Option[] = [
     },
     {   
         icon: '⏲️',
-        label: '대기 ',
+        label: '대기',
         value: 'wait',
     },
-    ];
+];
 
 const placeOptions = [
     '지하철',
@@ -114,7 +116,7 @@ export default function EnvironmentProfile() {
 }
 
         router.push({
-        pathname: '/childprofile/intellectual/schedulechange',
+        pathname: '/childprofile/characteristics/schedulechange',
         params: {
             name: params.name ?? '',
             profileImage: params.profileImage ?? '',
@@ -141,6 +143,7 @@ export default function EnvironmentProfile() {
         <View style={styles.container}>
             <View style={styles.logoArea}>
             <View style={styles.logoRow}>
+                <BackButton />
                 <Text style={styles.logoTitle}>월동</Text>
                 <Image
                 source={require('../../../assets/images/canola_flower_small.png')}
@@ -165,7 +168,7 @@ export default function EnvironmentProfile() {
             </View>
 
             <View style={styles.section}>
-            <Text style={styles.sectionTitle}>힘들어하는 감각 자극</Text>
+            <Text style={styles.sectionTitle}>힘들어하는 감각 자극<RequiredMark /></Text>
 
             <View style={styles.grid}>
                 {sensoryOptions.map((option) => {
@@ -192,7 +195,7 @@ export default function EnvironmentProfile() {
             </View>
 
             <View style={styles.section}>
-            <Text style={styles.sectionTitle}>힘들어하는 장소</Text>
+            <Text style={styles.sectionTitle}>힘들어하는 장소<RequiredMark /></Text>
             <View style={styles.chipContainer}>
                 {placeOptions.map((place) => {
                     const selected =
@@ -341,12 +344,13 @@ const styles = StyleSheet.create({
     chipContainer: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 12,
+        columnGap: 10,
+        rowGap: 12,
     },
     grid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         justifyContent: 'space-between',
-        rowGap: 14,
+        rowGap: 12,
     },
 });

@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from ai_model.models.simple_tacotron import SimpleTacotron
 from ai_model.preprocessing.audio import wav_to_mel
-from ai_model.preprocessing.text import PAD_TOKEN_ID, text_to_sequence
+from ai_model.preprocessing.text import text_to_sequence
 
 
 class TTSDataset(Dataset):
@@ -31,20 +31,36 @@ class TTSDataset(Dataset):
 
 
 def collate_batch(batch):
-    texts, mels = zip(*batch)
-    max_text_len = max(text.size(0) for text in texts)
-    max_mel_len = max(mel.size(1) for mel in mels)
-    n_mels = mels[0].size(0)
+    text_list = []
+    mel_list = []
 
-    text_batch = torch.full(
-        (len(batch), max_text_len),
-        PAD_TOKEN_ID,
-        dtype=torch.long,
-    )
-    mel_batch = torch.zeros(len(batch), n_mels, max_mel_len)
+    for text, mel in batch:
+        # text shape 정리
+        text_list.append(text)
 
-    for index, (text, mel) in enumerate(batch):
+        # mel shape 정리
+        # 예상되는 잘못된 shape: [channel, n_mels, time]
+        # 원하는 shape: [n_mels, time]
+        if mel.dim() == 3:
+            # stereo 또는 mono channel 제거
+            mel = mel.mean(dim=0)
+
+        # 혹시 [time, n_mels]로 들어오면 [n_mels, time]으로 변환
+        if mel.dim() == 2 and mel.size(0) != 80 and mel.size(1) == 80:
+            mel = mel.transpose(0, 1)
+
+        mel_list.append(mel)
+
+    max_text_len = max(text.size(0) for text in text_list)
+    max_mel_len = max(mel.size(1) for mel in mel_list)
+
+    text_batch = torch.zeros(len(batch), max_text_len, dtype=torch.long)
+    mel_batch = torch.zeros(len(batch), 80, max_mel_len)
+
+    for index, text in enumerate(text_list):
         text_batch[index, : text.size(0)] = text
+
+    for index, mel in enumerate(mel_list):
         mel_batch[index, :, : mel.size(1)] = mel
 
     return text_batch, mel_batch

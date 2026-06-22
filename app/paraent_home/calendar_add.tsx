@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Image,
     Keyboard,
@@ -74,6 +74,7 @@ export default function CalendarAdd() {
     const [memo, setMemo] = useState('');
     const [error, setError] = useState('');
     const [sheetTarget, setSheetTarget] = useState<SheetTarget>(null);
+    const [keyboardBottomInset, setKeyboardBottomInset] = useState(0);
     const calendarDays = useMemo(() => {
         const firstDay = new Date(selectedYear, selectedMonth - 1, 1).getDay();
         const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
@@ -172,8 +173,25 @@ export default function CalendarAdd() {
     const scrollToFormBottom = () => {
         setTimeout(() => {
             scrollViewRef.current?.scrollToEnd({ animated: true });
-        }, 120);
+        }, 320);
     };
+
+    useEffect(() => {
+        const showSubscription = Keyboard.addListener('keyboardDidShow', (event) => {
+            setKeyboardBottomInset(event.endCoordinates.height);
+            setTimeout(() => {
+                scrollViewRef.current?.scrollToEnd({ animated: true });
+            }, 80);
+        });
+        const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+            setKeyboardBottomInset(0);
+        });
+
+        return () => {
+            showSubscription.remove();
+            hideSubscription.remove();
+        };
+    }, []);
 
     return (
         <KeyboardAvoidingView
@@ -183,7 +201,10 @@ export default function CalendarAdd() {
         <ScrollView
             ref={scrollViewRef}
             style={styles.scrollView}
-            contentContainerStyle={styles.inner}
+            contentContainerStyle={[
+                styles.inner,
+                keyboardBottomInset ? { paddingBottom: keyboardBottomInset + 180 } : null,
+            ]}
             keyboardShouldPersistTaps="handled"
             automaticallyAdjustKeyboardInsets
             showsVerticalScrollIndicator={false}

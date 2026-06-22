@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
     Image,
@@ -13,6 +14,7 @@ import {
     View,
 } from 'react-native';
 import BackButton from '../../components/BackButton';
+import PrimaryButton from '../../components/PrimaryButton';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 
@@ -108,10 +110,34 @@ function EditableSection({ title, items, onEdit }: EditableSectionProps) {
     );
 }
 
+const parseSections = (value?: string) => {
+    if (!value) return initialSections;
+
+    try {
+        const parsed = JSON.parse(value);
+        if (!Array.isArray(parsed)) return initialSections;
+
+        return initialSections.map((section) => {
+            const matched = parsed.find((item) => item?.id === section.id);
+            return Array.isArray(matched?.items)
+                ? { ...section, items: matched.items.filter((item: unknown) => typeof item === 'string') }
+                : section;
+        });
+    } catch {
+        return initialSections;
+    }
+};
+
 export default function ParentChildProfile() {
-    const [childName, setChildName] = useState('김월동');
-    const [profileImage, setProfileImage] = useState<string | null>(null);
-    const [sections, setSections] = useState(initialSections);
+    const params = useLocalSearchParams<{
+        childName?: string;
+        profileImage?: string;
+        sections?: string;
+    }>();
+
+    const [childName, setChildName] = useState(params.childName || '김월동');
+    const [profileImage, setProfileImage] = useState<string | null>(params.profileImage || null);
+    const [sections, setSections] = useState(() => parseSections(params.sections));
     const [editTarget, setEditTarget] = useState<EditTarget>(null);
     const [editText, setEditText] = useState('');
     const [editSelectedItems, setEditSelectedItems] = useState<string[]>([]);
@@ -187,6 +213,20 @@ export default function ParentChildProfile() {
         ? '이름 수정하기'
         : `${editingSection?.title ?? '특성'} 수정하기`;
 
+    const handleComplete = () => {
+        router.replace({
+            pathname: '/paraent_home',
+            params: {
+                updatedChildName: childName,
+                updatedProfileImage: profileImage ?? '',
+                updatedProfileSections: JSON.stringify(sections.map((section) => ({
+                    id: section.id,
+                    items: section.items,
+                }))),
+            },
+        } as any);
+    };
+
     return (
         <ScrollView
             style={styles.scrollView}
@@ -246,6 +286,10 @@ export default function ParentChildProfile() {
                         />
                     ))}
                 </View>
+            </View>
+
+            <View style={styles.buttonArea}>
+                <PrimaryButton label="완료" width="100%" onPress={handleComplete} />
             </View>
 
             <Modal
@@ -379,6 +423,11 @@ const styles = StyleSheet.create({
         paddingTop: 40,
         paddingBottom: 34,
         backgroundColor: '#F7F4E8',
+    },
+
+    buttonArea: {
+        width: '100%',
+        marginTop: 24,
     },
 
     avatarButton: {

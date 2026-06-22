@@ -20,6 +20,14 @@ type ScheduleItem = {
     id: number;
     text: string;
     done: boolean;
+    companion: string;
+    todos: ScheduleTodo[];
+};
+
+type ScheduleTodo = {
+    id: number;
+    text: string;
+    done: boolean;
 };
 
 type HandoffItem = {
@@ -44,10 +52,27 @@ type EditTarget =
     | null;
 
 const initialSchedules: ScheduleItem[] = [
-    { id: 1, text: '병원 갈 준비', done: false },
-    { id: 2, text: '병원으로 이동', done: true },
-    { id: 3, text: '진료 보기', done: true },
-    { id: 4, text: '주사 맞기', done: true },
+    {
+        id: 1,
+        text: '병원 진료',
+        done: false,
+        companion: '박민지',
+        todos: [
+            { id: 11, text: '병원 갈 준비', done: false },
+            { id: 12, text: '병원으로 이동', done: true },
+            { id: 13, text: '진료 보기', done: true },
+        ],
+    },
+    {
+        id: 2,
+        text: '치료실 방문',
+        done: true,
+        companion: '최서윤',
+        todos: [
+            { id: 21, text: '치료 도구 챙기기', done: true },
+            { id: 22, text: '치료 후 쉬는 시간 갖기', done: true },
+        ],
+    },
 ];
 
 const initialHandoffs: HandoffItem[] = [
@@ -57,6 +82,7 @@ const initialHandoffs: HandoffItem[] = [
 ];
 
 const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
+const companionOptions = ['박민지', '이하늘', '최서윤'];
 
 function getTodayTitle() {
     const today = new Date();
@@ -75,6 +101,9 @@ export default function ParentHome() {
         addedEventDay?: string;
         addedEventTitle?: string;
         addedEventCompanion?: string;
+        updatedChildName?: string;
+        updatedProfileImage?: string;
+        updatedProfileSections?: string;
     }>();
     const todayTitle = useMemo(() => getTodayTitle(), []);
     const today = useMemo(() => new Date(), []);
@@ -94,6 +123,9 @@ export default function ParentHome() {
     }, [calendarMonth, calendarYear]);
     const scrollViewRef = useRef<ScrollView>(null);
     const [activeTab, setActiveTab] = useState<ActiveTab>('today');
+    const [childName, setChildName] = useState('김월동');
+    const [childProfileImage, setChildProfileImage] = useState('');
+    const [childProfileSections, setChildProfileSections] = useState('');
     const [selectedCalendarDay, setSelectedCalendarDay] = useState(todayDay);
     const [schedules, setSchedules] = useState(initialSchedules);
     const [handoffs, setHandoffs] = useState(initialHandoffs);
@@ -108,6 +140,9 @@ export default function ParentHome() {
     const [handoffText, setHandoffText] = useState('');
     const [editTarget, setEditTarget] = useState<EditTarget>(null);
     const [editText, setEditText] = useState('');
+    const [editCompanion, setEditCompanion] = useState(companionOptions[0]);
+    const [editTodos, setEditTodos] = useState<ScheduleTodo[]>([]);
+    const [editTodoText, setEditTodoText] = useState('');
     const selectedCalendarEvents = calendarEvents.filter((event) => (
         event.year === calendarYear &&
         event.month === calendarMonth &&
@@ -117,6 +152,18 @@ export default function ParentHome() {
     useEffect(() => {
         if (params.tab === 'calendar') {
             setActiveTab('calendar');
+        }
+
+        if (params.updatedChildName) {
+            setChildName(params.updatedChildName);
+        }
+
+        if (typeof params.updatedProfileImage === 'string') {
+            setChildProfileImage(params.updatedProfileImage);
+        }
+
+        if (typeof params.updatedProfileSections === 'string') {
+            setChildProfileSections(params.updatedProfileSections);
         }
 
         if (
@@ -164,6 +211,9 @@ export default function ParentHome() {
         params.addedEventTitle,
         params.addedEventYear,
         params.tab,
+        params.updatedChildName,
+        params.updatedProfileImage,
+        params.updatedProfileSections,
     ]);
 
     const cancelAddInputs = () => {
@@ -200,7 +250,13 @@ export default function ParentHome() {
 
         setSchedules((current) => [
             ...current,
-            { id: Date.now(), text: trimmedText, done: false },
+            {
+                id: Date.now(),
+                text: trimmedText,
+                done: false,
+                companion: companionOptions[0],
+                todos: [],
+            },
         ]);
         setScheduleText('');
         setIsScheduleInputOpen(false);
@@ -211,6 +267,9 @@ export default function ParentHome() {
         cancelAddInputs();
         setEditTarget({ type: 'schedule', item });
         setEditText(item.text);
+        setEditCompanion(item.companion);
+        setEditTodos(item.todos);
+        setEditTodoText('');
     };
 
     const addHandoff = () => {
@@ -235,7 +294,31 @@ export default function ParentHome() {
     const closeEditor = () => {
         setEditTarget(null);
         setEditText('');
+        setEditCompanion(companionOptions[0]);
+        setEditTodos([]);
+        setEditTodoText('');
         Keyboard.dismiss();
+    };
+
+    const toggleEditTodo = (id: number) => {
+        setEditTodos((current) => current.map((todo) => (
+            todo.id === id ? { ...todo, done: !todo.done } : todo
+        )));
+    };
+
+    const deleteEditTodo = (id: number) => {
+        setEditTodos((current) => current.filter((todo) => todo.id !== id));
+    };
+
+    const addEditTodo = () => {
+        const trimmedText = editTodoText.trim();
+        if (!trimmedText) return;
+
+        setEditTodos((current) => [
+            ...current,
+            { id: Date.now(), text: trimmedText, done: false },
+        ]);
+        setEditTodoText('');
     };
 
     const saveEdit = () => {
@@ -244,7 +327,14 @@ export default function ParentHome() {
 
         if (editTarget.type === 'schedule') {
             setSchedules((current) => current.map((item) => (
-                item.id === editTarget.item.id ? { ...item, text: trimmedText } : item
+                item.id === editTarget.item.id
+                    ? {
+                        ...item,
+                        text: trimmedText,
+                        companion: editCompanion,
+                        todos: editTodos,
+                    }
+                    : item
             )));
         } else {
             setHandoffs((current) => current.map((item) => (
@@ -306,11 +396,27 @@ export default function ParentHome() {
                         >
                             <Ionicons name="add" size={25} color={Colors.text} />
                         </Pressable>
-                        <Pressable style={styles.profileButton} onPress={() => router.push('/paraent_home/child_profile' as any)}>
+                        <Pressable
+                            style={styles.profileButton}
+                            onPress={() =>
+                                router.push({
+                                    pathname: '/paraent_home/child_profile',
+                                    params: {
+                                        childName,
+                                        profileImage: childProfileImage,
+                                        sections: childProfileSections,
+                                    },
+                                } as any)
+                            }
+                        >
                             <Image
-                                source={require('../../assets/images/icon_child.png')}
-                                style={styles.profileImage}
-                                resizeMode="contain"
+                                source={
+                                    childProfileImage
+                                        ? { uri: childProfileImage }
+                                        : require('../../assets/images/icon_child.png')
+                                }
+                                style={childProfileImage ? styles.profileImageFilled : styles.profileImage}
+                                resizeMode={childProfileImage ? 'cover' : 'contain'}
                             />
                         </Pressable>
                     </View>
@@ -342,12 +448,40 @@ export default function ParentHome() {
                                             style={styles.scheduleTextButton}
                                             onPress={() => openScheduleEditor(item)}
                                         >
-                                            <Text style={[
-                                                styles.scheduleText,
-                                                item.done && styles.scheduleTextDone,
-                                            ]}>
-                                                {item.text}
-                                            </Text>
+                                            <View style={styles.scheduleTitleRow}>
+                                                <Text style={[
+                                                    styles.scheduleText,
+                                                    item.done && styles.scheduleTextDone,
+                                                ]}>
+                                                    {item.text}
+                                                </Text>
+                                                <View style={styles.scheduleMetaPill}>
+                                                    <Ionicons name="person-outline" size={13} color={Colors.textShadow} />
+                                                    <Text style={styles.scheduleMetaText}>{item.companion}와 함께</Text>
+                                                </View>
+                                            </View>
+                                            {item.todos.length > 0 ? (
+                                                <View style={styles.scheduleTodoPreview}>
+                                                    {item.todos.slice(0, 2).map((todo) => (
+                                                        <View key={todo.id} style={styles.scheduleTodoPreviewRow}>
+                                                            <Ionicons
+                                                                name={todo.done ? 'checkmark-circle' : 'ellipse-outline'}
+                                                                size={13}
+                                                                color={todo.done ? Colors.highlight1 : Colors.textShadow}
+                                                            />
+                                                            <Text style={[
+                                                                styles.scheduleTodoPreviewText,
+                                                                todo.done && styles.scheduleTodoPreviewTextDone,
+                                                            ]}>
+                                                                {todo.text}
+                                                            </Text>
+                                                        </View>
+                                                    ))}
+                                                    {item.todos.length > 2 ? (
+                                                        <Text style={styles.scheduleMoreText}>+ {item.todos.length - 2}개 더</Text>
+                                                    ) : null}
+                                                </View>
+                                            ) : null}
                                         </Pressable>
                                     </View>
                                 ))}
@@ -593,7 +727,7 @@ export default function ParentHome() {
                 animationType="fade"
                 onRequestClose={closeEditor}
             >
-                <Pressable style={styles.modalBackdrop} onPress={closeEditor}>
+                <Pressable style={styles.modalBackdrop} onPress={Keyboard.dismiss}>
                     <Pressable style={styles.editModal} onPress={() => undefined}>
                         <Text style={styles.modalTitle}>
                             {editTarget?.type === 'schedule' ? '일정 수정하기' : '인수인계 자료 수정하기'}
@@ -608,6 +742,75 @@ export default function ParentHome() {
                             textAlignVertical="top"
                             autoFocus
                         />
+
+                        {editTarget?.type === 'schedule' ? (
+                            <>
+                                <Text style={styles.modalSubTitle}>함께 가는 동행인</Text>
+                                <View style={styles.modalChipRow}>
+                                    {companionOptions.map((companion) => {
+                                        const selected = editCompanion === companion;
+
+                                        return (
+                                            <Pressable
+                                                key={companion}
+                                                style={[styles.modalChip, selected && styles.modalChipSelected]}
+                                                onPress={() => setEditCompanion(companion)}
+                                            >
+                                                <Text style={[
+                                                    styles.modalChipText,
+                                                    selected && styles.modalChipTextSelected,
+                                                ]}>
+                                                    {companion}
+                                                </Text>
+                                            </Pressable>
+                                        );
+                                    })}
+                                </View>
+
+                                <Text style={styles.modalSubTitle}>세부 Todo</Text>
+                                <View style={styles.todoEditorCard}>
+                                    {editTodos.map((todo) => (
+                                        <View key={todo.id} style={styles.todoEditorRow}>
+                                            <Pressable
+                                                style={[
+                                                    styles.todoEditorCheck,
+                                                    todo.done && styles.todoEditorCheckDone,
+                                                ]}
+                                                onPress={() => toggleEditTodo(todo.id)}
+                                            >
+                                                {todo.done ? (
+                                                    <Ionicons name="checkmark" size={14} color={Colors.realwhite} />
+                                                ) : null}
+                                            </Pressable>
+                                            <Text style={[
+                                                styles.todoEditorText,
+                                                todo.done && styles.todoEditorTextDone,
+                                            ]}>
+                                                {todo.text}
+                                            </Text>
+                                            <Pressable onPress={() => deleteEditTodo(todo.id)} hitSlop={8}>
+                                                <Ionicons name="close" size={18} color={Colors.textShadow} />
+                                            </Pressable>
+                                        </View>
+                                    ))}
+
+                                    <View style={styles.todoAddRow}>
+                                        <TextInput
+                                            style={styles.todoAddInput}
+                                            placeholder="세부 할 일을 입력해주세요"
+                                            placeholderTextColor={Colors.textShadow}
+                                            value={editTodoText}
+                                            onChangeText={setEditTodoText}
+                                            returnKeyType="done"
+                                            onSubmitEditing={addEditTodo}
+                                        />
+                                        <Pressable style={styles.todoAddButton} onPress={addEditTodo}>
+                                            <Ionicons name="add" size={18} color={Colors.text} />
+                                        </Pressable>
+                                    </View>
+                                </View>
+                            </>
+                        ) : null}
 
                         <View style={styles.modalButtonRow}>
                             <Pressable style={styles.deleteButton} onPress={deleteEdit}>
@@ -721,6 +924,11 @@ const styles = StyleSheet.create({
         height: 34,
     },
 
+    profileImageFilled: {
+        width: '100%',
+        height: '100%',
+    },
+
     section: {
         width: '100%',
         marginBottom: 36,
@@ -750,7 +958,7 @@ const styles = StyleSheet.create({
     scheduleRow: {
         minHeight: 28,
         flexDirection: 'row',
-        alignItems: 'center',
+        alignItems: 'flex-start',
     },
 
     checkBox: {
@@ -761,6 +969,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         marginRight: 12,
+        marginTop: 1,
     },
 
     checkBoxDone: {
@@ -783,6 +992,58 @@ const styles = StyleSheet.create({
         flex: 1,
         minHeight: 28,
         justifyContent: 'center',
+    },
+
+    scheduleTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 8,
+    },
+
+    scheduleMetaPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderRadius: 12,
+        backgroundColor: Colors.pageBg,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+    },
+
+    scheduleMetaText: {
+        marginLeft: 5,
+        fontFamily: Fonts.body,
+        fontSize: 12,
+        color: Colors.textShadow,
+    },
+
+    scheduleTodoPreview: {
+        marginTop: 8,
+        gap: 4,
+    },
+
+    scheduleTodoPreviewRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+
+    scheduleTodoPreviewText: {
+        flex: 1,
+        marginLeft: 5,
+        fontFamily: Fonts.body,
+        fontSize: 13,
+        color: Colors.text,
+    },
+
+    scheduleTodoPreviewTextDone: {
+        color: '#A9A196',
+    },
+
+    scheduleMoreText: {
+        marginTop: 2,
+        fontFamily: Fonts.body,
+        fontSize: 12,
+        color: Colors.textShadow,
     },
 
     addButton: {
@@ -1162,6 +1423,117 @@ const styles = StyleSheet.create({
         lineHeight: 22,
         color: Colors.text,
         marginBottom: 16,
+    },
+
+    modalSubTitle: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 15,
+        fontWeight: '900',
+        color: Colors.text,
+        marginBottom: 10,
+    },
+
+    modalChipRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: 16,
+    },
+
+    modalChip: {
+        minHeight: 36,
+        borderRadius: 18,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 12,
+    },
+
+    modalChipSelected: {
+        borderColor: Colors.highlight1,
+        backgroundColor: Colors.highlight1,
+    },
+
+    modalChipText: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 13,
+        fontWeight: '900',
+        color: Colors.text,
+    },
+
+    modalChipTextSelected: {
+        color: Colors.text,
+    },
+
+    todoEditorCard: {
+        width: '100%',
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        padding: 12,
+        marginBottom: 16,
+        gap: 10,
+    },
+
+    todoEditorRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        minHeight: 28,
+    },
+
+    todoEditorCheck: {
+        width: 22,
+        height: 22,
+        borderRadius: 6,
+        backgroundColor: Colors.pageBg3,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 10,
+    },
+
+    todoEditorCheckDone: {
+        backgroundColor: Colors.highlight1,
+    },
+
+    todoEditorText: {
+        flex: 1,
+        fontFamily: Fonts.body,
+        fontSize: 14,
+        color: Colors.text,
+        lineHeight: 20,
+    },
+
+    todoEditorTextDone: {
+        color: '#A9A196',
+    },
+
+    todoAddRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderTopWidth: 1,
+        borderTopColor: '#E8DDC8',
+        paddingTop: 10,
+    },
+
+    todoAddInput: {
+        flex: 1,
+        height: 36,
+        fontFamily: Fonts.body,
+        fontSize: 14,
+        color: Colors.text,
+        paddingVertical: 0,
+    },
+
+    todoAddButton: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: Colors.highlight1,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
 
     modalButtonRow: {

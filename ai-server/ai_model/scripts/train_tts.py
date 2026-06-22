@@ -85,6 +85,12 @@ def train_tts(metadata_csv: str, checkpoint_path: str, epochs: int, batch_size: 
         collate_fn=collate_batch,
     )
 
+    print(f"dataset size: {len(dataset)}")
+    print(f"batch size: {loader.batch_size}")
+    print(f"batches per epoch: {len(loader)}")
+    print(f"total expected steps: {len(loader) * epochs}")
+    print(f"checkpoint path: {checkpoint_path}")
+
     model = SimpleTacotron().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.L1Loss()

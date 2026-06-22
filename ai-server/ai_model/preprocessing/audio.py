@@ -80,3 +80,36 @@ def mel_to_wav(mel, output_path: str):
     torchaudio.save(str(output), waveform, SAMPLE_RATE)
 
     return str(output)
+
+
+def concatenate_wavs(wav_paths: list[str], output_path: str, silence_seconds: float = 0.2):
+    torchaudio = _load_torchaudio()
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    chunks = []
+    silence = torch.zeros(1, int(SAMPLE_RATE * silence_seconds))
+
+    for wav_path in wav_paths:
+        waveform, sample_rate = torchaudio.load(wav_path)
+
+        if waveform.size(0) > 1:
+            waveform = waveform.mean(dim=0, keepdim=True)
+
+        if sample_rate != SAMPLE_RATE:
+            waveform = torchaudio.functional.resample(
+                waveform,
+                orig_freq=sample_rate,
+                new_freq=SAMPLE_RATE,
+            )
+
+        chunks.append(waveform)
+        chunks.append(silence)
+
+    if not chunks:
+        raise ValueError("wav_paths must not be empty")
+
+    combined = torch.cat(chunks[:-1], dim=1)
+    torchaudio.save(str(output), combined, SAMPLE_RATE)
+
+    return str(output)

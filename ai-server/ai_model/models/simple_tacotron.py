@@ -32,9 +32,23 @@ class SimpleTacotron(nn.Module):
             nn.Conv1d(N_MELS, N_MELS, kernel_size=5, padding=2),
         )
 
+    def _resize_time(self, encoded, target_len):
+        encoded = encoded.transpose(1, 2)
+        encoded = nn.functional.interpolate(
+            encoded,
+            size=target_len,
+            mode="linear",
+            align_corners=False,
+        )
+        return encoded.transpose(1, 2)
+
     def forward(self, text_sequences, mel_targets=None, teacher_forcing_ratio=1.0):
         embedded = self.embedding(text_sequences)
         encoded, _ = self.encoder(embedded)
+
+        if mel_targets is not None:
+            encoded = self._resize_time(encoded, mel_targets.size(2))
+
         decoded, _ = self.decoder(encoded)
         mel = self.mel_projection(decoded).transpose(1, 2)
         refined = self.postnet(mel)
@@ -45,9 +59,11 @@ class SimpleTacotron(nn.Module):
         if text_sequence.dim() == 1:
             text_sequence = text_sequence.unsqueeze(0)
 
-        mel = self.forward(text_sequence)
-
-        if mel.size(-1) > max_len:
-            mel = mel[:, :, :max_len]
+        target_len = min(max(text_sequence.size(1) * 8, 40), max_len)
+        dummy_targets = text_sequence.new_zeros(
+            (text_sequence.size(0), N_MELS, target_len),
+            dtype=torch.float32,
+        )
+        mel = self.forward(text_sequence, dummy_targets)
 
         return mel

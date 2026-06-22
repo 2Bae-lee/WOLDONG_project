@@ -740,7 +740,7 @@ export default function ParentHome() {
                                                     ]}>
                                                         {day}
                                                     </Text>
-                                                    {hasEvent ? <View style={styles.eventDot} /> : null}
+                                                    <View style={[styles.eventDot, !hasEvent && styles.eventDotHidden]} />
                                                 </>
                                             ) : null}
                                         </Pressable>
@@ -1411,6 +1411,10 @@ const styles = StyleSheet.create({
         borderRadius: 2.5,
         backgroundColor: Colors.highlight2,
         marginTop: 3,
+    },
+
+    eventDotHidden: {
+        opacity: 0,
     },
 
     calendarEventHeader: {

@@ -88,10 +88,12 @@ export default function MakeCharacterCustomize() {
     const params = useLocalSearchParams<{
         name?: string;
         profileImage?: string;
+        profileSections?: string;
         story?: string;
     }>();
 
     const childName = params.name || '아이';
+    const profileImage = params.profileImage ?? '';
     const [characterName, setCharacterName] = useState('');
     const [gender, setGender] = useState<CharacterGender | null>(null);
     const [tone, setTone] = useState<VoiceTone | null>(null);
@@ -122,6 +124,8 @@ export default function MakeCharacterCustomize() {
             pathname: '/childprofile/makecharacter/complete',
             params: {
                 name: childName,
+                profileImage,
+                profileSections: params.profileSections ?? '',
                 characterName: trimmedName,
                 gender,
                 tone,

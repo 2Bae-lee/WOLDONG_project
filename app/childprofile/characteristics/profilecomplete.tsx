@@ -57,6 +57,9 @@ const labelMap: Record<string, string> = {
     one_hour: '1시간 전',
     three_hours: '3시간 전',
     day_before: '전 날',
+
+    intellectual: '지적장애',
+    autism: '자폐스펙트럼',
 };
 
 const parseList = (value?: string) => {
@@ -98,6 +101,7 @@ export default function ChildProfileComplete() {
     const params = useLocalSearchParams<{
         name?: string;
         profileImage?: string;
+        typeofdisability?: string;
         guidanceOptions?: string;
         communicationOptions?: string;
         dangerSituations?: string;
@@ -110,6 +114,9 @@ export default function ChildProfileComplete() {
 
     const childName = params.name || '아이';
     const profileImage = params.profileImage ?? '';
+    const disabilityItems = params.typeofdisability
+        ? [labelMap[params.typeofdisability] ?? params.typeofdisability]
+        : [];
     const guidanceItems = toLabels(parseList(params.guidanceOptions));
     const communicationItems = toLabels(parseList(params.communicationOptions));
     const dangerItems = toLabels(parseList(params.dangerSituations));
@@ -118,6 +125,17 @@ export default function ChildProfileComplete() {
     const placeItems = parseList(params.placeOptions);
     const scheduleChangeItems = toLabels(parseList(params.scheduleChangeOptions));
     const advanceNoticeItems = toLabels(parseList(params.advanceNoticeOptions));
+    const profileSections = [
+        { id: 'info', items: disabilityItems },
+        { id: 'guidance', items: guidanceItems },
+        { id: 'communication', items: communicationItems },
+        { id: 'danger', items: dangerItems },
+        { id: 'companion', items: companionItems },
+        { id: 'sensory', items: sensoryItems },
+        { id: 'place', items: placeItems },
+        { id: 'schedule', items: scheduleChangeItems },
+        { id: 'notice', items: advanceNoticeItems },
+    ];
 
     return (
         <ScrollView
@@ -168,6 +186,7 @@ export default function ChildProfileComplete() {
                 <Text style={styles.childName}>{childName}</Text>
 
                 <View style={styles.summaryArea}>
+                    <SummarySection title="공유 정보" items={disabilityItems} />
                     <SummarySection title="설명 방식" items={guidanceItems} />
                     <SummarySection title="의사소통 방식" items={communicationItems} />
                     <SummarySection title="외출 중 주의 상황" items={dangerItems} />
@@ -189,6 +208,7 @@ export default function ChildProfileComplete() {
                             params: {
                                 name: childName,
                                 profileImage,
+                                profileSections: JSON.stringify(profileSections),
                             },
                         } as any)
                     }

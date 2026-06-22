@@ -645,7 +645,7 @@ export default function CompanionChildren() {
                                                 {schedule.childName}
                                             </Text>
                                         </View>
-                                        <Text style={styles.todoMeta}>{schedule.guardian} 보호자와 공유 중</Text>
+                                        <Text style={styles.todoMeta}>{schedule.childName}의 오늘 일정</Text>
                                         <View style={styles.todoList}>
                                             {schedule.todos.map((todo) => (
                                                 <View key={todo.id} style={styles.todoRow}>
@@ -727,8 +727,8 @@ export default function CompanionChildren() {
                                             <Text style={styles.childName}>{child.name}</Text>
                                             <Text style={styles.guardianText}>
                                                 {child.status === 'pending'
-                                                    ? '보호자 승인 요청을 기다리고 있어요'
-                                                    : `${child.guardian} 보호자와 연결됨`}
+                                                    ? '승인 요청을 기다리고 있어요'
+                                                    : '담당 어린이'}
                                             </Text>
                                             <View style={styles.metaRow}>
                                                 <View style={styles.metaPill}>
@@ -833,7 +833,7 @@ export default function CompanionChildren() {
                                         <View style={styles.calendarEventTextArea}>
                                             <Text style={styles.calendarEventTitle}>{event.title}</Text>
                                             <Text style={styles.calendarEventMeta}>
-                                                {event.childName} · {event.guardian} 보호자와 공유 중
+                                                {event.childName}의 공유 일정
                                             </Text>
                                             {event.todos.length > 0 ? (
                                                 <View style={styles.calendarTodoPreview}>

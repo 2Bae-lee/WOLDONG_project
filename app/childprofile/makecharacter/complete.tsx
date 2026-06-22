@@ -8,6 +8,8 @@ import { Fonts } from '../../../constants/Fonts';
 export default function MakeCharacterComplete() {
     const params = useLocalSearchParams<{
         name?: string;
+        profileImage?: string;
+        profileSections?: string;
         characterName?: string;
     }>();
 
@@ -63,7 +65,16 @@ export default function MakeCharacterComplete() {
                 <PrimaryButton
                     label="홈"
                     width="100%"
-                    onPress={() => router.push('/paraent_home' as any)}
+                    onPress={() =>
+                        router.replace({
+                            pathname: '/paraent_home',
+                            params: {
+                                updatedChildName: childName,
+                                updatedProfileImage: params.profileImage ?? '',
+                                updatedProfileSections: params.profileSections ?? '',
+                            },
+                        } as any)
+                    }
                 />
             </View>
         </View>

@@ -23,6 +23,7 @@ export default function MakeCharacterStory() {
     const params = useLocalSearchParams<{
         name?: string;
         profileImage?: string;
+        profileSections?: string;
     }>();
 
     const childName = params.name || '아이';
@@ -45,6 +46,7 @@ export default function MakeCharacterStory() {
             params: {
                 name: childName,
                 profileImage,
+                profileSections: params.profileSections ?? '',
                 story: trimmedStory,
             },
         } as any);

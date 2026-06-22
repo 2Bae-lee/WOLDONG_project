@@ -1,11 +1,12 @@
 import argparse
 import csv
+import time
 from pathlib import Path
 
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from ai_model.models.simple_tacotron import SimpleTacotron
 from ai_model.preprocessing.audio import wav_to_mel
@@ -35,17 +36,14 @@ def collate_batch(batch):
     mel_list = []
 
     for text, mel in batch:
-        # text shape 정리
+        # Normalize text shape.
         text_list.append(text)
 
-        # mel shape 정리
-        # 예상되는 잘못된 shape: [channel, n_mels, time]
-        # 원하는 shape: [n_mels, time]
+        # Normalize mel shape from [channel, n_mels, time] to [n_mels, time].
         if mel.dim() == 3:
-            # stereo 또는 mono channel 제거
             mel = mel.mean(dim=0)
 
-        # 혹시 [time, n_mels]로 들어오면 [n_mels, time]으로 변환
+        # Convert [time, n_mels] to [n_mels, time] when needed.
         if mel.dim() == 2 and mel.size(0) != 80 and mel.size(1) == 80:
             mel = mel.transpose(0, 1)
 
@@ -91,31 +89,76 @@ def train_tts(metadata_csv: str, checkpoint_path: str, epochs: int, batch_size: 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.L1Loss()
 
-    model.train()
-    for epoch in range(epochs):
-        total_loss = 0.0
-        progress = tqdm(loader, desc=f"epoch {epoch + 1}/{epochs}")
+    output_path = Path(checkpoint_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        for text_batch, mel_batch in progress:
+    model.train()
+    total_steps = epochs * len(loader)
+    global_step = 0
+    start_time = time.time()
+
+    overall_progress = tqdm(
+        total=total_steps,
+        desc="total training progress",
+        unit="batch",
+    )
+
+    for epoch in range(epochs):
+        epoch_loss = 0.0
+        epoch_start_time = time.time()
+        epoch_step = 0
+
+        for text_batch, mel_batch in loader:
             text_batch = text_batch.to(device)
             mel_batch = mel_batch.to(device)
 
-            predicted = model(text_batch)
-            predicted = match_mel_length(predicted, mel_batch)
-            loss = criterion(predicted, mel_batch)
-
             optimizer.zero_grad()
+
+            mel_pred = model(text_batch, mel_batch)
+            mel_pred = match_mel_length(mel_pred, mel_batch)
+            loss = criterion(mel_pred, mel_batch)
+
             loss.backward()
             optimizer.step()
 
-            total_loss += loss.item()
-            progress.set_postfix(loss=loss.item())
+            loss_value = loss.item()
+            epoch_loss += loss_value
+            global_step += 1
+            epoch_step += 1
 
-        print(f"epoch={epoch + 1} loss={total_loss / max(len(loader), 1):.4f}")
+            elapsed = time.time() - start_time
+            avg_time_per_step = elapsed / global_step
+            remaining_steps = total_steps - global_step
+            eta_seconds = avg_time_per_step * remaining_steps
 
-    output_path = Path(checkpoint_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save({"state_dict": model.state_dict()}, output_path)
+            overall_progress.update(1)
+            overall_progress.set_postfix({
+                "epoch": f"{epoch + 1}/{epochs}",
+                "loss": f"{loss_value:.4f}",
+                "avg_loss": f"{epoch_loss / epoch_step:.4f}",
+                "ETA_min": f"{eta_seconds / 60:.1f}",
+            })
+
+        epoch_time = time.time() - epoch_start_time
+        avg_epoch_loss = epoch_loss / max(len(loader), 1)
+
+        print(
+            f"Epoch {epoch + 1}/{epochs} complete | "
+            f"avg_loss={avg_epoch_loss:.4f} | "
+            f"epoch_time={epoch_time / 60:.1f}min"
+        )
+
+        torch.save({
+            "epoch": epoch + 1,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "loss": avg_epoch_loss,
+            "state_dict": model.state_dict(),
+        }, output_path)
+
+        print(f"Checkpoint saved: {output_path}")
+
+    overall_progress.close()
     return str(output_path)
 
 

@@ -22,7 +22,7 @@ export default function SignupRole() {
 
         <Pressable
           style={[styles.roleCard, styles.guardianCard]}
-          onPress={() => router.push('/signup/parent/email')}
+          onPress={() => router.push('/signup/parent/name')}
         >
           <View style={styles.iconCircle}>
             <Image

@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
   Image,
@@ -16,6 +16,10 @@ import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
 
 export default function ParentSignupPassword() {
+    const params = useLocalSearchParams<{
+        name?: string;
+        email?: string;
+    }>();
     const [password, setPassword] = useState('');
     const [passwordagain, setPasswordAgain] = useState('');
     const [passwordError, setPasswordError] = useState('');
@@ -35,6 +39,10 @@ export default function ParentSignupPassword() {
             setAgainError('비밀번호 재확인이 필요합니다.');
             return;
         }
+        if (trimmedpassword.length < 8) {
+            setPasswordError('비밀번호는 8자 이상이어야 합니다.');
+            return;
+        }
 
         const passwordRegex = /^(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*]).+$/;
 
@@ -49,7 +57,14 @@ export default function ParentSignupPassword() {
         setPasswordError('');
         setAgainError('');
         
-        router.push('/signup/parent/phonenumber' as any);
+        router.push({
+            pathname: '/signup/parent/phonenumber',
+            params: {
+                name: params.name ?? '',
+                email: params.email ?? '',
+                password: trimmedpassword,
+            },
+        } as any);
         }
     
     return (

@@ -10,6 +10,7 @@ from app.models.child import Child
 from app.models.schedule import Schedule, ScheduleStatus, ChecklistItem
 from app.middleware.auth import parent_only, companion_only, get_current_user
 from app.utils.response import success, error
+from app.models.invite import CompanionRequest, RequestStatus
 
 router = APIRouter(prefix="/api/schedules", tags=["외출 일정"])
 
@@ -21,11 +22,11 @@ class ScheduleCreateRequest(BaseModel):
     title: str
     date: date
     start_time: str
-    place_type: str                     # 장소 유형 (병원, 마트, 공원 등)
-    transport_type: str                 # 이동수단 (버스, 지하철, 택시 등)
-    activities: list[str] = []          # 활동 목록 (진료, 주사 등)
-    wait_possible: bool = False         # 대기 가능성
-    crowd_possible: bool = False        # 혼잡 가능성
+    place_type: str
+    transport_type: str
+    activities: list[str] = []
+    wait_possible: bool = False
+    crowd_possible: bool = False
     preparations: list[str] = []
     checklist: list[str] = []
 
@@ -76,9 +77,9 @@ class JournalCreateRequest(BaseModel):
 
 # ─── 라우트 ────────────────────────────────────────────
 
-# POST /api/schedules - 일정 등록 (부모 전용)
+# POST /api/schedules - 일정 등록 (부모/동행인 공통)
 @router.post("")
-async def create_schedule(body: ScheduleCreateRequest, user: User = Depends(parent_only)):
+async def create_schedule(body: ScheduleCreateRequest, user: User = Depends(get_current_user)):
     try:
         oid = PydanticObjectId(body.child_id)
     except Exception:
@@ -87,8 +88,20 @@ async def create_schedule(body: ScheduleCreateRequest, user: User = Depends(pare
     child = await Child.get(oid)
     if not child:
         return error("아동 프로필을 찾을 수 없습니다", 404)
-    if child.guardian_id != str(user.id):
+
+    # 부모면 본인 아동인지 확인
+    if user.role == "parent" and child.guardian_id != str(user.id):
         return error("접근 권한이 없습니다", 403)
+
+    # 동행인이면 담당 아동인지 확인
+    if user.role == "companion":
+        companion_check = await CompanionRequest.find_one(
+            CompanionRequest.companion_id == str(user.id),
+            CompanionRequest.child_id == body.child_id,
+            CompanionRequest.status == RequestStatus.approved
+        )
+        if not companion_check:
+            return error("담당 아동이 아닙니다", 403)
 
     checklist_items = [
         ChecklistItem(item_id=str(uuid.uuid4()), content=c)
@@ -96,9 +109,9 @@ async def create_schedule(body: ScheduleCreateRequest, user: User = Depends(pare
     ]
 
     schedule = Schedule(
-        guardian_id=str(user.id),
+        guardian_id=child.guardian_id,
         child_id=body.child_id,
-        companion_id=body.companion_id,
+        companion_id=body.companion_id if user.role == "parent" else str(user.id),
         title=body.title,
         date=body.date.isoformat(),
         start_time=body.start_time,
@@ -119,12 +132,17 @@ async def create_schedule(body: ScheduleCreateRequest, user: User = Depends(pare
     }, "일정이 등록되었습니다", 201)
 
 
-# GET /api/schedules - 부모 일정 목록 조회
+# GET /api/schedules - 일정 목록 조회
 @router.get("")
-async def get_schedules(user: User = Depends(parent_only)):
-    schedules = await Schedule.find(
-        Schedule.guardian_id == str(user.id)
-    ).sort(-Schedule.date).to_list()
+async def get_schedules(user: User = Depends(get_current_user)):
+    if user.role == "parent":
+        schedules = await Schedule.find(
+            Schedule.guardian_id == str(user.id)
+        ).sort(-Schedule.date).to_list()
+    else:
+        schedules = await Schedule.find(
+            Schedule.companion_id == str(user.id)
+        ).sort(-Schedule.date).to_list()
 
     return success([
         {

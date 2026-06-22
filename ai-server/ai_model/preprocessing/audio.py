@@ -1,0 +1,74 @@
+from pathlib import Path
+
+import torch
+
+from ai_model.configs.tts_config import (
+    HOP_LENGTH,
+    N_FFT,
+    N_MELS,
+    SAMPLE_RATE,
+    WIN_LENGTH,
+)
+
+
+def _load_torchaudio():
+    try:
+        import torchaudio
+    except Exception as exc:
+        raise RuntimeError(
+            "torchaudio is required for local TTS audio conversion."
+        ) from exc
+
+    return torchaudio
+
+
+def wav_to_mel(wav_path: str):
+    torchaudio = _load_torchaudio()
+    waveform, sample_rate = torchaudio.load(wav_path)
+
+    if sample_rate != SAMPLE_RATE:
+        waveform = torchaudio.functional.resample(
+            waveform,
+            orig_freq=sample_rate,
+            new_freq=SAMPLE_RATE,
+        )
+
+    transform = torchaudio.transforms.MelSpectrogram(
+        sample_rate=SAMPLE_RATE,
+        n_fft=N_FFT,
+        hop_length=HOP_LENGTH,
+        win_length=WIN_LENGTH,
+        n_mels=N_MELS,
+    )
+
+    return transform(waveform).squeeze(0)
+
+
+def mel_to_wav(mel, output_path: str):
+    torchaudio = _load_torchaudio()
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    if not isinstance(mel, torch.Tensor):
+        mel = torch.tensor(mel, dtype=torch.float32)
+
+    mel = mel.detach().cpu().float()
+    if mel.dim() == 3:
+        mel = mel.squeeze(0)
+
+    inverse_mel = torchaudio.transforms.InverseMelScale(
+        n_stft=(N_FFT // 2) + 1,
+        n_mels=N_MELS,
+        sample_rate=SAMPLE_RATE,
+    )
+    griffin_lim = torchaudio.transforms.GriffinLim(
+        n_fft=N_FFT,
+        hop_length=HOP_LENGTH,
+        win_length=WIN_LENGTH,
+    )
+
+    spectrogram = inverse_mel(mel.clamp_min(1e-6))
+    waveform = griffin_lim(spectrogram).unsqueeze(0)
+    torchaudio.save(str(output), waveform, SAMPLE_RATE)
+
+    return str(output)

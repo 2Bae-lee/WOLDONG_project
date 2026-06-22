@@ -6,7 +6,10 @@ import BackButton from '../../components/BackButton';
 import PrimaryButton from '../../components/PrimaryButton';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
-import { approveCompanionRequestNotification } from '../../constants/NotificationState';
+import {
+    approveCompanionRequestNotification,
+    getCompanionRequestNotification,
+} from '../../constants/NotificationState';
 
 const relationOptions = ['담임 선생님', '활동지원사', '치료사', '가족'];
 const permissionOptions = [
@@ -17,6 +20,9 @@ const permissionOptions = [
 ];
 
 export default function NotificationRequest() {
+    const companionRequest = getCompanionRequestNotification();
+    const companionName = companionRequest.companionName;
+    const childName = companionRequest.childName;
     const [selectedRelation, setSelectedRelation] = useState('담임 선생님');
     const [selectedPermissions, setSelectedPermissions] = useState([
         '아이 프로필',
@@ -33,12 +39,12 @@ export default function NotificationRequest() {
     };
 
     const approveCompanion = () => {
-        approveCompanionRequestNotification('박민지');
+        approveCompanionRequestNotification(companionName);
 
         router.replace({
             pathname: '/paraent_home/companions',
             params: {
-                acceptedName: '박민지',
+                acceptedName: companionName,
                 acceptedRelation: selectedRelation,
                 acceptedPhone: '010-1234-5678',
                 acceptedPermissions: selectedPermissions.join(','),
@@ -68,7 +74,7 @@ export default function NotificationRequest() {
                 <View style={styles.headerArea}>
                     <Text style={styles.title}>동행인 승인 요청</Text>
                     <Text style={styles.description}>
-                        박민지님이 김월동 어린이의 동행인 권한을 요청했어요.
+                        {companionName}님이 {childName} 어린이의 동행인 권한을 요청했어요.
                     </Text>
                 </View>
 
@@ -78,7 +84,7 @@ export default function NotificationRequest() {
                         style={styles.profileImage}
                         resizeMode="contain"
                     />
-                    <Text style={styles.name}>박민지</Text>
+                    <Text style={styles.name}>{companionName}</Text>
                     <Text style={styles.info}>010-1234-5678</Text>
                     <Text style={styles.permissionText}>
                         승인 전 부모님이 이 동행인의 관계와 접근 권한을 정리할 수 있어요.

@@ -6,6 +6,7 @@ import {
     Image,
     Keyboard,
     KeyboardAvoidingView,
+    Modal,
     Platform,
     Pressable,
     ScrollView,
@@ -20,36 +21,30 @@ import PrimaryButton from '../../components/PrimaryButton';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 
-const relationOptions = ['담임 선생님', '활동지원사', '치료사', '가족', '기타'];
-
-const formatPhoneNumber = (text: string) => {
-    const onlyNumbers = text.replace(/[^0-9]/g, '').slice(0, 11);
-
-    if (onlyNumbers.length <= 3) {
-        return onlyNumbers;
-    }
-
-    if (onlyNumbers.length <= 7) {
-        return `${onlyNumbers.slice(0, 3)}-${onlyNumbers.slice(3)}`;
-    }
-
-    return `${onlyNumbers.slice(0, 3)}-${onlyNumbers.slice(3, 7)}-${onlyNumbers.slice(7)}`;
-};
+const jobOptions = [
+    { label: '담임 선생님', description: '학교 일정과 생활 정보를 함께 확인해요.' },
+    { label: '활동지원사', description: '외출, 이동, 일상 지원 일정을 함께 확인해요.' },
+    { label: '치료사', description: '치료 일정과 아이 반응 메모를 함께 확인해요.' },
+    { label: '가족', description: '가족 돌봄과 공유 일정을 함께 확인해요.' },
+    { label: '기타', description: '직접 설명이 필요한 동행인이에요.' },
+];
 
 export default function CompanionProfileSetup() {
     const params = useLocalSearchParams<{
         companionName?: string;
         companionRelation?: string;
+        companionJob?: string;
+        companionIntro?: string;
         companionPhone?: string;
         companionProfileImage?: string;
     }>();
     const [name, setName] = useState(params.companionName || '');
-    const [relation, setRelation] = useState(params.companionRelation || '');
-    const [phone, setPhone] = useState(params.companionPhone || '');
+    const [job, setJob] = useState(params.companionJob || params.companionRelation || '');
+    const [intro, setIntro] = useState(params.companionIntro || '');
     const [profileImage, setProfileImage] = useState<string | null>(params.companionProfileImage || null);
     const [nameError, setNameError] = useState('');
-    const [relationError, setRelationError] = useState('');
-    const [phoneError, setPhoneError] = useState('');
+    const [jobError, setJobError] = useState('');
+    const [isJobSheetOpen, setIsJobSheetOpen] = useState(false);
 
     const pickImage = async () => {
         const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -73,21 +68,16 @@ export default function CompanionProfileSetup() {
 
     const handleSave = () => {
         const trimmedName = name.trim();
-        const trimmedRelation = relation.trim();
-        const trimmedPhone = phone.trim();
+        const trimmedJob = job.trim();
+        const trimmedIntro = intro.trim();
 
         if (!trimmedName) {
             setNameError('이름을 입력해주세요.');
             return;
         }
 
-        if (!trimmedRelation) {
-            setRelationError('동행인 분류를 선택해주세요.');
-            return;
-        }
-
-        if (!trimmedPhone) {
-            setPhoneError('연락처를 입력해주세요.');
+        if (!trimmedJob) {
+            setJobError('직업을 선택해주세요.');
             return;
         }
 
@@ -96,8 +86,9 @@ export default function CompanionProfileSetup() {
             pathname: '/companion_home',
             params: {
                 companionName: trimmedName,
-                companionRelation: trimmedRelation,
-                companionPhone: trimmedPhone,
+                companionJob: trimmedJob,
+                companionRelation: trimmedJob,
+                companionIntro: trimmedIntro,
                 companionProfileImage: profileImage ?? '',
             },
         } as any);
@@ -107,12 +98,15 @@ export default function CompanionProfileSetup() {
         <KeyboardAvoidingView
             style={styles.keyboardContainer}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
         >
             <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
                 <ScrollView
                     style={styles.scrollView}
                     contentContainerStyle={styles.inner}
                     keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="interactive"
+                    automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
                     showsVerticalScrollIndicator={false}
                 >
                     <View style={styles.logoArea}>
@@ -167,48 +161,33 @@ export default function CompanionProfileSetup() {
                     </View>
 
                     <View style={styles.fieldArea}>
-                        <Text style={styles.fieldTitle}>동행인 분류<Text style={styles.essential}> *</Text></Text>
-                        <View style={styles.relationGrid}>
-                            {relationOptions.map((option) => {
-                                const selected = relation === option;
-
-                                return (
-                                    <Pressable
-                                        key={option}
-                                        style={[styles.relationButton, selected && styles.relationButtonSelected]}
-                                        onPress={() => {
-                                            setRelation(option);
-                                            if (relationError) setRelationError('');
-                                        }}
-                                    >
-                                        <Text style={[
-                                            styles.relationButtonText,
-                                            selected && styles.relationButtonTextSelected,
-                                        ]}>
-                                            {option}
-                                        </Text>
-                                    </Pressable>
-                                );
-                            })}
-                        </View>
-                        {relationError ? <Text style={styles.errorText}>{relationError}</Text> : null}
+                        <Text style={styles.fieldTitle}>직업<Text style={styles.essential}> *</Text></Text>
+                        <Pressable
+                            style={[styles.selectField, jobError && styles.inputError]}
+                            onPress={() => setIsJobSheetOpen(true)}
+                        >
+                            <Text style={[
+                                styles.selectFieldText,
+                                !job && styles.selectFieldPlaceholder,
+                            ]}>
+                                {job || '직업을 선택해주세요'}
+                            </Text>
+                            <Ionicons name="chevron-down" size={20} color={Colors.textShadow} />
+                        </Pressable>
+                        {jobError ? <Text style={styles.errorText}>{jobError}</Text> : null}
                     </View>
 
                     <View style={styles.fieldArea}>
-                        <Text style={styles.fieldTitle}>연락처<Text style={styles.essential}> *</Text></Text>
+                        <Text style={styles.fieldTitle}>자기소개</Text>
                         <TextInput
-                            style={[styles.input, phoneError && styles.inputError]}
-                            placeholder="예) 010-1234-5678"
+                            style={styles.introInput}
+                            placeholder="예) 아이가 편안하게 이동할 수 있도록 차분하게 안내해요."
                             placeholderTextColor={Colors.textShadow}
-                            value={phone}
-                            onChangeText={(text) => {
-                                setPhone(formatPhoneNumber(text));
-                                if (phoneError) setPhoneError('');
-                            }}
-                            keyboardType="number-pad"
-                            maxLength={13}
+                            value={intro}
+                            onChangeText={setIntro}
+                            multiline
+                            textAlignVertical="top"
                         />
-                        {phoneError ? <Text style={styles.errorText}>{phoneError}</Text> : null}
                     </View>
 
                     <View style={styles.infoCard}>
@@ -223,6 +202,50 @@ export default function CompanionProfileSetup() {
                     </View>
                 </ScrollView>
             </TouchableWithoutFeedback>
+
+            <Modal
+                visible={isJobSheetOpen}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setIsJobSheetOpen(false)}
+            >
+                <Pressable style={styles.sheetBackdrop} onPress={() => setIsJobSheetOpen(false)}>
+                    <Pressable style={styles.sheet} onPress={() => undefined}>
+                        <View style={styles.sheetHandle} />
+                        <Text style={styles.sheetTitle}>직업 선택</Text>
+                        <Text style={styles.sheetDescription}>부모님에게 보여질 동행인의 직업을 골라주세요.</Text>
+                        {jobOptions.map((option) => {
+                            const selected = job === option.label;
+
+                            return (
+                                <Pressable
+                                    key={option.label}
+                                    style={[
+                                        styles.sheetOption,
+                                        selected && styles.sheetOptionSelected,
+                                    ]}
+                                    onPress={() => {
+                                        setJob(option.label);
+                                        if (jobError) setJobError('');
+                                        setIsJobSheetOpen(false);
+                                    }}
+                                >
+                                    <View style={styles.sheetTypeIcon}>
+                                        <Ionicons name="briefcase-outline" size={18} color={Colors.text} />
+                                    </View>
+                                    <View style={styles.sheetOptionTextArea}>
+                                        <Text style={styles.sheetOptionText}>{option.label}</Text>
+                                        <Text style={styles.sheetOptionDescription}>{option.description}</Text>
+                                    </View>
+                                    {selected ? (
+                                        <Ionicons name="checkmark-circle" size={22} color={Colors.highlight1} />
+                                    ) : null}
+                                </Pressable>
+                            );
+                        })}
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </KeyboardAvoidingView>
     );
 }
@@ -243,7 +266,7 @@ const styles = StyleSheet.create({
         width: '100%',
         paddingTop: 10,
         paddingHorizontal: 32,
-        paddingBottom: 54,
+        paddingBottom: 120,
     },
 
     logoArea: {
@@ -366,37 +389,134 @@ const styles = StyleSheet.create({
         borderColor: Colors.highlight3,
     },
 
-    relationGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 10,
-    },
-
-    relationButton: {
-        minHeight: 42,
-        borderRadius: 21,
+    selectField: {
+        width: '100%',
+        minHeight: 52,
+        borderRadius: 14,
         borderWidth: 1,
         borderColor: '#E8DDC8',
         backgroundColor: '#F7F4E8',
+        flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: 16,
+        justifyContent: 'space-between',
+        paddingHorizontal: 14,
     },
 
-    relationButtonSelected: {
-        borderColor: Colors.highlight1,
-        backgroundColor: Colors.highlight1,
-    },
-
-    relationButtonText: {
+    selectFieldText: {
+        flex: 1,
         fontFamily: Fonts.bodyBold,
-        fontSize: 14,
+        fontSize: 15,
         fontWeight: '900',
         color: Colors.text,
     },
 
-    relationButtonTextSelected: {
+    selectFieldPlaceholder: {
+        fontFamily: Fonts.body,
+        fontWeight: '400',
+        color: Colors.textShadow,
+    },
+
+    introInput: {
+        width: '100%',
+        minHeight: 112,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        paddingHorizontal: 14,
+        paddingVertical: 13,
+        fontFamily: Fonts.body,
+        fontSize: 15,
+        lineHeight: 22,
         color: Colors.text,
+    },
+
+    sheetBackdrop: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.18)',
+        justifyContent: 'flex-end',
+    },
+
+    sheet: {
+        width: '100%',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        backgroundColor: Colors.pageBg,
+        paddingHorizontal: 24,
+        paddingTop: 12,
+        paddingBottom: 34,
+    },
+
+    sheetHandle: {
+        alignSelf: 'center',
+        width: 44,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: '#D8CFBE',
+        marginBottom: 18,
+    },
+
+    sheetTitle: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 20,
+        fontWeight: '900',
+        color: Colors.text,
+        marginBottom: 8,
+    },
+
+    sheetDescription: {
+        fontFamily: Fonts.body,
+        fontSize: 14,
+        lineHeight: 20,
+        color: Colors.textShadow,
+        marginBottom: 16,
+    },
+
+    sheetOption: {
+        minHeight: 72,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        marginBottom: 10,
+    },
+
+    sheetOptionSelected: {
+        borderColor: Colors.highlight1,
+        backgroundColor: '#FFF4CF',
+    },
+
+    sheetTypeIcon: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        backgroundColor: '#FFF8DF',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
+    },
+
+    sheetOptionTextArea: {
+        flex: 1,
+    },
+
+    sheetOptionText: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 16,
+        fontWeight: '900',
+        color: Colors.text,
+        marginBottom: 4,
+    },
+
+    sheetOptionDescription: {
+        fontFamily: Fonts.body,
+        fontSize: 13,
+        lineHeight: 18,
+        color: Colors.textShadow,
     },
 
     errorText: {

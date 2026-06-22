@@ -6,7 +6,10 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import BackButton from '../../components/BackButton';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
-import { isCompanionRequestNotificationApproved } from '../../constants/NotificationState';
+import {
+    getCompanionRequestNotification,
+    isCompanionRequestNotificationApproved,
+} from '../../constants/NotificationState';
 
 type NotificationItem = {
     id: number;
@@ -55,15 +58,26 @@ export default function Notifications() {
         }, [])
     );
 
-    const visibleNotifications = useMemo(() => (
-        notifications.filter((notification) => {
+    const visibleNotifications = useMemo(() => {
+        const companionRequest = getCompanionRequestNotification();
+        const currentNotifications = notifications.map((notification) => (
+            notification.type === 'companion_request'
+                ? {
+                    ...notification,
+                    message: `${companionRequest.companionName}님이 ${companionRequest.childName} 어린이의 동행인 권한을 요청했어요.`,
+                    companionName: companionRequest.companionName,
+                }
+                : notification
+        ));
+
+        return currentNotifications.filter((notification) => {
             if (notification.type !== 'companion_request') {
                 return true;
             }
 
             return !isCompanionRequestNotificationApproved(notification.companionName ?? '');
-        })
-    ), [refreshKey]);
+        });
+    }, [refreshKey]);
 
     const openNotification = (notification: NotificationItem) => {
         if (notification.type === 'companion_request') {

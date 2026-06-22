@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
-import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../components/BackButton';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
@@ -8,6 +9,13 @@ import { Fonts } from '../../constants/Fonts';
 const parsePermissions = (value?: string) => (
     value ? value.split(',').map((item) => item.trim()).filter(Boolean) : []
 );
+
+const permissionOptions = [
+    '아이 프로필',
+    '오늘 일정',
+    '공유 캘린더',
+    '인수인계 자료',
+];
 
 export default function CompanionProfile() {
     const params = useLocalSearchParams<{
@@ -22,7 +30,27 @@ export default function CompanionProfile() {
     const relation = params.relation || '동행인';
     const phone = params.phone || '010-1234-5678';
     const status = params.status || '아이 정보를 함께 확인할 수 있어요.';
-    const permissions = parsePermissions(params.permissions);
+    const [permissions, setPermissions] = useState(() => parsePermissions(params.permissions));
+    const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
+    const [draftPermissions, setDraftPermissions] = useState<string[]>(permissions);
+
+    const openPermissionModal = () => {
+        setDraftPermissions(permissions);
+        setIsPermissionModalOpen(true);
+    };
+
+    const toggleDraftPermission = (permission: string) => {
+        setDraftPermissions((current) => (
+            current.includes(permission)
+                ? current.filter((item) => item !== permission)
+                : [...current, permission]
+        ));
+    };
+
+    const savePermissions = () => {
+        setPermissions(draftPermissions);
+        setIsPermissionModalOpen(false);
+    };
 
     return (
         <ScrollView
@@ -72,7 +100,13 @@ export default function CompanionProfile() {
             </View>
 
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>허용된 권한</Text>
+                <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>허용된 권한</Text>
+                    <Pressable style={styles.editPermissionButton} onPress={openPermissionModal}>
+                        <Ionicons name="pencil" size={15} color={Colors.textShadow} />
+                        <Text style={styles.editPermissionText}>수정</Text>
+                    </Pressable>
+                </View>
                 <View style={styles.permissionCard}>
                     {permissions.length > 0 ? (
                         permissions.map((permission) => (
@@ -86,6 +120,58 @@ export default function CompanionProfile() {
                     )}
                 </View>
             </View>
+
+            <Modal
+                visible={isPermissionModalOpen}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setIsPermissionModalOpen(false)}
+            >
+                <Pressable style={styles.modalBackdrop} onPress={() => setIsPermissionModalOpen(false)}>
+                    <Pressable style={styles.permissionModal} onPress={() => undefined}>
+                        <Text style={styles.modalTitle}>권한 수정하기</Text>
+                        <Text style={styles.modalDescription}>
+                            이 동행인이 확인할 수 있는 정보를 선택해주세요.
+                        </Text>
+
+                        <View style={styles.modalPermissionCard}>
+                            {permissionOptions.map((permission) => {
+                                const selected = draftPermissions.includes(permission);
+
+                                return (
+                                    <Pressable
+                                        key={permission}
+                                        style={styles.modalPermissionRow}
+                                        onPress={() => toggleDraftPermission(permission)}
+                                    >
+                                        <View style={[
+                                            styles.modalPermissionCheck,
+                                            selected && styles.modalPermissionCheckSelected,
+                                        ]}>
+                                            {selected ? (
+                                                <Ionicons name="checkmark" size={15} color={Colors.realwhite} />
+                                            ) : null}
+                                        </View>
+                                        <Text style={styles.modalPermissionText}>{permission}</Text>
+                                    </Pressable>
+                                );
+                            })}
+                        </View>
+
+                        <View style={styles.modalButtonRow}>
+                            <Pressable
+                                style={styles.cancelButton}
+                                onPress={() => setIsPermissionModalOpen(false)}
+                            >
+                                <Text style={styles.cancelButtonText}>취소</Text>
+                            </Pressable>
+                            <Pressable style={styles.saveButton} onPress={savePermissions}>
+                                <Text style={styles.saveButtonText}>저장</Text>
+                            </Pressable>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </ScrollView>
     );
 }
@@ -224,12 +310,37 @@ const styles = StyleSheet.create({
         width: '100%',
     },
 
+    sectionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 12,
+    },
+
     sectionTitle: {
         fontFamily: Fonts.bodyBold,
         fontSize: 17,
         fontWeight: '900',
         color: Colors.text,
-        marginBottom: 12,
+    },
+
+    editPermissionButton: {
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: '#F7F4E8',
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 10,
+    },
+
+    editPermissionText: {
+        marginLeft: 4,
+        fontFamily: Fonts.bodyBold,
+        fontSize: 13,
+        fontWeight: '900',
+        color: Colors.textShadow,
     },
 
     permissionCard: {
@@ -260,5 +371,116 @@ const styles = StyleSheet.create({
         fontFamily: Fonts.body,
         fontSize: 14,
         color: Colors.textShadow,
+    },
+
+    modalBackdrop: {
+        flex: 1,
+        backgroundColor: 'rgba(17, 17, 17, 0.28)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 30,
+    },
+
+    permissionModal: {
+        width: '100%',
+        borderRadius: 18,
+        backgroundColor: Colors.pageBg,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        padding: 20,
+    },
+
+    modalTitle: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 18,
+        fontWeight: '900',
+        color: Colors.text,
+        marginBottom: 8,
+    },
+
+    modalDescription: {
+        fontFamily: Fonts.body,
+        fontSize: 14,
+        lineHeight: 21,
+        color: Colors.textShadow,
+        marginBottom: 16,
+    },
+
+    modalPermissionCard: {
+        width: '100%',
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        padding: 12,
+        gap: 12,
+        marginBottom: 16,
+    },
+
+    modalPermissionRow: {
+        minHeight: 32,
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+
+    modalPermissionCheck: {
+        width: 22,
+        height: 22,
+        borderRadius: 6,
+        backgroundColor: Colors.pageBg3,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 10,
+    },
+
+    modalPermissionCheckSelected: {
+        backgroundColor: Colors.highlight1,
+    },
+
+    modalPermissionText: {
+        flex: 1,
+        fontFamily: Fonts.bodyBold,
+        fontSize: 15,
+        fontWeight: '900',
+        color: Colors.text,
+    },
+
+    modalButtonRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: 8,
+    },
+
+    cancelButton: {
+        height: 38,
+        borderRadius: 19,
+        paddingHorizontal: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#F7F4E8',
+    },
+
+    cancelButtonText: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 14,
+        fontWeight: '900',
+        color: Colors.textShadow,
+    },
+
+    saveButton: {
+        height: 38,
+        borderRadius: 19,
+        paddingHorizontal: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: Colors.highlight1,
+    },
+
+    saveButtonText: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 14,
+        fontWeight: '900',
+        color: Colors.text,
     },
 });

@@ -26,6 +26,8 @@ export default function Login() {
 
     const mockid = 'woldong'
     const mockpw = 'wd1!'
+    const companionMockId = 'wdc';
+    const companionMockPw = 'wdc2026!';
 
     const handleNext = () => {
         const trimmedid = id.trim();
@@ -37,6 +39,19 @@ export default function Login() {
         }
         if (trimmedpassword === '') {
             setPasswordError('비밀번호를 입력해주세요.');
+            return;
+        }
+
+        if (trimmedid === companionMockId) {
+            if (trimmedpassword !== companionMockPw) {
+                setPasswordMatchError('비밀번호를 재확인하세요');
+                return;
+            }
+
+            setIdError('');
+            setPasswordError('');
+            setPasswordMatchError('');
+            router.push('/companion_home/profile_setup' as any);
             return;
         }
 

@@ -1,8 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { GestureResponderEvent, LayoutChangeEvent } from 'react-native';
 import {
     Image,
+    Keyboard,
+    KeyboardAvoidingView,
+    Platform,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -81,6 +84,7 @@ function SnapSlider({ value, onChange }: SnapSliderProps) {
 }
 
 export default function MakeCharacterCustomize() {
+    const scrollViewRef = useRef<ScrollView>(null);
     const params = useLocalSearchParams<{
         name?: string;
         profileImage?: string;
@@ -127,126 +131,152 @@ export default function MakeCharacterCustomize() {
         } as any);
     };
 
+    const scrollToNameInput = () => {
+        setTimeout(() => {
+            scrollViewRef.current?.scrollTo({
+                y: 260,
+                animated: true,
+            });
+        }, 120);
+    };
+
     return (
-        <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={styles.inner}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
+        <KeyboardAvoidingView
+            style={styles.keyboardContainer}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
         >
-            <View style={styles.logoArea}>
-                <View style={styles.logoRow}>
-                    <BackButton />
-                    <Text style={styles.logoTitle}>월동</Text>
+            <ScrollView
+                ref={scrollViewRef}
+                style={styles.scrollView}
+                contentContainerStyle={styles.inner}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="interactive"
+                automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+            >
+                <View style={styles.logoArea}>
+                    <View style={styles.logoRow}>
+                        <BackButton />
+                        <Text style={styles.logoTitle}>월동</Text>
+                        <Image
+                            source={require('../../../assets/images/canola_flower_small.png')}
+                            style={styles.logoFlower}
+                            resizeMode="contain"
+                        />
+                    </View>
+                </View>
+
+                <View style={styles.progressArea}>
+                    <Text style={styles.progressText}>2/3</Text>
+                    <View style={styles.progressTrack}>
+                        <View style={styles.progressFill} />
+                    </View>
+                </View>
+
+                <View style={styles.titleArea}>
+                    <Text style={styles.title}>
+                        우리 아이를 위한 캐릭터가{'\n'}만들어졌어요!
+                    </Text>
+                    <Text style={styles.description}>이름과 말투를 정해주세요.</Text>
+                </View>
+
+                <View style={styles.characterArea}>
                     <Image
-                        source={require('../../../assets/images/canola_flower_small.png')}
-                        style={styles.logoFlower}
+                        source={require('../../../assets/images/mock_character.png')}
+                        style={styles.characterImage}
                         resizeMode="contain"
                     />
+                    <Text style={styles.childCaption}>{childName}에게 이야기를 전할 캐릭터</Text>
                 </View>
-            </View>
 
-            <View style={styles.progressArea}>
-                <Text style={styles.progressText}>2/3</Text>
-                <View style={styles.progressTrack}>
-                    <View style={styles.progressFill} />
+                <View style={styles.formSection}>
+                    <Text style={styles.sectionTitle}>캐릭터 이름<RequiredMark /></Text>
+                    <TextInput
+                        style={[styles.input, nameError ? styles.inputError : null]}
+                        placeholder="ex) 김공주"
+                        placeholderTextColor={Colors.textShadow}
+                        value={characterName}
+                        onFocus={scrollToNameInput}
+                        onChangeText={(text) => {
+                            setCharacterName(text);
+                            if (nameError) setNameError('');
+                        }}
+                        returnKeyType="done"
+                        onSubmitEditing={Keyboard.dismiss}
+                    />
+                    {nameError ? <Text style={styles.errorText}>{nameError}</Text> : null}
                 </View>
-            </View>
 
-            <View style={styles.titleArea}>
-                <Text style={styles.title}>
-                    우리 아이를 위한 캐릭터가{'\n'}만들어졌어요!
-                </Text>
-                <Text style={styles.description}>이름과 말투를 정해주세요.</Text>
-            </View>
-
-            <View style={styles.characterArea}>
-                <Image
-                    source={require('../../../assets/images/mock_character.png')}
-                    style={styles.characterImage}
-                    resizeMode="contain"
-                />
-                <Text style={styles.childCaption}>{childName}에게 이야기를 전할 캐릭터</Text>
-            </View>
-
-            <View style={styles.formSection}>
-                <Text style={styles.sectionTitle}>캐릭터 이름<RequiredMark /></Text>
-                <TextInput
-                    style={[styles.input, nameError ? styles.inputError : null]}
-                    placeholder="ex) 김공주"
-                    placeholderTextColor={Colors.textShadow}
-                    value={characterName}
-                    onChangeText={(text) => {
-                        setCharacterName(text);
-                        if (nameError) setNameError('');
-                    }}
-                />
-                {nameError ? <Text style={styles.errorText}>{nameError}</Text> : null}
-            </View>
-
-            <View style={styles.formSection}>
-                <Text style={styles.sectionTitle}>캐릭터 성별<RequiredMark /></Text>
-                <View style={styles.buttonRow}>
-                    <Pressable
-                        style={[styles.choiceButton, gender === 'female' && styles.choiceButtonSelected]}
-                        onPress={() => {
-                            setGender('female');
-                            if (genderError) setGenderError('');
-                        }}
-                    >
-                        <Text style={styles.choiceText}>여자</Text>
-                    </Pressable>
-                    <Pressable
-                        style={[styles.choiceButton, gender === 'male' && styles.choiceButtonSelected]}
-                        onPress={() => {
-                            setGender('male');
-                            if (genderError) setGenderError('');
-                        }}
-                    >
-                        <Text style={styles.choiceText}>남자</Text>
-                    </Pressable>
+                <View style={styles.formSection}>
+                    <Text style={styles.sectionTitle}>캐릭터 성별<RequiredMark /></Text>
+                    <View style={styles.buttonRow}>
+                        <Pressable
+                            style={[styles.choiceButton, gender === 'female' && styles.choiceButtonSelected]}
+                            onPress={() => {
+                                setGender('female');
+                                if (genderError) setGenderError('');
+                            }}
+                        >
+                            <Text style={styles.choiceText}>여자</Text>
+                        </Pressable>
+                        <Pressable
+                            style={[styles.choiceButton, gender === 'male' && styles.choiceButtonSelected]}
+                            onPress={() => {
+                                setGender('male');
+                                if (genderError) setGenderError('');
+                            }}
+                        >
+                            <Text style={styles.choiceText}>남자</Text>
+                        </Pressable>
+                    </View>
+                    {genderError ? <Text style={styles.errorText}>{genderError}</Text> : null}
                 </View>
-                {genderError ? <Text style={styles.errorText}>{genderError}</Text> : null}
-            </View>
 
-            <View style={styles.formSection}>
-                <Text style={styles.sectionTitle}>목소리 톤<RequiredMark /></Text>
-                <View style={styles.buttonRow}>
-                    <Pressable
-                        style={[styles.choiceButton, tone === 'kind' && styles.choiceButtonSelected]}
-                        onPress={() => {
-                            setTone('kind');
-                            if (toneError) setToneError('');
-                        }}
-                    >
-                        <Text style={styles.choiceText}>다정</Text>
-                    </Pressable>
-                    <Pressable
-                        style={[styles.choiceButton, tone === 'strict' && styles.choiceButtonSelected]}
-                        onPress={() => {
-                            setTone('strict');
-                            if (toneError) setToneError('');
-                        }}
-                    >
-                        <Text style={styles.choiceText}>엄격</Text>
-                    </Pressable>
+                <View style={styles.formSection}>
+                    <Text style={styles.sectionTitle}>목소리 톤<RequiredMark /></Text>
+                    <View style={styles.buttonRow}>
+                        <Pressable
+                            style={[styles.choiceButton, tone === 'kind' && styles.choiceButtonSelected]}
+                            onPress={() => {
+                                setTone('kind');
+                                if (toneError) setToneError('');
+                            }}
+                        >
+                            <Text style={styles.choiceText}>다정</Text>
+                        </Pressable>
+                        <Pressable
+                            style={[styles.choiceButton, tone === 'strict' && styles.choiceButtonSelected]}
+                            onPress={() => {
+                                setTone('strict');
+                                if (toneError) setToneError('');
+                            }}
+                        >
+                            <Text style={styles.choiceText}>엄격</Text>
+                        </Pressable>
+                    </View>
+                    {toneError ? <Text style={styles.errorText}>{toneError}</Text> : null}
                 </View>
-                {toneError ? <Text style={styles.errorText}>{toneError}</Text> : null}
-            </View>
 
-            <View style={styles.formSection}>
-                <Text style={styles.sectionTitle}>빠르기<RequiredMark /></Text>
-                <SnapSlider value={speed} onChange={setSpeed} />
-            </View>
+                <View style={styles.formSection}>
+                    <Text style={styles.sectionTitle}>빠르기<RequiredMark /></Text>
+                    <SnapSlider value={speed} onChange={setSpeed} />
+                </View>
 
-            <View style={styles.buttonArea}>
-                <PrimaryButton label="완료" width="100%" onPress={handleNext} />
-            </View>
-        </ScrollView>
+                <View style={styles.buttonArea}>
+                    <PrimaryButton label="완료" width="100%" onPress={handleNext} />
+                </View>
+            </ScrollView>
+        </KeyboardAvoidingView>
     );
 }
 
 const styles = StyleSheet.create({
+    keyboardContainer: {
+        flex: 1,
+        backgroundColor: Colors.pageBg,
+    },
+
     scrollView: {
         flex: 1,
         backgroundColor: Colors.pageBg,

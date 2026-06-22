@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
     Image,
     Keyboard,
@@ -60,7 +60,6 @@ export default function CalendarAdd() {
         day?: string;
     }>();
 
-    const scrollViewRef = useRef<ScrollView>(null);
     const today = useMemo(() => new Date(), []);
     const initialYear = Number(params.year) || today.getFullYear();
     const initialMonth = Number(params.month) || today.getMonth() + 1;
@@ -72,9 +71,10 @@ export default function CalendarAdd() {
     const [selectedCompanion, setSelectedCompanion] = useState('');
     const [scheduleTitle, setScheduleTitle] = useState('');
     const [memo, setMemo] = useState('');
+    const [todos, setTodos] = useState<string[]>([]);
+    const [todoText, setTodoText] = useState('');
     const [error, setError] = useState('');
     const [sheetTarget, setSheetTarget] = useState<SheetTarget>(null);
-    const [keyboardBottomInset, setKeyboardBottomInset] = useState(0);
     const calendarDays = useMemo(() => {
         const firstDay = new Date(selectedYear, selectedMonth - 1, 1).getDay();
         const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
@@ -166,47 +166,35 @@ export default function CalendarAdd() {
                 addedEventDay: String(selectedDay),
                 addedEventTitle: scheduleTitle.trim(),
                 addedEventCompanion: selectedCompanion,
+                addedEventTodos: JSON.stringify(todos),
             },
         } as any);
     };
 
-    const scrollToFormBottom = () => {
-        setTimeout(() => {
-            scrollViewRef.current?.scrollToEnd({ animated: true });
-        }, 320);
+    const addTodo = () => {
+        const trimmedText = todoText.trim();
+        if (!trimmedText) return;
+
+        setTodos((current) => [...current, trimmedText]);
+        setTodoText('');
     };
 
-    useEffect(() => {
-        const showSubscription = Keyboard.addListener('keyboardDidShow', (event) => {
-            setKeyboardBottomInset(event.endCoordinates.height);
-            setTimeout(() => {
-                scrollViewRef.current?.scrollToEnd({ animated: true });
-            }, 80);
-        });
-        const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
-            setKeyboardBottomInset(0);
-        });
-
-        return () => {
-            showSubscription.remove();
-            hideSubscription.remove();
-        };
-    }, []);
+    const deleteTodo = (index: number) => {
+        setTodos((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    };
 
     return (
         <KeyboardAvoidingView
             style={styles.keyboardContainer}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
         >
         <ScrollView
-            ref={scrollViewRef}
             style={styles.scrollView}
-            contentContainerStyle={[
-                styles.inner,
-                keyboardBottomInset ? { paddingBottom: keyboardBottomInset + 180 } : null,
-            ]}
+            contentContainerStyle={styles.inner}
             keyboardShouldPersistTaps="handled"
-            automaticallyAdjustKeyboardInsets
+            keyboardDismissMode="interactive"
+            automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
             showsVerticalScrollIndicator={false}
         >
             <View style={styles.logoArea}>
@@ -316,7 +304,6 @@ export default function CalendarAdd() {
                     placeholder="ex) 병원 진료"
                     placeholderTextColor={Colors.textShadow}
                     value={scheduleTitle}
-                    onFocus={scrollToFormBottom}
                     onChangeText={(text) => {
                         setScheduleTitle(text);
                         clearError();
@@ -334,8 +321,37 @@ export default function CalendarAdd() {
                     onChangeText={setMemo}
                     multiline
                     textAlignVertical="top"
-                    onFocus={scrollToFormBottom}
                 />
+            </View>
+
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>세부 Todo</Text>
+                <View style={styles.todoCard}>
+                    {todos.map((todo, index) => (
+                        <View key={`${todo}-${index}`} style={styles.todoRow}>
+                            <Ionicons name="ellipse-outline" size={16} color={Colors.textShadow} />
+                            <Text style={styles.todoText}>{todo}</Text>
+                            <Pressable onPress={() => deleteTodo(index)} hitSlop={8}>
+                                <Ionicons name="close" size={18} color={Colors.textShadow} />
+                            </Pressable>
+                        </View>
+                    ))}
+
+                    <View style={styles.todoInputRow}>
+                        <TextInput
+                            style={styles.todoInput}
+                            placeholder="ex) 병원 접수하기"
+                            placeholderTextColor={Colors.textShadow}
+                            value={todoText}
+                            onChangeText={setTodoText}
+                            returnKeyType="done"
+                            onSubmitEditing={addTodo}
+                        />
+                        <Pressable style={styles.todoAddButton} onPress={addTodo}>
+                            <Ionicons name="add" size={18} color={Colors.text} />
+                        </Pressable>
+                    </View>
+                </View>
             </View>
 
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -435,7 +451,7 @@ const styles = StyleSheet.create({
         width: '100%',
         paddingTop: 10,
         paddingHorizontal: 32,
-        paddingBottom: 54,
+        paddingBottom: 120,
     },
 
     logoArea: {
@@ -744,6 +760,57 @@ const styles = StyleSheet.create({
         fontSize: 14,
         lineHeight: 21,
         color: Colors.text,
+    },
+
+    todoCard: {
+        width: '100%',
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        padding: 12,
+        gap: 10,
+    },
+
+    todoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        minHeight: 28,
+    },
+
+    todoText: {
+        flex: 1,
+        marginLeft: 8,
+        fontFamily: Fonts.body,
+        fontSize: 14,
+        color: Colors.text,
+        lineHeight: 20,
+    },
+
+    todoInputRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderTopWidth: 1,
+        borderTopColor: '#E8DDC8',
+        paddingTop: 10,
+    },
+
+    todoInput: {
+        flex: 1,
+        height: 36,
+        fontFamily: Fonts.body,
+        fontSize: 14,
+        color: Colors.text,
+        paddingVertical: 0,
+    },
+
+    todoAddButton: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: Colors.highlight1,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
 
     errorText: {

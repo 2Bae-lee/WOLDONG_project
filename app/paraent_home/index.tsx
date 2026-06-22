@@ -4,7 +4,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Image,
     Keyboard,
+    KeyboardAvoidingView,
     Modal,
+    Platform,
     Pressable,
     SafeAreaView,
     ScrollView,
@@ -44,11 +46,13 @@ type CalendarEvent = {
     day: number;
     title: string;
     companion: string;
+    todos: ScheduleTodo[];
 };
 
 type EditTarget =
     | { type: 'schedule'; item: ScheduleItem }
     | { type: 'handoff'; item: HandoffItem }
+    | { type: 'calendar'; item: CalendarEvent }
     | null;
 
 const initialSchedules: ScheduleItem[] = [
@@ -101,6 +105,11 @@ export default function ParentHome() {
         addedEventDay?: string;
         addedEventTitle?: string;
         addedEventCompanion?: string;
+        addedEventTodos?: string;
+        addedScheduleId?: string;
+        addedScheduleTitle?: string;
+        addedScheduleCompanion?: string;
+        addedScheduleTodos?: string;
         updatedChildName?: string;
         updatedProfileImage?: string;
         updatedProfileSections?: string;
@@ -130,9 +139,40 @@ export default function ParentHome() {
     const [schedules, setSchedules] = useState(initialSchedules);
     const [handoffs, setHandoffs] = useState(initialHandoffs);
     const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([
-        { id: 1, year: currentYear, month: currentMonth, day: todayDay, title: '병원 진료', companion: '박민지' },
-        { id: 2, year: currentYear, month: currentMonth, day: todayDay, title: '진료 후 쉬는 시간', companion: '이하늘' },
-        { id: 3, year: currentYear, month: currentMonth, day: Math.min(todayDay + 3, new Date(currentYear, currentMonth, 0).getDate()), title: '언어 치료', companion: '최서윤' },
+        {
+            id: 1,
+            year: currentYear,
+            month: currentMonth,
+            day: todayDay,
+            title: '병원 진료',
+            companion: '박민지',
+            todos: [
+                { id: 101, text: '진료 접수하기', done: false },
+                { id: 102, text: '진료 후 쉬는 시간 갖기', done: false },
+            ],
+        },
+        {
+            id: 2,
+            year: currentYear,
+            month: currentMonth,
+            day: todayDay,
+            title: '진료 후 쉬는 시간',
+            companion: '이하늘',
+            todos: [
+                { id: 201, text: '조용한 장소 찾기', done: true },
+            ],
+        },
+        {
+            id: 3,
+            year: currentYear,
+            month: currentMonth,
+            day: Math.min(todayDay + 3, new Date(currentYear, currentMonth, 0).getDate()),
+            title: '언어 치료',
+            companion: '최서윤',
+            todos: [
+                { id: 301, text: '치료 카드 챙기기', done: false },
+            ],
+        },
     ]);
     const [isScheduleInputOpen, setIsScheduleInputOpen] = useState(false);
     const [isHandoffInputOpen, setIsHandoffInputOpen] = useState(false);
@@ -166,6 +206,48 @@ export default function ParentHome() {
             setChildProfileSections(params.updatedProfileSections);
         }
 
+        const addedScheduleId = params.addedScheduleId;
+        const addedScheduleTitle = params.addedScheduleTitle;
+        const addedScheduleCompanion = params.addedScheduleCompanion;
+
+        if (addedScheduleId && addedScheduleTitle && addedScheduleCompanion) {
+            const scheduleId = Number(addedScheduleId);
+            let parsedTodos: ScheduleTodo[] = [];
+
+            try {
+                const parsed = params.addedScheduleTodos ? JSON.parse(params.addedScheduleTodos) : [];
+                parsedTodos = Array.isArray(parsed)
+                    ? parsed
+                        .filter((item) => typeof item === 'string' && item.trim())
+                        .map((item, index) => ({
+                            id: scheduleId + index + 1,
+                            text: item.trim(),
+                            done: false,
+                        }))
+                    : [];
+            } catch {
+                parsedTodos = [];
+            }
+
+            if (!Number.isNaN(scheduleId)) {
+                setActiveTab('today');
+                setSchedules((current) => (
+                    current.some((schedule) => schedule.id === scheduleId)
+                        ? current
+                        : [
+                            ...current,
+                            {
+                                id: scheduleId,
+                                text: addedScheduleTitle,
+                                done: false,
+                                companion: addedScheduleCompanion,
+                                todos: parsedTodos,
+                            },
+                        ]
+                ));
+            }
+        }
+
         if (
             !params.addedEventId ||
             !params.addedEventTitle ||
@@ -177,13 +259,32 @@ export default function ParentHome() {
             return;
         }
 
+        const eventId = Number(params.addedEventId);
+        let parsedTodos: ScheduleTodo[] = [];
+
+        try {
+            const parsed = params.addedEventTodos ? JSON.parse(params.addedEventTodos) : [];
+            parsedTodos = Array.isArray(parsed)
+                ? parsed
+                    .filter((item) => typeof item === 'string' && item.trim())
+                    .map((item, index) => ({
+                        id: eventId + index + 1,
+                        text: item.trim(),
+                        done: false,
+                    }))
+                : [];
+        } catch {
+            parsedTodos = [];
+        }
+
         const nextEvent = {
-            id: Number(params.addedEventId),
+            id: eventId,
             year: Number(params.addedEventYear),
             month: Number(params.addedEventMonth),
             day: Number(params.addedEventDay),
             title: params.addedEventTitle,
             companion: params.addedEventCompanion,
+            todos: parsedTodos,
         };
 
         if (
@@ -209,7 +310,12 @@ export default function ParentHome() {
         params.addedEventId,
         params.addedEventMonth,
         params.addedEventTitle,
+        params.addedEventTodos,
         params.addedEventYear,
+        params.addedScheduleCompanion,
+        params.addedScheduleId,
+        params.addedScheduleTitle,
+        params.addedScheduleTodos,
         params.tab,
         params.updatedChildName,
         params.updatedProfileImage,
@@ -230,12 +336,6 @@ export default function ParentHome() {
         cancelAddInputs();
         setActiveTab(nextTab);
         scrollViewRef.current?.scrollTo({ y: 0, animated: true });
-    };
-
-    const scrollToBottom = () => {
-        setTimeout(() => {
-            scrollViewRef.current?.scrollToEnd({ animated: true });
-        }, 80);
     };
 
     const toggleSchedule = (id: number) => {
@@ -291,6 +391,15 @@ export default function ParentHome() {
         setEditText(item.text);
     };
 
+    const openCalendarEditor = (item: CalendarEvent) => {
+        cancelAddInputs();
+        setEditTarget({ type: 'calendar', item });
+        setEditText(item.title);
+        setEditCompanion(item.companion);
+        setEditTodos(item.todos);
+        setEditTodoText('');
+    };
+
     const closeEditor = () => {
         setEditTarget(null);
         setEditText('');
@@ -336,6 +445,17 @@ export default function ParentHome() {
                     }
                     : item
             )));
+        } else if (editTarget.type === 'calendar') {
+            setCalendarEvents((current) => current.map((item) => (
+                item.id === editTarget.item.id
+                    ? {
+                        ...item,
+                        title: trimmedText,
+                        companion: editCompanion,
+                        todos: editTodos,
+                    }
+                    : item
+            )));
         } else {
             setHandoffs((current) => current.map((item) => (
                 item.id === editTarget.item.id ? { ...item, text: trimmedText } : item
@@ -350,6 +470,8 @@ export default function ParentHome() {
 
         if (editTarget.type === 'schedule') {
             setSchedules((current) => current.filter((item) => item.id !== editTarget.item.id));
+        } else if (editTarget.type === 'calendar') {
+            setCalendarEvents((current) => current.filter((item) => item.id !== editTarget.item.id));
         } else {
             setHandoffs((current) => current.filter((item) => item.id !== editTarget.item.id));
         }
@@ -487,38 +609,18 @@ export default function ParentHome() {
                                 ))}
                             </View>
 
-                            {isScheduleInputOpen ? (
-                                <View style={styles.inlineInputRow}>
-                                    <TextInput
-                                        style={styles.inlineInput}
-                                        placeholder="추가할 일정을 입력해주세요"
-                                        placeholderTextColor={Colors.textShadow}
-                                        value={scheduleText}
-                                        onChangeText={setScheduleText}
-                                        autoFocus
-                                        returnKeyType="done"
-                                        onSubmitEditing={addSchedule}
-                                    />
-                                    <Pressable style={styles.inlineAddButton} onPress={addSchedule}>
-                                        <Ionicons name="checkmark" size={18} color={Colors.text} />
-                                    </Pressable>
+                            <Pressable
+                                style={styles.addButton}
+                                onPress={() => {
+                                    cancelAddInputs();
+                                    router.push('/paraent_home/schedule_add' as any);
+                                }}
+                            >
+                                <View style={styles.addIconCircle}>
+                                    <Ionicons name="add" size={18} color={Colors.realwhite} />
                                 </View>
-                            ) : (
-                                <Pressable
-                                    style={styles.addButton}
-                                    onPress={() => {
-                                        setIsHandoffInputOpen(false);
-                                        setHandoffText('');
-                                        setIsScheduleInputOpen(true);
-                                        scrollToBottom();
-                                    }}
-                                >
-                                    <View style={styles.addIconCircle}>
-                                        <Ionicons name="add" size={18} color={Colors.realwhite} />
-                                    </View>
-                                    <Text style={styles.addButtonText}>일정 추가하기</Text>
-                                </Pressable>
-                            )}
+                                <Text style={styles.addButtonText}>일정 추가하기</Text>
+                            </Pressable>
                         </View>
 
                         <View style={styles.section}>
@@ -552,7 +654,6 @@ export default function ParentHome() {
                                         autoFocus
                                         multiline
                                         textAlignVertical="top"
-                                        onFocus={scrollToBottom}
                                     />
                                     <Pressable style={styles.saveHandoffButton} onPress={addHandoff}>
                                         <Text style={styles.saveHandoffText}>저장</Text>
@@ -565,7 +666,6 @@ export default function ParentHome() {
                                         setIsScheduleInputOpen(false);
                                         setScheduleText('');
                                         setIsHandoffInputOpen(true);
-                                        scrollToBottom();
                                     }}
                                 >
                                     <View style={styles.addIconCircle}>
@@ -645,15 +745,39 @@ export default function ParentHome() {
                         <View style={styles.calendarEventList}>
                             {selectedCalendarEvents.length > 0 ? (
                                 selectedCalendarEvents.map((event) => (
-                                    <View key={event.id} style={styles.calendarEventCard}>
+                                    <Pressable
+                                        key={event.id}
+                                        style={styles.calendarEventCard}
+                                        onPress={() => openCalendarEditor(event)}
+                                    >
                                         <View style={styles.calendarEventIcon}>
                                             <Ionicons name="calendar-outline" size={18} color={Colors.text} />
                                         </View>
                                         <View style={styles.calendarEventTextArea}>
                                             <Text style={styles.calendarEventName}>{event.title}</Text>
                                             <Text style={styles.calendarEventCompanion}>{event.companion}와 공유 중</Text>
+                                            {event.todos.length > 0 ? (
+                                                <View style={styles.calendarTodoPreview}>
+                                                    {event.todos.slice(0, 2).map((todo) => (
+                                                        <View key={todo.id} style={styles.calendarTodoPreviewRow}>
+                                                            <Ionicons
+                                                                name={todo.done ? 'checkmark-circle' : 'ellipse-outline'}
+                                                                size={13}
+                                                                color={todo.done ? Colors.highlight1 : Colors.textShadow}
+                                                            />
+                                                            <Text style={[
+                                                                styles.calendarTodoPreviewText,
+                                                                todo.done && styles.calendarTodoPreviewTextDone,
+                                                            ]}>
+                                                                {todo.text}
+                                                            </Text>
+                                                        </View>
+                                                    ))}
+                                                </View>
+                                            ) : null}
                                         </View>
-                                    </View>
+                                        <Ionicons name="chevron-forward" size={18} color={Colors.textShadow} />
+                                    </Pressable>
                                 ))
                             ) : (
                                 <View style={styles.emptyEventCard}>
@@ -728,102 +852,108 @@ export default function ParentHome() {
                 onRequestClose={closeEditor}
             >
                 <Pressable style={styles.modalBackdrop} onPress={Keyboard.dismiss}>
-                    <Pressable style={styles.editModal} onPress={() => undefined}>
-                        <Text style={styles.modalTitle}>
-                            {editTarget?.type === 'schedule' ? '일정 수정하기' : '인수인계 자료 수정하기'}
-                        </Text>
-                        <TextInput
-                            style={styles.modalInput}
-                            value={editText}
-                            onChangeText={setEditText}
-                            placeholder="내용을 입력해주세요"
-                            placeholderTextColor={Colors.textShadow}
-                            multiline={editTarget?.type === 'handoff'}
-                            textAlignVertical="top"
-                            autoFocus
-                        />
+                    <KeyboardAvoidingView
+                        style={styles.modalKeyboardArea}
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+                    >
+                        <Pressable style={styles.editModal} onPress={(event) => event.stopPropagation()}>
+                            <Text style={styles.modalTitle}>
+                                {editTarget?.type === 'handoff' ? '인수인계 자료 수정하기' : '일정 수정하기'}
+                            </Text>
+                            <TextInput
+                                style={styles.modalInput}
+                                value={editText}
+                                onChangeText={setEditText}
+                                placeholder="내용을 입력해주세요"
+                                placeholderTextColor={Colors.textShadow}
+                                multiline={editTarget?.type === 'handoff'}
+                                textAlignVertical="top"
+                                autoFocus
+                            />
 
-                        {editTarget?.type === 'schedule' ? (
-                            <>
-                                <Text style={styles.modalSubTitle}>함께 가는 동행인</Text>
-                                <View style={styles.modalChipRow}>
-                                    {companionOptions.map((companion) => {
-                                        const selected = editCompanion === companion;
+                            {editTarget?.type === 'schedule' || editTarget?.type === 'calendar' ? (
+                                <>
+                                    <Text style={styles.modalSubTitle}>함께 가는 동행인</Text>
+                                    <View style={styles.modalChipRow}>
+                                        {companionOptions.map((companion) => {
+                                            const selected = editCompanion === companion;
 
-                                        return (
-                                            <Pressable
-                                                key={companion}
-                                                style={[styles.modalChip, selected && styles.modalChipSelected]}
-                                                onPress={() => setEditCompanion(companion)}
-                                            >
+                                            return (
+                                                <Pressable
+                                                    key={companion}
+                                                    style={[styles.modalChip, selected && styles.modalChipSelected]}
+                                                    onPress={() => setEditCompanion(companion)}
+                                                >
+                                                    <Text style={[
+                                                        styles.modalChipText,
+                                                        selected && styles.modalChipTextSelected,
+                                                    ]}>
+                                                        {companion}
+                                                    </Text>
+                                                </Pressable>
+                                            );
+                                        })}
+                                    </View>
+
+                                    <Text style={styles.modalSubTitle}>세부 Todo</Text>
+                                    <View style={styles.todoEditorCard}>
+                                        {editTodos.map((todo) => (
+                                            <View key={todo.id} style={styles.todoEditorRow}>
+                                                <Pressable
+                                                    style={[
+                                                        styles.todoEditorCheck,
+                                                        todo.done && styles.todoEditorCheckDone,
+                                                    ]}
+                                                    onPress={() => toggleEditTodo(todo.id)}
+                                                >
+                                                    {todo.done ? (
+                                                        <Ionicons name="checkmark" size={14} color={Colors.realwhite} />
+                                                    ) : null}
+                                                </Pressable>
                                                 <Text style={[
-                                                    styles.modalChipText,
-                                                    selected && styles.modalChipTextSelected,
+                                                    styles.todoEditorText,
+                                                    todo.done && styles.todoEditorTextDone,
                                                 ]}>
-                                                    {companion}
+                                                    {todo.text}
                                                 </Text>
-                                            </Pressable>
-                                        );
-                                    })}
-                                </View>
+                                                <Pressable onPress={() => deleteEditTodo(todo.id)} hitSlop={8}>
+                                                    <Ionicons name="close" size={18} color={Colors.textShadow} />
+                                                </Pressable>
+                                            </View>
+                                        ))}
 
-                                <Text style={styles.modalSubTitle}>세부 Todo</Text>
-                                <View style={styles.todoEditorCard}>
-                                    {editTodos.map((todo) => (
-                                        <View key={todo.id} style={styles.todoEditorRow}>
-                                            <Pressable
-                                                style={[
-                                                    styles.todoEditorCheck,
-                                                    todo.done && styles.todoEditorCheckDone,
-                                                ]}
-                                                onPress={() => toggleEditTodo(todo.id)}
-                                            >
-                                                {todo.done ? (
-                                                    <Ionicons name="checkmark" size={14} color={Colors.realwhite} />
-                                                ) : null}
-                                            </Pressable>
-                                            <Text style={[
-                                                styles.todoEditorText,
-                                                todo.done && styles.todoEditorTextDone,
-                                            ]}>
-                                                {todo.text}
-                                            </Text>
-                                            <Pressable onPress={() => deleteEditTodo(todo.id)} hitSlop={8}>
-                                                <Ionicons name="close" size={18} color={Colors.textShadow} />
+                                        <View style={styles.todoAddRow}>
+                                            <TextInput
+                                                style={styles.todoAddInput}
+                                                placeholder="세부 할 일을 입력해주세요"
+                                                placeholderTextColor={Colors.textShadow}
+                                                value={editTodoText}
+                                                onChangeText={setEditTodoText}
+                                                returnKeyType="done"
+                                                onSubmitEditing={addEditTodo}
+                                            />
+                                            <Pressable style={styles.todoAddButton} onPress={addEditTodo}>
+                                                <Ionicons name="add" size={18} color={Colors.text} />
                                             </Pressable>
                                         </View>
-                                    ))}
-
-                                    <View style={styles.todoAddRow}>
-                                        <TextInput
-                                            style={styles.todoAddInput}
-                                            placeholder="세부 할 일을 입력해주세요"
-                                            placeholderTextColor={Colors.textShadow}
-                                            value={editTodoText}
-                                            onChangeText={setEditTodoText}
-                                            returnKeyType="done"
-                                            onSubmitEditing={addEditTodo}
-                                        />
-                                        <Pressable style={styles.todoAddButton} onPress={addEditTodo}>
-                                            <Ionicons name="add" size={18} color={Colors.text} />
-                                        </Pressable>
                                     </View>
-                                </View>
-                            </>
-                        ) : null}
+                                </>
+                            ) : null}
 
-                        <View style={styles.modalButtonRow}>
-                            <Pressable style={styles.deleteButton} onPress={deleteEdit}>
-                                <Text style={styles.deleteButtonText}>삭제</Text>
-                            </Pressable>
-                            <Pressable style={styles.cancelButton} onPress={closeEditor}>
-                                <Text style={styles.cancelButtonText}>취소</Text>
-                            </Pressable>
-                            <Pressable style={styles.saveButton} onPress={saveEdit}>
-                                <Text style={styles.saveButtonText}>저장</Text>
-                            </Pressable>
-                        </View>
-                    </Pressable>
+                            <View style={styles.modalButtonRow}>
+                                <Pressable style={styles.deleteButton} onPress={deleteEdit}>
+                                    <Text style={styles.deleteButtonText}>삭제</Text>
+                                </Pressable>
+                                <Pressable style={styles.cancelButton} onPress={closeEditor}>
+                                    <Text style={styles.cancelButtonText}>취소</Text>
+                                </Pressable>
+                                <Pressable style={styles.saveButton} onPress={saveEdit}>
+                                    <Text style={styles.saveButtonText}>저장</Text>
+                                </Pressable>
+                            </View>
+                        </Pressable>
+                    </KeyboardAvoidingView>
                 </Pressable>
             </Modal>
         </SafeAreaView>
@@ -1319,6 +1449,28 @@ const styles = StyleSheet.create({
         color: Colors.textShadow,
     },
 
+    calendarTodoPreview: {
+        marginTop: 8,
+        gap: 4,
+    },
+
+    calendarTodoPreviewRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+
+    calendarTodoPreviewText: {
+        flex: 1,
+        marginLeft: 5,
+        fontFamily: Fonts.body,
+        fontSize: 13,
+        color: Colors.text,
+    },
+
+    calendarTodoPreviewTextDone: {
+        color: '#A9A196',
+    },
+
     emptyEventCard: {
         width: '100%',
         minHeight: 58,
@@ -1390,6 +1542,11 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         paddingHorizontal: 30,
+    },
+
+    modalKeyboardArea: {
+        width: '100%',
+        alignItems: 'center',
     },
 
     editModal: {

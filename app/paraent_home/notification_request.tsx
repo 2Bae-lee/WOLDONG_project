@@ -6,6 +6,7 @@ import BackButton from '../../components/BackButton';
 import PrimaryButton from '../../components/PrimaryButton';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
+import { approveCompanionRequestNotification } from '../../constants/NotificationState';
 
 const relationOptions = ['담임 선생님', '활동지원사', '치료사', '가족'];
 const permissionOptions = [
@@ -32,6 +33,8 @@ export default function NotificationRequest() {
     };
 
     const approveCompanion = () => {
+        approveCompanionRequestNotification('박민지');
+
         router.replace({
             pathname: '/paraent_home/companions',
             params: {

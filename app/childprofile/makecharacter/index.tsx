@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
     Image,
     Keyboard,
@@ -19,6 +19,7 @@ import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
 
 export default function MakeCharacterStory() {
+    const scrollViewRef = useRef<ScrollView>(null);
     const params = useLocalSearchParams<{
         name?: string;
         profileImage?: string;
@@ -49,16 +50,29 @@ export default function MakeCharacterStory() {
         } as any);
     };
 
+    const scrollToStoryInput = () => {
+        setTimeout(() => {
+            scrollViewRef.current?.scrollTo({
+                y: 170,
+                animated: true,
+            });
+        }, 120);
+    };
+
     return (
         <KeyboardAvoidingView
             style={styles.keyboardContainer}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
         >
             <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
                 <ScrollView
+                    ref={scrollViewRef}
                     style={styles.scrollView}
                     contentContainerStyle={styles.inner}
                     keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="interactive"
+                    automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
                     showsVerticalScrollIndicator={false}
                 >
                     <View style={styles.logoArea}>
@@ -113,6 +127,7 @@ export default function MakeCharacterStory() {
                             placeholder="ex) 지팡이를 든 공주"
                             placeholderTextColor={Colors.textShadow}
                             value={story}
+                            onFocus={scrollToStoryInput}
                             onChangeText={(text) => {
                                 setStory(text);
                                 if (storyError) setStoryError('');

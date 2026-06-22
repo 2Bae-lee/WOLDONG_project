@@ -1,9 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../components/BackButton';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
+import { isCompanionRequestNotificationApproved } from '../../constants/NotificationState';
 
 type NotificationItem = {
     id: number;
@@ -12,6 +15,7 @@ type NotificationItem = {
     time: string;
     type: 'companion_request' | 'schedule' | 'handoff';
     unread: boolean;
+    companionName?: string;
 };
 
 const notifications: NotificationItem[] = [
@@ -22,6 +26,7 @@ const notifications: NotificationItem[] = [
         time: '방금 전',
         type: 'companion_request',
         unread: true,
+        companionName: '박민지',
     },
     {
         id: 2,
@@ -42,6 +47,24 @@ const notifications: NotificationItem[] = [
 ];
 
 export default function Notifications() {
+    const [refreshKey, setRefreshKey] = useState(0);
+
+    useFocusEffect(
+        useCallback(() => {
+            setRefreshKey((current) => current + 1);
+        }, [])
+    );
+
+    const visibleNotifications = useMemo(() => (
+        notifications.filter((notification) => {
+            if (notification.type !== 'companion_request') {
+                return true;
+            }
+
+            return !isCompanionRequestNotificationApproved(notification.companionName ?? '');
+        })
+    ), [refreshKey]);
+
     const openNotification = (notification: NotificationItem) => {
         if (notification.type === 'companion_request') {
             router.push('/paraent_home/notification_request' as any);
@@ -72,7 +95,7 @@ export default function Notifications() {
             </View>
 
             <View style={styles.listArea}>
-                {notifications.map((notification) => (
+                {visibleNotifications.map((notification) => (
                     <Pressable
                         key={notification.id}
                         style={styles.notificationCard}
@@ -102,6 +125,14 @@ export default function Notifications() {
                         ) : null}
                     </Pressable>
                 ))}
+
+                {visibleNotifications.length === 0 ? (
+                    <View style={styles.emptyCard}>
+                        <Ionicons name="checkmark-circle" size={34} color={Colors.highlight1} />
+                        <Text style={styles.emptyTitle}>확인할 알림이 없어요.</Text>
+                        <Text style={styles.emptyDescription}>새로운 소식이 생기면 여기에서 알려드릴게요.</Text>
+                    </View>
+                ) : null}
             </View>
         </ScrollView>
     );
@@ -230,5 +261,35 @@ const styles = StyleSheet.create({
         fontSize: 14,
         lineHeight: 21,
         color: Colors.textShadow,
+    },
+
+    emptyCard: {
+        width: '100%',
+        minHeight: 180,
+        borderRadius: 18,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 24,
+        paddingVertical: 28,
+    },
+
+    emptyTitle: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 17,
+        fontWeight: '900',
+        color: Colors.text,
+        marginTop: 12,
+        marginBottom: 8,
+    },
+
+    emptyDescription: {
+        fontFamily: Fonts.body,
+        fontSize: 14,
+        lineHeight: 21,
+        color: Colors.textShadow,
+        textAlign: 'center',
     },
 });

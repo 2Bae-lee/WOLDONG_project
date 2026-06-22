@@ -26,6 +26,9 @@ def wav_to_mel(wav_path: str):
     torchaudio = _load_torchaudio()
     waveform, sample_rate = torchaudio.load(wav_path)
 
+    if waveform.size(0) > 1:
+        waveform = waveform.mean(dim=0, keepdim=True)
+
     if sample_rate != SAMPLE_RATE:
         waveform = torchaudio.functional.resample(
             waveform,
@@ -41,7 +44,12 @@ def wav_to_mel(wav_path: str):
         n_mels=N_MELS,
     )
 
-    return transform(waveform).squeeze(0)
+    mel = transform(waveform).squeeze(0)
+
+    if mel.dim() == 2 and mel.size(0) != N_MELS and mel.size(1) == N_MELS:
+        mel = mel.transpose(0, 1)
+
+    return mel
 
 
 def mel_to_wav(mel, output_path: str):

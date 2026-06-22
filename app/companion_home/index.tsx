@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
     Image,
     Keyboard,
@@ -16,6 +17,14 @@ import {
     View,
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
+import {
+    CompanionTodaySchedule,
+    getCompanionTodaySchedules,
+    subscribeCompanionTodaySchedules,
+    toggleCompanionTodaySchedule,
+    toggleCompanionTodayTodo,
+    updateCompanionTodaySchedule,
+} from '../../constants/CompanionTodayState';
 import { Fonts } from '../../constants/Fonts';
 import { registerCompanionRequestNotification } from '../../constants/NotificationState';
 
@@ -29,15 +38,6 @@ type ChildItem = {
     permissions: string[];
     status: 'connected' | 'pending';
     inviteCode?: string;
-};
-
-type HomeTodo = {
-    id: number;
-    childName: string;
-    title: string;
-    guardian: string;
-    done: boolean;
-    todos: { id: number; text: string; done: boolean }[];
 };
 
 type CalendarTodo = {
@@ -149,35 +149,28 @@ export default function CompanionChildren() {
     const [editTodos, setEditTodos] = useState<CalendarTodo[]>([]);
     const [editTodoText, setEditTodoText] = useState('');
     const [editError, setEditError] = useState('');
-    const [todayTodos, setTodayTodos] = useState<HomeTodo[]>([
-        {
-            id: 1,
-            childName: '김월동',
-            title: '병원 진료',
-            guardian: '김보호자',
-            done: false,
-            todos: [
-                { id: 11, text: '병원 접수하기', done: false },
-                { id: 12, text: '진료 전 짧게 설명하기', done: true },
-            ],
-        },
-        {
-            id: 2,
-            childName: '이하준',
-            title: '귀가 준비',
-            guardian: '이보호자',
-            done: false,
-            todos: [
-                { id: 21, text: '가방 챙기기', done: false },
-            ],
-        },
-    ]);
-    const [editingTodayTodo, setEditingTodayTodo] = useState<HomeTodo | null>(null);
+    const [isChildPickerOpen, setIsChildPickerOpen] = useState(false);
+    const [todayTodos, setTodayTodos] = useState<CompanionTodaySchedule[]>(() => (
+        getCompanionTodaySchedules()
+    ));
+    const [editingTodayTodo, setEditingTodayTodo] = useState<CompanionTodaySchedule | null>(null);
     const [todayEditTitle, setTodayEditTitle] = useState('');
     const [todayEditTodos, setTodayEditTodos] = useState<CalendarTodo[]>([]);
     const [todayEditTodoText, setTodayEditTodoText] = useState('');
     const [todayEditError, setTodayEditError] = useState('');
     const connectedChildren = children.filter((child) => child.status === 'connected');
+    const selectedEditChild = connectedChildren.find((child) => child.name === editChildName);
+
+    useFocusEffect(
+        useCallback(() => {
+            setTodayTodos(getCompanionTodaySchedules());
+            const unsubscribe = subscribeCompanionTodaySchedules(() => {
+                setTodayTodos(getCompanionTodaySchedules());
+            });
+
+            return unsubscribe;
+        }, [])
+    );
     const calendarDays = useMemo(() => {
         const firstDay = new Date(calendarYear, calendarMonth - 1, 1).getDay();
         const daysInMonth = new Date(calendarYear, calendarMonth, 0).getDate();
@@ -276,6 +269,7 @@ export default function CompanionChildren() {
         setEditTodos([]);
         setEditTodoText('');
         setEditError('');
+        setIsChildPickerOpen(false);
         setIsCalendarEditorOpen(true);
     };
 
@@ -286,6 +280,7 @@ export default function CompanionChildren() {
         setEditTodos(event.todos);
         setEditTodoText('');
         setEditError('');
+        setIsChildPickerOpen(false);
         setIsCalendarEditorOpen(true);
     };
 
@@ -297,6 +292,7 @@ export default function CompanionChildren() {
         setEditTodos([]);
         setEditTodoText('');
         setEditError('');
+        setIsChildPickerOpen(false);
         Keyboard.dismiss();
     };
 
@@ -369,25 +365,14 @@ export default function CompanionChildren() {
     };
 
     const toggleTodaySchedule = (id: number) => {
-        setTodayTodos((current) => current.map((schedule) => (
-            schedule.id === id ? { ...schedule, done: !schedule.done } : schedule
-        )));
+        toggleCompanionTodaySchedule(id);
     };
 
     const toggleTodayTodo = (scheduleId: number, todoId: number) => {
-        setTodayTodos((current) => current.map((schedule) => (
-            schedule.id === scheduleId
-                ? {
-                    ...schedule,
-                    todos: schedule.todos.map((todo) => (
-                        todo.id === todoId ? { ...todo, done: !todo.done } : todo
-                    )),
-                }
-                : schedule
-        )));
+        toggleCompanionTodayTodo(scheduleId, todoId);
     };
 
-    const openTodayEditor = (schedule: HomeTodo) => {
+    const openTodayEditor = (schedule: CompanionTodaySchedule) => {
         setEditingTodayTodo(schedule);
         setTodayEditTitle(schedule.title);
         setTodayEditTodos(schedule.todos);
@@ -432,11 +417,7 @@ export default function CompanionChildren() {
             return;
         }
 
-        setTodayTodos((current) => current.map((schedule) => (
-            schedule.id === editingTodayTodo.id
-                ? { ...schedule, title: trimmedTitle, todos: todayEditTodos }
-                : schedule
-        )));
+        updateCompanionTodaySchedule(editingTodayTodo.id, trimmedTitle, todayEditTodos);
         closeTodayEditor();
     };
 
@@ -499,16 +480,22 @@ export default function CompanionChildren() {
                                                 <Text style={[
                                                     styles.todoTitle,
                                                     schedule.done && styles.todoDoneText,
-                                                ]}>
+                                                ]} numberOfLines={1}>
                                                     {schedule.title}
                                                 </Text>
                                             </Pressable>
-                                            <Text style={styles.childPill}>{schedule.childName}</Text>
+                                            <Text style={styles.childPill} numberOfLines={1}>
+                                                {schedule.childName}
+                                            </Text>
                                         </View>
                                         <Text style={styles.todoMeta}>{schedule.guardian} 보호자와 공유 중</Text>
                                         <View style={styles.todoList}>
                                             {schedule.todos.map((todo) => (
-                                                <View key={todo.id} style={styles.todoRow}>
+                                                <Pressable
+                                                    key={todo.id}
+                                                    style={styles.todoRow}
+                                                    onPress={() => openTodayEditor(schedule)}
+                                                >
                                                     <Pressable
                                                         onPress={() => toggleTodayTodo(schedule.id, todo.id)}
                                                         hitSlop={8}
@@ -522,7 +509,7 @@ export default function CompanionChildren() {
                                                     <Text style={[styles.todoText, todo.done && styles.todoDoneText]}>
                                                         {todo.text}
                                                     </Text>
-                                                </View>
+                                                </Pressable>
                                             ))}
                                         </View>
                                     </View>
@@ -609,18 +596,10 @@ export default function CompanionChildren() {
                     <View style={styles.section}>
                         <View style={styles.calendarHeader}>
                             <View>
-                                <Text style={styles.title}>{calendarMonth}월 캘린더</Text>
-                                <Text style={styles.description}>담당 어린이들의 공유 일정이에요.</Text>
+                                <Text style={styles.sectionTitle}>{calendarMonth}월 캘린더</Text>
+                                <Text style={styles.calendarSubtitle}>담당 어린이들의 공유 일정이에요.</Text>
                             </View>
-                            <View style={styles.calendarMoveArea}>
-                                <Pressable style={styles.calendarMoveButton} onPress={() => moveCalendarMonth(-1)}>
-                                    <Ionicons name="chevron-back" size={18} color={Colors.text} />
-                                </Pressable>
-                                <Text style={styles.calendarYear}>{calendarYear}</Text>
-                                <Pressable style={styles.calendarMoveButton} onPress={() => moveCalendarMonth(1)}>
-                                    <Ionicons name="chevron-forward" size={18} color={Colors.text} />
-                                </Pressable>
-                            </View>
+                            <Text style={styles.calendarYear}>{calendarYear}</Text>
                         </View>
 
                         <View style={styles.calendarCard}>
@@ -638,6 +617,9 @@ export default function CompanionChildren() {
                                         event.month === calendarMonth &&
                                         event.day === day
                                     ));
+                                    const isToday = day === todayDay &&
+                                        calendarMonth === currentMonth &&
+                                        calendarYear === currentYear;
 
                                     return (
                                         <Pressable
@@ -651,6 +633,7 @@ export default function CompanionChildren() {
                                                     <Text style={[
                                                         styles.dayText,
                                                         selected && styles.dayTextSelected,
+                                                        isToday && !selected && styles.todayText,
                                                     ]}>
                                                         {day}
                                                     </Text>
@@ -661,6 +644,12 @@ export default function CompanionChildren() {
                                     );
                                 })}
                             </View>
+                        </View>
+
+                        <View style={styles.calendarEventHeader}>
+                            <Text style={styles.calendarSelectedDateTitle}>
+                                {calendarMonth}월 {selectedDay}일 일정
+                            </Text>
                         </View>
 
                         <View style={styles.calendarEventList}>
@@ -791,7 +780,7 @@ export default function CompanionChildren() {
                 animationType="fade"
                 onRequestClose={closeCalendarEditor}
             >
-                <Pressable style={styles.modalBackdrop} onPress={Keyboard.dismiss}>
+                <Pressable style={styles.modalBackdrop} onPress={closeCalendarEditor}>
                     <KeyboardAvoidingView
                         style={styles.modalKeyboardArea}
                         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -812,29 +801,90 @@ export default function CompanionChildren() {
                                 </Text>
 
                                 <Text style={styles.modalSubTitle}>어린이 선택</Text>
-                                <View style={styles.modalChipRow}>
-                                    {connectedChildren.map((child) => {
-                                        const selected = editChildName === child.name;
+                                <Pressable
+                                    style={styles.childPickerTrigger}
+                                    onPress={() => {
+                                        Keyboard.dismiss();
+                                        setIsChildPickerOpen((current) => !current);
+                                    }}
+                                >
+                                    <View style={styles.childSelectAvatar}>
+                                        <Image
+                                            source={require('../../assets/images/icon_child.png')}
+                                            style={styles.childSelectImage}
+                                            resizeMode="contain"
+                                        />
+                                    </View>
+                                    <View style={styles.childPickerTextArea}>
+                                        <Text style={[
+                                            styles.childPickerValue,
+                                            !selectedEditChild && styles.childPickerPlaceholder,
+                                        ]}>
+                                            {selectedEditChild?.name ?? '어린이를 선택해주세요'}
+                                        </Text>
+                                        <Text style={styles.childPickerMeta}>
+                                            {selectedEditChild
+                                                ? `${selectedEditChild.guardian} 보호자와 연결됨`
+                                                : '담당 어린이 목록에서 선택'}
+                                        </Text>
+                                    </View>
+                                    <Ionicons
+                                        name={isChildPickerOpen ? 'chevron-up' : 'chevron-down'}
+                                        size={20}
+                                        color={Colors.text}
+                                    />
+                                </Pressable>
 
-                                        return (
-                                            <Pressable
-                                                key={child.id}
-                                                style={[styles.modalChip, selected && styles.modalChipSelected]}
-                                                onPress={() => {
-                                                    setEditChildName(child.name);
-                                                    if (editError) setEditError('');
-                                                }}
-                                            >
-                                                <Text style={[
-                                                    styles.modalChipText,
-                                                    selected && styles.modalChipTextSelected,
-                                                ]}>
-                                                    {child.name}
-                                                </Text>
-                                            </Pressable>
-                                        );
-                                    })}
-                                </View>
+                                {isChildPickerOpen ? (
+                                    <View style={styles.childPickerPanel}>
+                                        <ScrollView
+                                            style={styles.childPickerScroll}
+                                            nestedScrollEnabled
+                                            keyboardShouldPersistTaps="handled"
+                                            showsVerticalScrollIndicator={false}
+                                        >
+                                            {connectedChildren.map((child) => {
+                                                const selected = editChildName === child.name;
+
+                                                return (
+                                                    <Pressable
+                                                        key={child.id}
+                                                        style={[
+                                                            styles.childSelectRow,
+                                                            selected && styles.childSelectRowSelected,
+                                                        ]}
+                                                        onPress={() => {
+                                                            setEditChildName(child.name);
+                                                            setIsChildPickerOpen(false);
+                                                            if (editError) setEditError('');
+                                                        }}
+                                                    >
+                                                        <View style={styles.childSelectAvatar}>
+                                                            <Image
+                                                                source={require('../../assets/images/icon_child.png')}
+                                                                style={styles.childSelectImage}
+                                                                resizeMode="contain"
+                                                            />
+                                                        </View>
+                                                        <View style={styles.childSelectTextArea}>
+                                                            <Text style={styles.childSelectName}>{child.name}</Text>
+                                                            <Text style={styles.childSelectMeta}>
+                                                                {child.guardian} 보호자와 연결됨
+                                                            </Text>
+                                                        </View>
+                                                        {selected ? (
+                                                            <Ionicons
+                                                                name="checkmark-circle"
+                                                                size={22}
+                                                                color={Colors.highlight1}
+                                                            />
+                                                        ) : null}
+                                                    </Pressable>
+                                                );
+                                            })}
+                                        </ScrollView>
+                                    </View>
+                                ) : null}
 
                                 <Text style={styles.modalSubTitle}>일정 이름</Text>
                                 <TextInput
@@ -919,13 +969,13 @@ export default function CompanionChildren() {
                 animationType="fade"
                 onRequestClose={closeTodayEditor}
             >
-                <Pressable style={styles.modalBackdrop} onPress={Keyboard.dismiss}>
+                <Pressable style={styles.modalBackdrop} onPress={closeTodayEditor}>
                     <KeyboardAvoidingView
                         style={styles.modalKeyboardArea}
                         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                         keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
                     >
-                        <Pressable style={styles.calendarEditModal} onPress={(event) => event.stopPropagation()}>
+                        <Pressable style={styles.todayEditModal} onPress={(event) => event.stopPropagation()}>
                             <ScrollView
                                 style={styles.calendarEditScroll}
                                 contentContainerStyle={styles.calendarEditInner}
@@ -1100,6 +1150,14 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
 
+    sectionTitle: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 22,
+        fontWeight: '900',
+        color: Colors.text,
+        marginBottom: 8,
+    },
+
     description: {
         fontFamily: Fonts.body,
         fontSize: 15,
@@ -1136,10 +1194,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: 10,
+        minHeight: 42,
     },
 
     todoTitle: {
         flex: 1,
+        flexShrink: 1,
         fontFamily: Fonts.bodyBold,
         fontSize: 16,
         fontWeight: '900',
@@ -1154,6 +1214,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         marginRight: 10,
+        marginVertical: 8,
     },
 
     todayScheduleCheckDone: {
@@ -1162,6 +1223,9 @@ const styles = StyleSheet.create({
 
     todayScheduleTextButton: {
         flex: 1,
+        minHeight: 42,
+        justifyContent: 'center',
+        paddingVertical: 6,
     },
 
     childPill: {
@@ -1174,6 +1238,7 @@ const styles = StyleSheet.create({
         fontWeight: '900',
         color: Colors.text,
         overflow: 'hidden',
+        maxWidth: 86,
     },
 
     todoMeta: {
@@ -1189,6 +1254,8 @@ const styles = StyleSheet.create({
     todoRow: {
         flexDirection: 'row',
         alignItems: 'center',
+        minHeight: 32,
+        paddingVertical: 3,
     },
 
     todoText: {
@@ -1318,11 +1385,19 @@ const styles = StyleSheet.create({
     },
 
     calendarHeader: {
+        width: '100%',
         flexDirection: 'row',
         alignItems: 'flex-start',
         justifyContent: 'space-between',
-        gap: 12,
         marginBottom: 16,
+    },
+
+    calendarSubtitle: {
+        marginTop: -8,
+        fontFamily: Fonts.body,
+        fontSize: 14,
+        lineHeight: 21,
+        color: Colors.textShadow,
     },
 
     calendarMoveArea: {
@@ -1348,15 +1423,17 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '900',
         color: Colors.textShadow,
+        paddingTop: 4,
     },
 
     calendarCard: {
+        width: '100%',
         borderRadius: 18,
         borderWidth: 1,
         borderColor: '#E8DDC8',
         backgroundColor: '#F7F4E8',
         padding: 14,
-        marginBottom: 18,
+        marginBottom: 22,
     },
 
     weekRow: {
@@ -1401,6 +1478,10 @@ const styles = StyleSheet.create({
         color: Colors.text,
     },
 
+    todayText: {
+        color: Colors.highlight3,
+    },
+
     eventDot: {
         width: 5,
         height: 5,
@@ -1410,10 +1491,24 @@ const styles = StyleSheet.create({
     },
 
     calendarEventList: {
+        width: '100%',
         gap: 10,
+        marginBottom: 16,
+    },
+
+    calendarEventHeader: {
+        marginBottom: 12,
+    },
+
+    calendarSelectedDateTitle: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 17,
+        fontWeight: '900',
+        color: Colors.text,
     },
 
     calendarEventCard: {
+        width: '100%',
         minHeight: 62,
         borderRadius: 14,
         borderWidth: 1,
@@ -1421,7 +1516,8 @@ const styles = StyleSheet.create({
         backgroundColor: '#F7F4E8',
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 14,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
     },
 
     calendarEventIcon: {
@@ -1587,7 +1683,17 @@ const styles = StyleSheet.create({
 
     calendarEditModal: {
         width: '100%',
-        maxHeight: '84%',
+        height: '90%',
+        borderRadius: 18,
+        backgroundColor: Colors.pageBg,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        overflow: 'hidden',
+    },
+
+    todayEditModal: {
+        width: '100%',
+        maxHeight: '72%',
         borderRadius: 18,
         backgroundColor: Colors.pageBg,
         borderWidth: 1,
@@ -1597,18 +1703,21 @@ const styles = StyleSheet.create({
 
     calendarEditScroll: {
         width: '100%',
+        flex: 1,
     },
 
     calendarEditInner: {
         padding: 20,
+        paddingBottom: 28,
+        flexGrow: 1,
     },
 
     modalTitle: {
         fontFamily: Fonts.bodyBold,
-        fontSize: 19,
+        fontSize: 18,
         fontWeight: '900',
         color: Colors.text,
-        marginBottom: 10,
+        marginBottom: 14,
     },
 
     modalDescription: {
@@ -1659,6 +1768,109 @@ const styles = StyleSheet.create({
 
     modalChipTextSelected: {
         color: Colors.text,
+    },
+
+    childPickerTrigger: {
+        width: '100%',
+        minHeight: 64,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        marginBottom: 16,
+    },
+
+    childPickerTextArea: {
+        flex: 1,
+    },
+
+    childPickerValue: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 15,
+        fontWeight: '900',
+        color: Colors.text,
+        marginBottom: 3,
+    },
+
+    childPickerPlaceholder: {
+        color: Colors.textShadow,
+    },
+
+    childPickerMeta: {
+        fontFamily: Fonts.body,
+        fontSize: 12,
+        color: Colors.textShadow,
+    },
+
+    childPickerPanel: {
+        width: '100%',
+        maxHeight: 228,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: Colors.realwhite,
+        padding: 8,
+        marginTop: -8,
+        marginBottom: 16,
+    },
+
+    childPickerScroll: {
+        maxHeight: 210,
+    },
+
+    childSelectRow: {
+        minHeight: 64,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        marginBottom: 8,
+    },
+
+    childSelectRowSelected: {
+        borderColor: Colors.highlight1,
+        backgroundColor: '#FFF4CF',
+    },
+
+    childSelectAvatar: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        backgroundColor: '#FFF8DF',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
+    },
+
+    childSelectImage: {
+        width: 27,
+        height: 27,
+    },
+
+    childSelectTextArea: {
+        flex: 1,
+    },
+
+    childSelectName: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 15,
+        fontWeight: '900',
+        color: Colors.text,
+        marginBottom: 3,
+    },
+
+    childSelectMeta: {
+        fontFamily: Fonts.body,
+        fontSize: 12,
+        color: Colors.textShadow,
     },
 
     modalInput: {

@@ -574,12 +574,14 @@ export default function ParentHome() {
                                                 <Text style={[
                                                     styles.scheduleText,
                                                     item.done && styles.scheduleTextDone,
-                                                ]}>
+                                                ]} numberOfLines={1}>
                                                     {item.text}
                                                 </Text>
                                                 <View style={styles.scheduleMetaPill}>
                                                     <Ionicons name="person-outline" size={13} color={Colors.textShadow} />
-                                                    <Text style={styles.scheduleMetaText}>{item.companion}와 함께</Text>
+                                                    <Text style={styles.scheduleMetaText} numberOfLines={1}>
+                                                        {item.companion}와 함께
+                                                    </Text>
                                                 </View>
                                             </View>
                                             {item.todos.length > 0 ? (
@@ -862,13 +864,16 @@ export default function ParentHome() {
                                 {editTarget?.type === 'handoff' ? '인수인계 자료 수정하기' : '일정 수정하기'}
                             </Text>
                             <TextInput
-                                style={styles.modalInput}
+                                style={[
+                                    styles.modalInput,
+                                    editTarget?.type !== 'handoff' && styles.modalSingleLineInput,
+                                ]}
                                 value={editText}
                                 onChangeText={setEditText}
                                 placeholder="내용을 입력해주세요"
                                 placeholderTextColor={Colors.textShadow}
                                 multiline={editTarget?.type === 'handoff'}
-                                textAlignVertical="top"
+                                textAlignVertical={editTarget?.type === 'handoff' ? 'top' : 'center'}
                                 autoFocus
                             />
 
@@ -1086,7 +1091,7 @@ const styles = StyleSheet.create({
     },
 
     scheduleRow: {
-        minHeight: 28,
+        minHeight: 42,
         flexDirection: 'row',
         alignItems: 'flex-start',
     },
@@ -1099,7 +1104,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         marginRight: 12,
-        marginTop: 1,
+        marginTop: 8,
     },
 
     checkBoxDone: {
@@ -1108,6 +1113,7 @@ const styles = StyleSheet.create({
 
     scheduleText: {
         flex: 1,
+        flexShrink: 1,
         fontFamily: Fonts.bodyMedium,
         fontSize: 15,
         color: Colors.text,
@@ -1120,8 +1126,9 @@ const styles = StyleSheet.create({
 
     scheduleTextButton: {
         flex: 1,
-        minHeight: 28,
+        minHeight: 42,
         justifyContent: 'center',
+        paddingVertical: 6,
     },
 
     scheduleTitleRow: {
@@ -1138,6 +1145,7 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.pageBg,
         paddingHorizontal: 8,
         paddingVertical: 4,
+        maxWidth: 126,
     },
 
     scheduleMetaText: {
@@ -1580,6 +1588,12 @@ const styles = StyleSheet.create({
         lineHeight: 22,
         color: Colors.text,
         marginBottom: 16,
+    },
+
+    modalSingleLineInput: {
+        minHeight: 46,
+        paddingVertical: 10,
+        textAlignVertical: 'center',
     },
 
     modalSubTitle: {

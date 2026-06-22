@@ -1,9 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../components/BackButton';
 import { Colors } from '../../constants/Colors';
+import {
+    CompanionTodaySchedule,
+    getCompanionTodaySchedulesForChild,
+    subscribeCompanionTodaySchedules,
+    toggleCompanionTodayTodo,
+} from '../../constants/CompanionTodayState';
 import { Fonts } from '../../constants/Fonts';
 
 type ActiveTab = 'today' | 'calendar';
@@ -102,6 +109,9 @@ export default function CompanionChildHome() {
     const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(() => (
         createInitialEvents(currentYear, currentMonth, todayDay, guardian)
     ));
+    const [todayEvents, setTodayEvents] = useState<CompanionTodaySchedule[]>(() => (
+        getCompanionTodaySchedulesForChild(childName)
+    ));
     const calendarDays = useMemo(() => {
         const firstDay = new Date(calendarYear, calendarMonth - 1, 1).getDay();
         const daysInMonth = new Date(calendarYear, calendarMonth, 0).getDate();
@@ -112,16 +122,26 @@ export default function CompanionChildHome() {
         ];
     }, [calendarMonth, calendarYear]);
 
-    const todayEvents = calendarEvents.filter((event) => (
-        event.year === currentYear &&
-        event.month === currentMonth &&
-        event.day === todayDay
-    ));
     const selectedEvents = calendarEvents.filter((event) => (
         event.year === calendarYear &&
         event.month === calendarMonth &&
         event.day === selectedDay
     ));
+
+    useFocusEffect(
+        useCallback(() => {
+            setTodayEvents(getCompanionTodaySchedulesForChild(childName));
+            const unsubscribe = subscribeCompanionTodaySchedules(() => {
+                setTodayEvents(getCompanionTodaySchedulesForChild(childName));
+            });
+
+            return unsubscribe;
+        }, [childName])
+    );
+
+    const toggleTodayTodo = (scheduleId: number, todoId: number) => {
+        toggleCompanionTodayTodo(scheduleId, todoId);
+    };
 
     useEffect(() => {
         if (params.tab === 'calendar') {
@@ -261,19 +281,25 @@ export default function CompanionChildHome() {
                                         </View>
                                         <View style={styles.todoList}>
                                             {schedule.todos.map((todo) => (
-                                                <View key={todo.id} style={styles.todoRow}>
-                                                    <Ionicons
-                                                        name={todo.done ? 'checkmark-circle' : 'ellipse-outline'}
-                                                        size={16}
-                                                        color={todo.done ? Colors.highlight1 : Colors.textShadow}
-                                                    />
+                                                <Pressable
+                                                    key={todo.id}
+                                                    style={styles.todoRow}
+                                                    onPress={() => toggleTodayTodo(schedule.id, todo.id)}
+                                                >
+                                                    <View style={styles.todoCheckHitArea}>
+                                                        <Ionicons
+                                                            name={todo.done ? 'checkmark-circle' : 'ellipse-outline'}
+                                                            size={17}
+                                                            color={todo.done ? Colors.highlight1 : Colors.textShadow}
+                                                        />
+                                                    </View>
                                                     <Text style={[
                                                         styles.todoText,
                                                         todo.done && styles.todoDoneText,
                                                     ]}>
                                                         {todo.text}
                                                     </Text>
-                                                </View>
+                                                </Pressable>
                                             ))}
                                         </View>
                                     </View>
@@ -573,11 +599,20 @@ const styles = StyleSheet.create({
     todoRow: {
         flexDirection: 'row',
         alignItems: 'center',
+        minHeight: 34,
+        paddingVertical: 4,
+    },
+
+    todoCheckHitArea: {
+        width: 28,
+        height: 28,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
 
     todoText: {
         flex: 1,
-        marginLeft: 7,
+        marginLeft: 3,
         fontFamily: Fonts.body,
         fontSize: 14,
         color: Colors.text,

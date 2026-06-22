@@ -27,6 +27,15 @@ type HandoffItem = {
     text: string;
 };
 
+type ActiveTab = 'today' | 'calendar';
+
+type CalendarEvent = {
+    id: number;
+    day: number;
+    title: string;
+    companion: string;
+};
+
 type EditTarget =
     | { type: 'schedule'; item: ScheduleItem }
     | { type: 'handoff'; item: HandoffItem }
@@ -45,6 +54,8 @@ const initialHandoffs: HandoffItem[] = [
     { id: 3, text: '대기 시간이 길면 조용한 곳에서 쉬면 좋아요.' },
 ];
 
+const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
+
 function getTodayTitle() {
     const today = new Date();
     const month = today.getMonth() + 1;
@@ -55,15 +66,36 @@ function getTodayTitle() {
 
 export default function ParentHome() {
     const todayTitle = useMemo(() => getTodayTitle(), []);
+    const today = useMemo(() => new Date(), []);
+    const currentMonth = today.getMonth() + 1;
+    const currentYear = today.getFullYear();
+    const todayDay = today.getDate();
+    const calendarDays = useMemo(() => {
+        const firstDay = new Date(currentYear, currentMonth - 1, 1).getDay();
+        const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+
+        return [
+            ...Array.from({ length: firstDay }, () => null),
+            ...Array.from({ length: daysInMonth }, (_, index) => index + 1),
+        ];
+    }, [currentMonth, currentYear]);
     const scrollViewRef = useRef<ScrollView>(null);
+    const [activeTab, setActiveTab] = useState<ActiveTab>('today');
+    const [selectedCalendarDay, setSelectedCalendarDay] = useState(todayDay);
     const [schedules, setSchedules] = useState(initialSchedules);
     const [handoffs, setHandoffs] = useState(initialHandoffs);
+    const [calendarEvents] = useState<CalendarEvent[]>([
+        { id: 1, day: todayDay, title: '병원 진료', companion: '박민지' },
+        { id: 2, day: todayDay, title: '진료 후 쉬는 시간', companion: '이하늘' },
+        { id: 3, day: Math.min(todayDay + 3, new Date(currentYear, currentMonth, 0).getDate()), title: '언어 치료', companion: '최서윤' },
+    ]);
     const [isScheduleInputOpen, setIsScheduleInputOpen] = useState(false);
     const [isHandoffInputOpen, setIsHandoffInputOpen] = useState(false);
     const [scheduleText, setScheduleText] = useState('');
     const [handoffText, setHandoffText] = useState('');
     const [editTarget, setEditTarget] = useState<EditTarget>(null);
     const [editText, setEditText] = useState('');
+    const selectedCalendarEvents = calendarEvents.filter((event) => event.day === selectedCalendarDay);
 
     const cancelAddInputs = () => {
         if (!isScheduleInputOpen && !isHandoffInputOpen) return;
@@ -73,6 +105,12 @@ export default function ParentHome() {
         setScheduleText('');
         setHandoffText('');
         Keyboard.dismiss();
+    };
+
+    const switchTab = (nextTab: ActiveTab) => {
+        cancelAddInputs();
+        setActiveTab(nextTab);
+        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
     };
 
     const scrollToBottom = () => {
@@ -186,7 +224,10 @@ export default function ParentHome() {
                     </View>
 
                     <View style={styles.headerActions}>
-                        <Pressable style={styles.iconButton}>
+                        <Pressable
+                            style={styles.iconButton}
+                            onPress={() => router.push('/paraent_home/notifications' as any)}
+                        >
                             <Ionicons name="notifications-outline" size={24} color={Colors.text} />
                             <View style={styles.notificationDot} />
                         </Pressable>
@@ -206,130 +247,272 @@ export default function ParentHome() {
                     </View>
                 </Pressable>
 
-                <View style={styles.section}>
-                    <Pressable onPress={cancelAddInputs}>
-                        <Text style={styles.sectionTitle}>{todayTitle}</Text>
-                    </Pressable>
-
-                    <View style={styles.scheduleCard}>
-                        {schedules.map((item) => (
-                            <View key={item.id} style={styles.scheduleRow}>
-                                <Pressable
-                                    style={[styles.checkBox, item.done && styles.checkBoxDone]}
-                                    onPress={() => {
-                                        cancelAddInputs();
-                                        toggleSchedule(item.id);
-                                    }}
-                                    hitSlop={10}
-                                >
-                                    {item.done ? (
-                                        <Ionicons name="checkmark" size={15} color={Colors.realwhite} />
-                                    ) : null}
-                                </Pressable>
-                                <Pressable
-                                    style={styles.scheduleTextButton}
-                                    onPress={() => openScheduleEditor(item)}
-                                >
-                                    <Text style={[
-                                        styles.scheduleText,
-                                        item.done && styles.scheduleTextDone,
-                                    ]}>
-                                        {item.text}
-                                    </Text>
-                                </Pressable>
-                            </View>
-                        ))}
-                    </View>
-
-                    {isScheduleInputOpen ? (
-                        <View style={styles.inlineInputRow}>
-                            <TextInput
-                                style={styles.inlineInput}
-                                placeholder="추가할 일정을 입력해주세요"
-                                placeholderTextColor={Colors.textShadow}
-                                value={scheduleText}
-                                onChangeText={setScheduleText}
-                                autoFocus
-                                returnKeyType="done"
-                                onSubmitEditing={addSchedule}
-                            />
-                            <Pressable style={styles.inlineAddButton} onPress={addSchedule}>
-                                <Ionicons name="checkmark" size={18} color={Colors.text} />
+                {activeTab === 'today' ? (
+                    <>
+                        <View style={styles.section}>
+                            <Pressable onPress={cancelAddInputs}>
+                                <Text style={styles.sectionTitle}>{todayTitle}</Text>
                             </Pressable>
-                        </View>
-                    ) : (
-                        <Pressable
-                            style={styles.addButton}
-                            onPress={() => {
-                                setIsHandoffInputOpen(false);
-                                setHandoffText('');
-                                setIsScheduleInputOpen(true);
-                                scrollToBottom();
-                            }}
-                        >
-                            <View style={styles.addIconCircle}>
-                                <Ionicons name="add" size={18} color={Colors.realwhite} />
+
+                            <View style={styles.scheduleCard}>
+                                {schedules.map((item) => (
+                                    <View key={item.id} style={styles.scheduleRow}>
+                                        <Pressable
+                                            style={[styles.checkBox, item.done && styles.checkBoxDone]}
+                                            onPress={() => {
+                                                cancelAddInputs();
+                                                toggleSchedule(item.id);
+                                            }}
+                                            hitSlop={10}
+                                        >
+                                            {item.done ? (
+                                                <Ionicons name="checkmark" size={15} color={Colors.realwhite} />
+                                            ) : null}
+                                        </Pressable>
+                                        <Pressable
+                                            style={styles.scheduleTextButton}
+                                            onPress={() => openScheduleEditor(item)}
+                                        >
+                                            <Text style={[
+                                                styles.scheduleText,
+                                                item.done && styles.scheduleTextDone,
+                                            ]}>
+                                                {item.text}
+                                            </Text>
+                                        </Pressable>
+                                    </View>
+                                ))}
                             </View>
-                            <Text style={styles.addButtonText}>일정 추가하기</Text>
-                        </Pressable>
-                    )}
-                </View>
 
-                <View style={styles.section}>
-                    <Pressable onPress={cancelAddInputs}>
-                        <Text style={styles.sectionTitle}>아이 인수인계 자료</Text>
-                    </Pressable>
-
-                    <View style={styles.handoffCard}>
-                        {handoffs.map((item) => (
-                            <Pressable
-                                key={item.id}
-                                style={styles.handoffRow}
-                                onPress={() => openHandoffEditor(item)}
-                            >
-                                <View style={styles.staticCheckIcon}>
-                                    <Ionicons name="checkmark" size={18} color={Colors.highlight1} />
+                            {isScheduleInputOpen ? (
+                                <View style={styles.inlineInputRow}>
+                                    <TextInput
+                                        style={styles.inlineInput}
+                                        placeholder="추가할 일정을 입력해주세요"
+                                        placeholderTextColor={Colors.textShadow}
+                                        value={scheduleText}
+                                        onChangeText={setScheduleText}
+                                        autoFocus
+                                        returnKeyType="done"
+                                        onSubmitEditing={addSchedule}
+                                    />
+                                    <Pressable style={styles.inlineAddButton} onPress={addSchedule}>
+                                        <Ionicons name="checkmark" size={18} color={Colors.text} />
+                                    </Pressable>
                                 </View>
-                                <Text style={styles.handoffText}>{item.text}</Text>
-                            </Pressable>
-                        ))}
-                    </View>
-
-                    {isHandoffInputOpen ? (
-                        <View style={styles.handoffInputBox}>
-                            <TextInput
-                                style={styles.handoffInput}
-                                placeholder="공유할 내용을 입력해주세요"
-                                placeholderTextColor={Colors.textShadow}
-                                value={handoffText}
-                                onChangeText={setHandoffText}
-                                autoFocus
-                                multiline
-                                textAlignVertical="top"
-                                onFocus={scrollToBottom}
-                            />
-                            <Pressable style={styles.saveHandoffButton} onPress={addHandoff}>
-                                <Text style={styles.saveHandoffText}>저장</Text>
-                            </Pressable>
+                            ) : (
+                                <Pressable
+                                    style={styles.addButton}
+                                    onPress={() => {
+                                        setIsHandoffInputOpen(false);
+                                        setHandoffText('');
+                                        setIsScheduleInputOpen(true);
+                                        scrollToBottom();
+                                    }}
+                                >
+                                    <View style={styles.addIconCircle}>
+                                        <Ionicons name="add" size={18} color={Colors.realwhite} />
+                                    </View>
+                                    <Text style={styles.addButtonText}>일정 추가하기</Text>
+                                </Pressable>
+                            )}
                         </View>
-                    ) : (
+
+                        <View style={styles.section}>
+                            <Pressable onPress={cancelAddInputs}>
+                                <Text style={styles.sectionTitle}>아이 인수인계 자료</Text>
+                            </Pressable>
+
+                            <View style={styles.handoffCard}>
+                                {handoffs.map((item) => (
+                                    <Pressable
+                                        key={item.id}
+                                        style={styles.handoffRow}
+                                        onPress={() => openHandoffEditor(item)}
+                                    >
+                                        <View style={styles.staticCheckIcon}>
+                                            <Ionicons name="checkmark" size={18} color={Colors.highlight1} />
+                                        </View>
+                                        <Text style={styles.handoffText}>{item.text}</Text>
+                                    </Pressable>
+                                ))}
+                            </View>
+
+                            {isHandoffInputOpen ? (
+                                <View style={styles.handoffInputBox}>
+                                    <TextInput
+                                        style={styles.handoffInput}
+                                        placeholder="공유할 내용을 입력해주세요"
+                                        placeholderTextColor={Colors.textShadow}
+                                        value={handoffText}
+                                        onChangeText={setHandoffText}
+                                        autoFocus
+                                        multiline
+                                        textAlignVertical="top"
+                                        onFocus={scrollToBottom}
+                                    />
+                                    <Pressable style={styles.saveHandoffButton} onPress={addHandoff}>
+                                        <Text style={styles.saveHandoffText}>저장</Text>
+                                    </Pressable>
+                                </View>
+                            ) : (
+                                <Pressable
+                                    style={styles.addButton}
+                                    onPress={() => {
+                                        setIsScheduleInputOpen(false);
+                                        setScheduleText('');
+                                        setIsHandoffInputOpen(true);
+                                        scrollToBottom();
+                                    }}
+                                >
+                                    <View style={styles.addIconCircle}>
+                                        <Ionicons name="add" size={18} color={Colors.realwhite} />
+                                    </View>
+                                    <Text style={styles.addButtonText}>자료 추가하기</Text>
+                                </Pressable>
+                            )}
+                        </View>
+                    </>
+                ) : (
+                    <View style={styles.section}>
+                        <View style={styles.calendarHeader}>
+                            <View>
+                                <Text style={styles.sectionTitle}>{currentMonth}월 캘린더</Text>
+                                <Text style={styles.calendarSubtitle}>동행인과 함께 보는 공유 일정이에요.</Text>
+                            </View>
+                            <Text style={styles.calendarYear}>{currentYear}</Text>
+                        </View>
+
+                        <View style={styles.calendarCard}>
+                            <View style={styles.weekRow}>
+                                {weekDays.map((day) => (
+                                    <Text key={day} style={styles.weekDay}>{day}</Text>
+                                ))}
+                            </View>
+
+                            <View style={styles.calendarGrid}>
+                                {calendarDays.map((day, index) => {
+                                    const hasEvent = day !== null && calendarEvents.some((event) => event.day === day);
+                                    const selected = day === selectedCalendarDay;
+                                    const isToday = day === todayDay;
+
+                                    return (
+                                        <Pressable
+                                            key={`${day ?? 'blank'}-${index}`}
+                                            style={[
+                                                styles.dayCell,
+                                                selected && styles.dayCellSelected,
+                                            ]}
+                                            disabled={day === null}
+                                            onPress={() => {
+                                                if (day !== null) {
+                                                    cancelAddInputs();
+                                                    setSelectedCalendarDay(day);
+                                                }
+                                            }}
+                                        >
+                                            {day !== null ? (
+                                                <>
+                                                    <Text style={[
+                                                        styles.dayText,
+                                                        selected && styles.dayTextSelected,
+                                                        isToday && !selected && styles.todayText,
+                                                    ]}>
+                                                        {day}
+                                                    </Text>
+                                                    {hasEvent ? <View style={styles.eventDot} /> : null}
+                                                </>
+                                            ) : null}
+                                        </Pressable>
+                                    );
+                                })}
+                            </View>
+                        </View>
+
+                        <View style={styles.calendarEventHeader}>
+                            <Text style={styles.calendarEventTitle}>
+                                {currentMonth}월 {selectedCalendarDay}일 일정
+                            </Text>
+                        </View>
+
+                        <View style={styles.calendarEventList}>
+                            {selectedCalendarEvents.length > 0 ? (
+                                selectedCalendarEvents.map((event) => (
+                                    <View key={event.id} style={styles.calendarEventCard}>
+                                        <View style={styles.calendarEventIcon}>
+                                            <Ionicons name="calendar-outline" size={18} color={Colors.text} />
+                                        </View>
+                                        <View style={styles.calendarEventTextArea}>
+                                            <Text style={styles.calendarEventName}>{event.title}</Text>
+                                            <Text style={styles.calendarEventCompanion}>{event.companion}와 공유 중</Text>
+                                        </View>
+                                    </View>
+                                ))
+                            ) : (
+                                <View style={styles.emptyEventCard}>
+                                    <Text style={styles.emptyEventText}>등록된 공유 일정이 없어요.</Text>
+                                </View>
+                            )}
+                        </View>
+
                         <Pressable
                             style={styles.addButton}
-                            onPress={() => {
-                                setIsScheduleInputOpen(false);
-                                setScheduleText('');
-                                setIsHandoffInputOpen(true);
-                                scrollToBottom();
-                            }}
+                            onPress={() =>
+                                router.push({
+                                    pathname: '/paraent_home/calendar_add',
+                                    params: {
+                                        year: String(currentYear),
+                                        month: String(currentMonth),
+                                        day: String(selectedCalendarDay),
+                                    },
+                                } as any)
+                            }
                         >
                             <View style={styles.addIconCircle}>
                                 <Ionicons name="add" size={18} color={Colors.realwhite} />
                             </View>
-                            <Text style={styles.addButtonText}>자료 추가하기</Text>
+                            <Text style={styles.addButtonText}>공유 일정 추가하기</Text>
                         </Pressable>
-                    )}
-                </View>
+                    </View>
+                )}
             </ScrollView>
+
+            <View style={styles.bottomTabWrap}>
+                <View style={styles.bottomTab}>
+                    <Pressable
+                        style={[styles.tabButton, activeTab === 'today' && styles.tabButtonActive]}
+                        onPress={() => switchTab('today')}
+                    >
+                        <Ionicons
+                            name="sunny-outline"
+                            size={18}
+                            color={activeTab === 'today' ? Colors.text : Colors.textShadow}
+                        />
+                        <Text style={[
+                            styles.tabButtonText,
+                            activeTab === 'today' && styles.tabButtonTextActive,
+                        ]}>
+                            오늘
+                        </Text>
+                    </Pressable>
+                    <Pressable
+                        style={[styles.tabButton, activeTab === 'calendar' && styles.tabButtonActive]}
+                        onPress={() => switchTab('calendar')}
+                    >
+                        <Ionicons
+                            name="calendar-outline"
+                            size={18}
+                            color={activeTab === 'calendar' ? Colors.text : Colors.textShadow}
+                        />
+                        <Text style={[
+                            styles.tabButtonText,
+                            activeTab === 'calendar' && styles.tabButtonTextActive,
+                        ]}>
+                            캘린더
+                        </Text>
+                    </Pressable>
+                </View>
+            </View>
 
             <Modal
                 visible={Boolean(editTarget)}
@@ -385,7 +568,7 @@ const styles = StyleSheet.create({
         flexGrow: 1,
         paddingHorizontal: 30,
         paddingTop: 18,
-        paddingBottom: 46,
+        paddingBottom: 126,
         position: 'relative',
     },
 
@@ -653,6 +836,217 @@ const styles = StyleSheet.create({
         fontFamily: Fonts.bodyBold,
         fontSize: 14,
         fontWeight: '900',
+        color: Colors.text,
+    },
+
+    calendarHeader: {
+        width: '100%',
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        marginBottom: 16,
+    },
+
+    calendarSubtitle: {
+        marginTop: -8,
+        fontFamily: Fonts.body,
+        fontSize: 14,
+        lineHeight: 21,
+        color: Colors.textShadow,
+    },
+
+    calendarYear: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 14,
+        fontWeight: '900',
+        color: Colors.textShadow,
+        paddingTop: 4,
+    },
+
+    calendarCard: {
+        width: '100%',
+        borderRadius: 18,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        padding: 14,
+        marginBottom: 22,
+    },
+
+    weekRow: {
+        flexDirection: 'row',
+        marginBottom: 10,
+    },
+
+    weekDay: {
+        flex: 1,
+        fontFamily: Fonts.bodyBold,
+        fontSize: 13,
+        fontWeight: '900',
+        color: Colors.textShadow,
+        textAlign: 'center',
+    },
+
+    calendarGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+    },
+
+    dayCell: {
+        width: `${100 / 7}%`,
+        aspectRatio: 1,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    dayCellSelected: {
+        backgroundColor: Colors.highlight1,
+    },
+
+    dayText: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 15,
+        fontWeight: '900',
+        color: Colors.text,
+    },
+
+    dayTextSelected: {
+        color: Colors.text,
+    },
+
+    todayText: {
+        color: Colors.highlight3,
+    },
+
+    eventDot: {
+        width: 5,
+        height: 5,
+        borderRadius: 2.5,
+        backgroundColor: Colors.highlight2,
+        marginTop: 3,
+    },
+
+    calendarEventHeader: {
+        marginBottom: 12,
+    },
+
+    calendarEventTitle: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 17,
+        fontWeight: '900',
+        color: Colors.text,
+    },
+
+    calendarEventList: {
+        width: '100%',
+        gap: 10,
+        marginBottom: 16,
+    },
+
+    calendarEventCard: {
+        width: '100%',
+        minHeight: 62,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+    },
+
+    calendarEventIcon: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        backgroundColor: Colors.pageBg2,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
+    },
+
+    calendarEventTextArea: {
+        flex: 1,
+    },
+
+    calendarEventName: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 15,
+        fontWeight: '900',
+        color: Colors.text,
+        marginBottom: 3,
+    },
+
+    calendarEventCompanion: {
+        fontFamily: Fonts.body,
+        fontSize: 13,
+        color: Colors.textShadow,
+    },
+
+    emptyEventCard: {
+        width: '100%',
+        minHeight: 58,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 14,
+    },
+
+    emptyEventText: {
+        fontFamily: Fonts.body,
+        fontSize: 14,
+        color: Colors.textShadow,
+    },
+
+    bottomTabWrap: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 18,
+        alignItems: 'center',
+        paddingHorizontal: 32,
+    },
+
+    bottomTab: {
+        width: '100%',
+        maxWidth: 330,
+        height: 58,
+        borderRadius: 29,
+        backgroundColor: '#F7F4E8',
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 6,
+    },
+
+    tabButton: {
+        flex: 1,
+        height: '100%',
+        borderRadius: 24,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+    },
+
+    tabButtonActive: {
+        backgroundColor: Colors.highlight1,
+    },
+
+    tabButtonText: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 15,
+        fontWeight: '900',
+        color: Colors.textShadow,
+    },
+
+    tabButtonTextActive: {
         color: Colors.text,
     },
 

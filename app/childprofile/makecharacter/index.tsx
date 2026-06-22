@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import {
     Image,
     Keyboard,
@@ -26,7 +26,6 @@ export default function MakeCharacterStory() {
 
     const childName = params.name || '아이';
     const profileImage = params.profileImage ?? '';
-    const scrollViewRef = useRef<ScrollView>(null);
     const [story, setStory] = useState('');
     const [storyError, setStoryError] = useState('');
 
@@ -57,12 +56,10 @@ export default function MakeCharacterStory() {
         >
             <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
                 <ScrollView
-                    ref={scrollViewRef}
                     style={styles.scrollView}
                     contentContainerStyle={styles.inner}
                     keyboardShouldPersistTaps="handled"
                     showsVerticalScrollIndicator={false}
-                    automaticallyAdjustKeyboardInsets={true}
                 >
                     <View style={styles.logoArea}>
                         <View style={styles.logoRow}>
@@ -116,11 +113,6 @@ export default function MakeCharacterStory() {
                             placeholder="ex) 지팡이를 든 공주"
                             placeholderTextColor={Colors.textShadow}
                             value={story}
-                            onFocus={() => {
-                                setTimeout(() => {
-                                    scrollViewRef.current?.scrollToEnd({ animated: true });
-                                }, 120);
-                            }}
                             onChangeText={(text) => {
                                 setStory(text);
                                 if (storyError) setStoryError('');

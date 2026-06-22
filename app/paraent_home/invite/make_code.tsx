@@ -1,15 +1,19 @@
-import { router } from 'expo-router';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Share, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../../components/BackButton';
 import PrimaryButton from '../../../components/PrimaryButton';
 import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
 
 const mockInviteCode = ['R', 'O', 'W', '8'];
+const mockChildName = '김월동';
+const mockInviteUrl = 'https://woldong.app/invite/ROW8';
 
 export default function MakeInviteCode() {
-    const goNext = () => {
-        router.push('/paraent_home/invite/accept' as any);
+    const shareInviteCode = async () => {
+        await Share.share({
+            message: `${mockChildName} 어린이 월동 동행인 초대 코드 : ${mockInviteCode.join('')}\n${mockInviteUrl}`,
+            url: mockInviteUrl,
+        });
     };
 
     return (
@@ -53,12 +57,8 @@ export default function MakeInviteCode() {
                 </Text>
             </View>
 
-            <Pressable style={styles.skipButton} onPress={goNext}>
-                <Text style={styles.skipText}>넘어가기</Text>
-            </Pressable>
-
             <View style={styles.buttonArea}>
-                <PrimaryButton label="공유하기" width="100%" onPress={goNext} />
+                <PrimaryButton label="공유하기" width="100%" onPress={shareInviteCode} />
             </View>
         </View>
     );
@@ -135,23 +135,22 @@ const styles = StyleSheet.create({
 
     codeRow: {
         flexDirection: 'row',
-        gap: 12,
+        gap: 8,
         marginBottom: 46,
     },
 
     codeBox: {
-        width: 48,
-        height: 52,
-        borderRadius: 8,
+        width: 66,
+        height: 76,
+        borderRadius: 10,
         backgroundColor: Colors.realwhite,
         alignItems: 'center',
         justifyContent: 'center',
     },
 
     codeText: {
-        fontFamily: Fonts.bodyBlack,
-        fontSize: 28,
-        fontWeight: '900',
+        fontFamily: Fonts.title,
+        fontSize: 80,
         color: Colors.black,
         transform: [{ rotate: '-8deg' }],
     },
@@ -162,17 +161,6 @@ const styles = StyleSheet.create({
         lineHeight: 22,
         textAlign: 'center',
         color: Colors.text,
-    },
-
-    skipButton: {
-        alignSelf: 'center',
-        marginBottom: 16,
-    },
-
-    skipText: {
-        fontFamily: Fonts.body,
-        fontSize: 14,
-        color: Colors.textShadow,
     },
 
     buttonArea: {

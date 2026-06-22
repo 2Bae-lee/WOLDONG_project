@@ -1,91 +1,60 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { router } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../components/BackButton';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
-import {
-    getCompanionRequestNotification,
-    isCompanionRequestNotificationApproved,
-    markParentNotificationsRead,
-} from '../../constants/NotificationState';
+import { markCompanionNotificationsRead } from '../../constants/NotificationState';
 
 type NotificationItem = {
     id: number;
     title: string;
     message: string;
     time: string;
-    type: 'companion_request' | 'schedule' | 'handoff';
+    type: 'approval' | 'schedule' | 'todo';
     unread: boolean;
-    companionName?: string;
 };
 
 const notifications: NotificationItem[] = [
     {
         id: 1,
-        title: '동행인 승인 요청',
-        message: '박민지님이 김월동 어린이의 동행인 권한을 요청했어요.',
+        title: '승인 요청 전송',
+        message: '김월동 어린이 보호자에게 동행인 승인 요청을 보냈어요.',
         time: '방금 전',
-        type: 'companion_request',
+        type: 'approval',
         unread: true,
-        companionName: '박민지',
     },
     {
         id: 2,
-        title: '오늘 일정 확인',
-        message: '병원 일정이 아직 남아 있어요.',
+        title: '오늘 할 일',
+        message: '병원 진료 일정의 세부 Todo를 확인해주세요.',
         time: '20분 전',
-        type: 'schedule',
+        type: 'todo',
         unread: false,
     },
     {
         id: 3,
-        title: '인수인계 자료',
-        message: '아이에게 전달할 자료를 다시 확인해주세요.',
+        title: '공유 일정',
+        message: '김월동 어린이의 언어 치료 일정이 캘린더에 있어요.',
         time: '1시간 전',
-        type: 'handoff',
+        type: 'schedule',
         unread: false,
     },
 ];
 
-export default function Notifications() {
-    const [refreshKey, setRefreshKey] = useState(0);
+const getIconName = (type: NotificationItem['type']) => {
+    if (type === 'approval') return 'person-add-outline';
+    if (type === 'schedule') return 'calendar-outline';
+    return 'checkmark-circle-outline';
+};
 
+export default function CompanionNotifications() {
     useFocusEffect(
         useCallback(() => {
-            markParentNotificationsRead();
-            setRefreshKey((current) => current + 1);
+            markCompanionNotificationsRead();
         }, [])
     );
-
-    const visibleNotifications = useMemo(() => {
-        const companionRequest = getCompanionRequestNotification();
-        const currentNotifications = notifications.map((notification) => (
-            notification.type === 'companion_request'
-                ? {
-                    ...notification,
-                    message: `${companionRequest.companionName}님이 ${companionRequest.childName} 어린이의 동행인 권한을 요청했어요.`,
-                    companionName: companionRequest.companionName,
-                }
-                : notification
-        ));
-
-        return currentNotifications.filter((notification) => {
-            if (notification.type !== 'companion_request') {
-                return true;
-            }
-
-            return !isCompanionRequestNotificationApproved(notification.companionName ?? '');
-        });
-    }, [refreshKey]);
-
-    const openNotification = (notification: NotificationItem) => {
-        if (notification.type === 'companion_request') {
-            router.push('/paraent_home/notification_request' as any);
-        }
-    };
 
     return (
         <ScrollView
@@ -107,22 +76,18 @@ export default function Notifications() {
 
             <View style={styles.headerArea}>
                 <Text style={styles.title}>알림</Text>
-                <Text style={styles.description}>확인이 필요한 소식을 모아봤어요.</Text>
+                <Text style={styles.description}>담당 어린이와 공유 일정 소식을 모아봤어요.</Text>
             </View>
 
             <View style={styles.listArea}>
-                {visibleNotifications.map((notification) => (
-                    <Pressable
-                        key={notification.id}
-                        style={styles.notificationCard}
-                        onPress={() => openNotification(notification)}
-                    >
+                {notifications.map((notification) => (
+                    <Pressable key={notification.id} style={styles.notificationCard}>
                         <View style={[
                             styles.iconCircle,
                             notification.unread && styles.iconCircleUnread,
                         ]}>
                             <Ionicons
-                                name={notification.type === 'companion_request' ? 'person-add-outline' : 'notifications-outline'}
+                                name={getIconName(notification.type)}
                                 size={22}
                                 color={Colors.text}
                             />
@@ -135,20 +100,8 @@ export default function Notifications() {
                             </View>
                             <Text style={styles.notificationMessage}>{notification.message}</Text>
                         </View>
-
-                        {notification.type === 'companion_request' ? (
-                            <Ionicons name="chevron-forward" size={20} color={Colors.textShadow} />
-                        ) : null}
                     </Pressable>
                 ))}
-
-                {visibleNotifications.length === 0 ? (
-                    <View style={styles.emptyCard}>
-                        <Ionicons name="checkmark-circle" size={34} color={Colors.highlight1} />
-                        <Text style={styles.emptyTitle}>확인할 알림이 없어요.</Text>
-                        <Text style={styles.emptyDescription}>새로운 소식이 생기면 여기에서 알려드릴게요.</Text>
-                    </View>
-                ) : null}
             </View>
         </ScrollView>
     );
@@ -255,15 +208,15 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         marginBottom: 6,
+        gap: 10,
     },
 
     notificationTitle: {
         flex: 1,
         fontFamily: Fonts.bodyBold,
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: '900',
         color: Colors.text,
-        marginRight: 8,
     },
 
     notificationTime: {
@@ -274,38 +227,8 @@ const styles = StyleSheet.create({
 
     notificationMessage: {
         fontFamily: Fonts.body,
-        fontSize: 14,
-        lineHeight: 21,
-        color: Colors.textShadow,
-    },
-
-    emptyCard: {
-        width: '100%',
-        minHeight: 180,
-        borderRadius: 18,
-        borderWidth: 1,
-        borderColor: '#E8DDC8',
-        backgroundColor: '#F7F4E8',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: 24,
-        paddingVertical: 28,
-    },
-
-    emptyTitle: {
-        fontFamily: Fonts.bodyBold,
-        fontSize: 17,
-        fontWeight: '900',
+        fontSize: 13,
+        lineHeight: 19,
         color: Colors.text,
-        marginTop: 12,
-        marginBottom: 8,
-    },
-
-    emptyDescription: {
-        fontFamily: Fonts.body,
-        fontSize: 14,
-        lineHeight: 21,
-        color: Colors.textShadow,
-        textAlign: 'center',
     },
 });

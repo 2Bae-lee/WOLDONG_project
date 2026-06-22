@@ -227,6 +227,16 @@ export default function ParentChildProfile() {
         } as any);
     };
 
+    const openCharacterEditor = () => {
+        router.push({
+            pathname: '/childprofile/makecharacter',
+            params: {
+                name: childName,
+                profileImage: profileImage ?? '',
+            },
+        } as any);
+    };
+
     return (
         <ScrollView
             style={styles.scrollView}
@@ -289,6 +299,10 @@ export default function ParentChildProfile() {
             </View>
 
             <View style={styles.buttonArea}>
+                <Pressable style={styles.characterEditButton} onPress={openCharacterEditor}>
+                    <Ionicons name="sparkles-outline" size={19} color={Colors.text} />
+                    <Text style={styles.characterEditText}>캐릭터 수정</Text>
+                </Pressable>
                 <PrimaryButton label="완료" width="100%" onPress={handleComplete} />
             </View>
 
@@ -428,6 +442,27 @@ const styles = StyleSheet.create({
     buttonArea: {
         width: '100%',
         marginTop: 24,
+        gap: 12,
+    },
+
+    characterEditButton: {
+        width: '100%',
+        minHeight: 52,
+        borderRadius: 26,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+    },
+
+    characterEditText: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 16,
+        fontWeight: '900',
+        color: Colors.text,
     },
 
     avatarButton: {

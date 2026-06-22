@@ -9,6 +9,7 @@ import {
     CompanionTodaySchedule,
     getCompanionTodaySchedulesForChild,
     subscribeCompanionTodaySchedules,
+    toggleCompanionTodaySchedule,
     toggleCompanionTodayTodo,
 } from '../../constants/CompanionTodayState';
 import { Fonts } from '../../constants/Fonts';
@@ -143,6 +144,10 @@ export default function CompanionChildHome() {
         toggleCompanionTodayTodo(scheduleId, todoId);
     };
 
+    const toggleTodaySchedule = (scheduleId: number) => {
+        toggleCompanionTodaySchedule(scheduleId);
+    };
+
     useEffect(() => {
         if (params.tab === 'calendar') {
             setActiveTab('calendar');
@@ -274,7 +279,27 @@ export default function CompanionChildHome() {
                                 {todayEvents.map((schedule) => (
                                     <View key={schedule.id} style={styles.scheduleBlock}>
                                         <View style={styles.scheduleTitleRow}>
-                                            <Text style={styles.scheduleTitle}>{schedule.title}</Text>
+                                            <Pressable
+                                                style={[
+                                                    styles.scheduleCheckBox,
+                                                    schedule.done && styles.scheduleCheckBoxDone,
+                                                ]}
+                                                onPress={() => toggleTodaySchedule(schedule.id)}
+                                                hitSlop={8}
+                                            >
+                                                {schedule.done ? (
+                                                    <Ionicons name="checkmark" size={14} color={Colors.realwhite} />
+                                                ) : null}
+                                            </Pressable>
+                                            <Text
+                                                style={[
+                                                    styles.scheduleTitle,
+                                                    schedule.done && styles.todoDoneText,
+                                                ]}
+                                                numberOfLines={1}
+                                            >
+                                                {schedule.title}
+                                            </Text>
                                             <View style={styles.guardianPill}>
                                                 <Text style={styles.guardianPillText}>{schedule.guardian}</Text>
                                             </View>
@@ -569,10 +594,25 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: 10,
+        minHeight: 42,
+    },
+
+    scheduleCheckBox: {
+        width: 22,
+        height: 22,
+        borderRadius: 6,
+        backgroundColor: Colors.pageBg3,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    scheduleCheckBoxDone: {
+        backgroundColor: Colors.highlight1,
     },
 
     scheduleTitle: {
         flex: 1,
+        flexShrink: 1,
         fontFamily: Fonts.bodyBold,
         fontSize: 16,
         fontWeight: '900',
@@ -584,6 +624,7 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.pageBg,
         paddingHorizontal: 9,
         paddingVertical: 4,
+        maxWidth: 116,
     },
 
     guardianPillText: {
@@ -686,17 +727,20 @@ const styles = StyleSheet.create({
     },
 
     calendarCard: {
+        width: '100%',
         borderRadius: 18,
         borderWidth: 1,
         borderColor: '#E8DDC8',
         backgroundColor: '#F7F4E8',
-        padding: 14,
-        marginBottom: 18,
+        paddingHorizontal: 16,
+        paddingTop: 16,
+        paddingBottom: 18,
+        marginBottom: 22,
     },
 
     weekRow: {
         flexDirection: 'row',
-        marginBottom: 10,
+        marginBottom: 12,
     },
 
     weekDay: {
@@ -716,6 +760,7 @@ const styles = StyleSheet.create({
     dayCell: {
         width: `${100 / 7}%`,
         aspectRatio: 1,
+        minHeight: 42,
         borderRadius: 12,
         alignItems: 'center',
         justifyContent: 'center',

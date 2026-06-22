@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Image,
     Keyboard,
@@ -26,7 +26,7 @@ import {
     updateCompanionTodaySchedule,
 } from '../../constants/CompanionTodayState';
 import { Fonts } from '../../constants/Fonts';
-import { registerCompanionRequestNotification } from '../../constants/NotificationState';
+import { hasUnreadCompanionNotifications } from '../../constants/NotificationState';
 
 type ActiveTab = 'today' | 'calendar';
 
@@ -85,6 +85,9 @@ export default function CompanionChildren() {
         companionJob?: string;
         companionIntro?: string;
         companionProfileImage?: string;
+        requestSent?: string;
+        requestedInviteCode?: string;
+        requestedChildName?: string;
     }>();
     const companionName = params.companionName || '박민지';
     const companionJob = params.companionJob || params.companionRelation || '담임 선생님';
@@ -96,9 +99,6 @@ export default function CompanionChildren() {
     const todayDay = today.getDate();
     const [activeTab, setActiveTab] = useState<ActiveTab>('today');
     const [children, setChildren] = useState(initialChildren);
-    const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
-    const [inviteCode, setInviteCode] = useState('');
-    const [codeError, setCodeError] = useState('');
     const [requestMessage, setRequestMessage] = useState('');
     const [calendarYear, setCalendarYear] = useState(currentYear);
     const [calendarMonth, setCalendarMonth] = useState(currentMonth);
@@ -158,12 +158,16 @@ export default function CompanionChildren() {
     const [todayEditTodos, setTodayEditTodos] = useState<CalendarTodo[]>([]);
     const [todayEditTodoText, setTodayEditTodoText] = useState('');
     const [todayEditError, setTodayEditError] = useState('');
+    const [hasUnreadNotifications, setHasUnreadNotifications] = useState(() => (
+        hasUnreadCompanionNotifications()
+    ));
     const connectedChildren = children.filter((child) => child.status === 'connected');
     const selectedEditChild = connectedChildren.find((child) => child.name === editChildName);
 
     useFocusEffect(
         useCallback(() => {
             setTodayTodos(getCompanionTodaySchedules());
+            setHasUnreadNotifications(hasUnreadCompanionNotifications());
             const unsubscribe = subscribeCompanionTodaySchedules(() => {
                 setTodayTodos(getCompanionTodaySchedules());
             });
@@ -171,6 +175,33 @@ export default function CompanionChildren() {
             return unsubscribe;
         }, [])
     );
+
+    useEffect(() => {
+        if (params.requestSent !== 'true' || !params.requestedInviteCode || !params.requestedChildName) {
+            return;
+        }
+
+        const normalizedCode = params.requestedInviteCode.trim().replace(/\s/g, '').toUpperCase();
+        setChildren((current) => {
+            const alreadyRequested = current.some((child) => child.inviteCode === normalizedCode);
+            if (alreadyRequested) return current;
+
+            return [
+                ...current,
+                {
+                    id: Date.now(),
+                    name: params.requestedChildName ?? `초대 코드 ${normalizedCode}`,
+                    guardian: '보호자 승인 대기',
+                    schedules: 0,
+                    permissions: ['승인 요청 중'],
+                    status: 'pending',
+                    inviteCode: normalizedCode,
+                },
+            ];
+        });
+
+        setRequestMessage(`${params.requestedChildName} 보호자에게 승인 요청을 보냈어요.`);
+    }, [params.requestSent, params.requestedChildName, params.requestedInviteCode]);
     const calendarDays = useMemo(() => {
         const firstDay = new Date(calendarYear, calendarMonth - 1, 1).getDay();
         const daysInMonth = new Date(calendarYear, calendarMonth, 0).getDate();
@@ -220,44 +251,6 @@ export default function CompanionChildren() {
         setCalendarYear(nextYear);
         setCalendarMonth(nextMonth);
         setSelectedDay(Math.min(selectedDay, daysInNextMonth));
-    };
-
-    const closeCodeModal = () => {
-        setIsCodeModalOpen(false);
-        setInviteCode('');
-        setCodeError('');
-        Keyboard.dismiss();
-    };
-
-    const submitInviteCode = () => {
-        const normalizedCode = inviteCode.trim().replace(/\s/g, '').toUpperCase();
-
-        if (normalizedCode.length < 4) {
-            setCodeError('초대 코드를 4자리 이상 입력해주세요.');
-            return;
-        }
-
-        const pendingName = normalizedCode === 'ROW8' ? '김월동' : `초대 코드 ${normalizedCode}`;
-        const alreadyRequested = children.some((child) => child.inviteCode === normalizedCode);
-
-        if (!alreadyRequested) {
-            setChildren((current) => [
-                ...current,
-                {
-                    id: Date.now(),
-                    name: pendingName,
-                    guardian: '보호자 승인 대기',
-                    schedules: 0,
-                    permissions: ['승인 요청 중'],
-                    status: 'pending',
-                    inviteCode: normalizedCode,
-                },
-            ]);
-        }
-
-        registerCompanionRequestNotification(companionName, pendingName);
-        setRequestMessage(`${pendingName} 보호자에게 승인 요청을 보냈어요.`);
-        closeCodeModal();
     };
 
     const openNewCalendarEvent = () => {
@@ -438,17 +431,26 @@ export default function CompanionChildren() {
                             resizeMode="contain"
                         />
                     </View>
-                    <Pressable style={styles.headerProfileButton} onPress={openProfileSetup}>
-                        <Image
-                            source={
-                                companionProfileImage
-                                    ? { uri: companionProfileImage }
-                                    : require('../../assets/images/icon_companion.png')
-                            }
-                            style={companionProfileImage ? styles.profileImageFilled : styles.profileImage}
-                            resizeMode={companionProfileImage ? 'cover' : 'contain'}
-                        />
-                    </Pressable>
+                    <View style={styles.headerActions}>
+                        <Pressable
+                            style={styles.iconButton}
+                            onPress={() => router.push('/companion_home/notifications' as any)}
+                        >
+                            <Ionicons name="notifications-outline" size={24} color={Colors.text} />
+                            {hasUnreadNotifications ? <View style={styles.notificationDot} /> : null}
+                        </Pressable>
+                        <Pressable style={styles.headerProfileButton} onPress={openProfileSetup}>
+                            <Image
+                                source={
+                                    companionProfileImage
+                                        ? { uri: companionProfileImage }
+                                        : require('../../assets/images/icon_companion.png')
+                                }
+                                style={companionProfileImage ? styles.profileImageFilled : styles.profileImage}
+                                resizeMode={companionProfileImage ? 'cover' : 'contain'}
+                            />
+                        </Pressable>
+                    </View>
                 </View>
 
                 {activeTab === 'today' ? (
@@ -491,12 +493,9 @@ export default function CompanionChildren() {
                                         <Text style={styles.todoMeta}>{schedule.guardian} 보호자와 공유 중</Text>
                                         <View style={styles.todoList}>
                                             {schedule.todos.map((todo) => (
-                                                <Pressable
-                                                    key={todo.id}
-                                                    style={styles.todoRow}
-                                                    onPress={() => openTodayEditor(schedule)}
-                                                >
+                                                <View key={todo.id} style={styles.todoRow}>
                                                     <Pressable
+                                                        style={styles.todoCheckButton}
                                                         onPress={() => toggleTodayTodo(schedule.id, todo.id)}
                                                         hitSlop={8}
                                                     >
@@ -506,10 +505,15 @@ export default function CompanionChildren() {
                                                             color={todo.done ? Colors.highlight1 : Colors.textShadow}
                                                         />
                                                     </Pressable>
-                                                    <Text style={[styles.todoText, todo.done && styles.todoDoneText]}>
-                                                        {todo.text}
-                                                    </Text>
-                                                </Pressable>
+                                                    <Pressable
+                                                        style={styles.todoTextButton}
+                                                        onPress={() => openTodayEditor(schedule)}
+                                                    >
+                                                        <Text style={[styles.todoText, todo.done && styles.todoDoneText]}>
+                                                            {todo.text}
+                                                        </Text>
+                                                    </Pressable>
+                                                </View>
                                             ))}
                                         </View>
                                     </View>
@@ -525,7 +529,15 @@ export default function CompanionChildren() {
                                 </View>
                                 <Pressable
                                     style={styles.smallAddButton}
-                                    onPress={() => setIsCodeModalOpen(true)}
+                                    onPress={() => router.push({
+                                        pathname: '/companion_home/invite_code',
+                                        params: {
+                                            companionName,
+                                            companionJob,
+                                            companionIntro,
+                                            companionProfileImage,
+                                        },
+                                    } as any)}
                                 >
                                     <Ionicons name="add" size={22} color={Colors.text} />
                                 </Pressable>
@@ -726,53 +738,6 @@ export default function CompanionChildren() {
                     </Pressable>
                 </View>
             </View>
-
-            <Modal
-                visible={isCodeModalOpen}
-                transparent
-                animationType="fade"
-                onRequestClose={closeCodeModal}
-            >
-                <Pressable style={styles.modalBackdrop} onPress={closeCodeModal}>
-                    <KeyboardAvoidingView
-                        style={styles.modalKeyboardArea}
-                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
-                    >
-                        <Pressable style={styles.codeModal} onPress={(event) => event.stopPropagation()}>
-                            <Text style={styles.modalTitle}>담당 어린이 추가</Text>
-                            <Text style={styles.modalDescription}>
-                                보호자에게 받은 초대 코드를 입력하면 승인 요청이 전송돼요.
-                            </Text>
-
-                            <TextInput
-                                style={[styles.codeInput, codeError && styles.inputError]}
-                                placeholder="초대 코드 입력"
-                                placeholderTextColor={Colors.textShadow}
-                                value={inviteCode}
-                                onChangeText={(text) => {
-                                    setInviteCode(text.toUpperCase());
-                                    if (codeError) setCodeError('');
-                                }}
-                                autoCapitalize="characters"
-                                returnKeyType="done"
-                                onSubmitEditing={submitInviteCode}
-                                autoFocus
-                            />
-                            {codeError ? <Text style={styles.errorText}>{codeError}</Text> : null}
-
-                            <View style={styles.modalButtonRow}>
-                                <Pressable style={styles.cancelButton} onPress={closeCodeModal}>
-                                    <Text style={styles.cancelButtonText}>취소</Text>
-                                </Pressable>
-                                <Pressable style={styles.submitButton} onPress={submitInviteCode}>
-                                    <Text style={styles.submitButtonText}>요청 보내기</Text>
-                                </Pressable>
-                            </View>
-                        </Pressable>
-                    </KeyboardAvoidingView>
-                </Pressable>
-            </Modal>
 
             <Modal
                 visible={isCalendarEditorOpen}
@@ -1119,6 +1084,33 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
     },
 
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+
+    iconButton: {
+        width: 46,
+        height: 46,
+        borderRadius: 23,
+        borderWidth: 1,
+        borderColor: Colors.highlight1,
+        backgroundColor: '#FFF8DF',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    notificationDot: {
+        position: 'absolute',
+        right: 8,
+        bottom: 8,
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: Colors.highlight3,
+    },
+
     profileImage: {
         width: 34,
         height: 34,
@@ -1161,9 +1153,9 @@ const styles = StyleSheet.create({
     description: {
         fontFamily: Fonts.body,
         fontSize: 15,
-        lineHeight: 22,
+        lineHeight: 21,
         color: Colors.textShadow,
-        marginBottom: 16,
+        marginBottom: 12,
     },
 
     smallAddButton: {
@@ -1181,12 +1173,13 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#E8DDC8',
         backgroundColor: '#F7F4E8',
-        padding: 16,
-        gap: 18,
+        paddingHorizontal: 14,
+        paddingVertical: 14,
+        gap: 12,
     },
 
     todoBlock: {
-        gap: 8,
+        gap: 5,
     },
 
     todoTitleRow: {
@@ -1194,7 +1187,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: 10,
-        minHeight: 42,
+        minHeight: 36,
     },
 
     todoTitle: {
@@ -1214,7 +1207,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         marginRight: 10,
-        marginVertical: 8,
+        marginVertical: 5,
     },
 
     todayScheduleCheckDone: {
@@ -1223,9 +1216,9 @@ const styles = StyleSheet.create({
 
     todayScheduleTextButton: {
         flex: 1,
-        minHeight: 42,
+        minHeight: 36,
         justifyContent: 'center',
-        paddingVertical: 6,
+        paddingVertical: 4,
     },
 
     childPill: {
@@ -1248,19 +1241,32 @@ const styles = StyleSheet.create({
     },
 
     todoList: {
-        gap: 6,
+        gap: 3,
     },
 
     todoRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        minHeight: 32,
-        paddingVertical: 3,
+        minHeight: 28,
+        paddingVertical: 1,
+    },
+
+    todoCheckButton: {
+        width: 30,
+        height: 30,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 2,
+    },
+
+    todoTextButton: {
+        flex: 1,
+        minHeight: 28,
+        justifyContent: 'center',
     },
 
     todoText: {
         flex: 1,
-        marginLeft: 7,
         fontFamily: Fonts.body,
         fontSize: 14,
         color: Colors.text,
@@ -1432,13 +1438,15 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#E8DDC8',
         backgroundColor: '#F7F4E8',
-        padding: 14,
+        paddingHorizontal: 16,
+        paddingTop: 16,
+        paddingBottom: 18,
         marginBottom: 22,
     },
 
     weekRow: {
         flexDirection: 'row',
-        marginBottom: 10,
+        marginBottom: 12,
     },
 
     weekDay: {
@@ -1458,6 +1466,7 @@ const styles = StyleSheet.create({
     dayCell: {
         width: `${100 / 7}%`,
         aspectRatio: 1,
+        minHeight: 42,
         borderRadius: 12,
         alignItems: 'center',
         justifyContent: 'center',
@@ -1683,7 +1692,7 @@ const styles = StyleSheet.create({
 
     calendarEditModal: {
         width: '100%',
-        height: '90%',
+        height: '78%',
         borderRadius: 18,
         backgroundColor: Colors.pageBg,
         borderWidth: 1,
@@ -1693,7 +1702,7 @@ const styles = StyleSheet.create({
 
     todayEditModal: {
         width: '100%',
-        maxHeight: '72%',
+        height: '78%',
         borderRadius: 18,
         backgroundColor: Colors.pageBg,
         borderWidth: 1,

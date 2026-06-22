@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Image,
     Keyboard,
@@ -17,6 +18,7 @@ import {
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
+import { hasUnreadParentNotifications } from '../../constants/NotificationState';
 
 type ScheduleItem = {
     id: number;
@@ -183,11 +185,20 @@ export default function ParentHome() {
     const [editCompanion, setEditCompanion] = useState(companionOptions[0]);
     const [editTodos, setEditTodos] = useState<ScheduleTodo[]>([]);
     const [editTodoText, setEditTodoText] = useState('');
+    const [hasUnreadNotifications, setHasUnreadNotifications] = useState(() => (
+        hasUnreadParentNotifications()
+    ));
     const selectedCalendarEvents = calendarEvents.filter((event) => (
         event.year === calendarYear &&
         event.month === calendarMonth &&
         event.day === selectedCalendarDay
     ));
+
+    useFocusEffect(
+        useCallback(() => {
+            setHasUnreadNotifications(hasUnreadParentNotifications());
+        }, [])
+    );
 
     useEffect(() => {
         if (params.tab === 'calendar') {
@@ -510,13 +521,13 @@ export default function ParentHome() {
                             onPress={() => router.push('/paraent_home/notifications' as any)}
                         >
                             <Ionicons name="notifications-outline" size={24} color={Colors.text} />
-                            <View style={styles.notificationDot} />
+                            {hasUnreadNotifications ? <View style={styles.notificationDot} /> : null}
                         </Pressable>
                         <Pressable
                             style={styles.iconButton}
                             onPress={() => router.push('/paraent_home/companions' as any)}
                         >
-                            <Ionicons name="add" size={25} color={Colors.text} />
+                            <Ionicons name="person-add-outline" size={23} color={Colors.text} />
                         </Pressable>
                         <Pressable
                             style={styles.profileButton}
@@ -1341,13 +1352,15 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#E8DDC8',
         backgroundColor: '#F7F4E8',
-        padding: 14,
+        paddingHorizontal: 16,
+        paddingTop: 16,
+        paddingBottom: 18,
         marginBottom: 22,
     },
 
     weekRow: {
         flexDirection: 'row',
-        marginBottom: 10,
+        marginBottom: 12,
     },
 
     weekDay: {
@@ -1367,6 +1380,7 @@ const styles = StyleSheet.create({
     dayCell: {
         width: `${100 / 7}%`,
         aspectRatio: 1,
+        minHeight: 42,
         borderRadius: 12,
         alignItems: 'center',
         justifyContent: 'center',

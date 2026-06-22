@@ -564,7 +564,7 @@ const styles = StyleSheet.create({
 
     weekRow: {
         flexDirection: 'row',
-        marginBottom: 10,
+        marginBottom: 12,
     },
 
     weekDay: {
@@ -584,6 +584,7 @@ const styles = StyleSheet.create({
     dayCell: {
         width: `${100 / 7}%`,
         aspectRatio: 1,
+        minHeight: 42,
         alignItems: 'center',
         justifyContent: 'center',
         padding: 3,

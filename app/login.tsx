@@ -51,7 +51,7 @@ export default function Login() {
             setIdError('');
             setPasswordError('');
             setPasswordMatchError('');
-            router.push('/companion_home/profile_setup' as any);
+            router.push('/companion_home' as any);
             return;
         }
 
@@ -68,7 +68,7 @@ export default function Login() {
         setIdError('');
         setPasswordError('');
         
-        router.push('childprofile/childname' as any);
+        router.push('/paraent_home' as any);
         }
     
     return (

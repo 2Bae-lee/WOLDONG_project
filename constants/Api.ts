@@ -1,7 +1,21 @@
 import * as SecureStore from 'expo-secure-store';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
-export const API_BASE_URL = 'http://127.0.0.1:8000';
+const API_PORT = 8003;
+
+function getApiBaseUrl() {
+    if (Platform.OS === 'web') {
+        return `http://127.0.0.1:${API_PORT}`;
+    }
+
+    const hostUri = Constants.expoConfig?.hostUri;
+    const host = hostUri?.split(':')[0];
+
+    return host ? `http://${host}:${API_PORT}` : `http://127.0.0.1:${API_PORT}`;
+}
+
+export const API_BASE_URL = getApiBaseUrl();
 const AUTH_TOKEN_KEY = 'woldong.authToken';
 const AUTH_USER_KEY = 'woldong.authUser';
 

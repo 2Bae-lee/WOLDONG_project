@@ -65,7 +65,10 @@ export default function NotificationRequest() {
 
         try {
             if (params.requestId) {
-                await approveInviteRequest(params.requestId, true);
+                await approveInviteRequest(params.requestId, true, {
+                    relation: selectedRelation,
+                    permissions: selectedPermissions,
+                });
             }
             await markCurrentNotificationRead();
             approveCompanionRequestNotification(companionName);

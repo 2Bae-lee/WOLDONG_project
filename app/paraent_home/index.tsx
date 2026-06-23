@@ -65,6 +65,13 @@ type CalendarEvent = {
     todos: ScheduleTodo[];
 };
 
+type CalendarDay = {
+    year: number;
+    month: number;
+    day: number;
+    monthOffset: -1 | 0 | 1;
+};
+
 type EditTarget =
     | { type: 'schedule'; item: ScheduleItem }
     | { type: 'handoff'; item: HandoffItem }
@@ -190,11 +197,32 @@ export default function ParentHome() {
     const calendarDays = useMemo(() => {
         const firstDay = new Date(calendarYear, calendarMonth - 1, 1).getDay();
         const daysInMonth = new Date(calendarYear, calendarMonth, 0).getDate();
+        const previousMonthDays = new Date(calendarYear, calendarMonth - 1, 0).getDate();
+        const previousMonthDate = new Date(calendarYear, calendarMonth - 2, 1);
+        const nextMonthDate = new Date(calendarYear, calendarMonth, 1);
+        const previousDays: CalendarDay[] = Array.from({ length: firstDay }, (_, index) => ({
+            year: previousMonthDate.getFullYear(),
+            month: previousMonthDate.getMonth() + 1,
+            day: previousMonthDays - firstDay + index + 1,
+            monthOffset: -1,
+        }));
+        const currentDays: CalendarDay[] = Array.from({ length: daysInMonth }, (_, index) => ({
+            year: calendarYear,
+            month: calendarMonth,
+            day: index + 1,
+            monthOffset: 0,
+        }));
+        const trailingCount = Math.ceil((previousDays.length + currentDays.length) / 7) * 7
+            - previousDays.length
+            - currentDays.length;
+        const nextDays: CalendarDay[] = Array.from({ length: trailingCount }, (_, index) => ({
+            year: nextMonthDate.getFullYear(),
+            month: nextMonthDate.getMonth() + 1,
+            day: index + 1,
+            monthOffset: 1,
+        }));
 
-        return [
-            ...Array.from({ length: firstDay }, () => null),
-            ...Array.from({ length: daysInMonth }, (_, index) => index + 1),
-        ];
+        return [...previousDays, ...currentDays, ...nextDays];
     }, [calendarMonth, calendarYear]);
     const scrollViewRef = useRef<ScrollView>(null);
     const [activeTab, setActiveTab] = useState<ActiveTab>('today');
@@ -503,6 +531,15 @@ export default function ParentHome() {
         cancelAddInputs();
         setActiveTab(nextTab);
         scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    };
+
+    const selectCalendarDay = (calendarDay: CalendarDay) => {
+        cancelAddInputs();
+        if (calendarDay.monthOffset !== 0) {
+            setCalendarYear(calendarDay.year);
+            setCalendarMonth(calendarDay.month);
+        }
+        setSelectedCalendarDay(calendarDay.day);
     };
 
     const toggleSchedule = (id: number) => {
@@ -849,7 +886,15 @@ export default function ParentHome() {
                                 style={styles.addButton}
                                 onPress={() => {
                                     cancelAddInputs();
-                                    router.push('/paraent_home/schedule_add' as any);
+                                    router.push({
+                                        pathname: '/paraent_home/calendar_add',
+                                        params: {
+                                            childId,
+                                            year: String(currentYear),
+                                            month: String(currentMonth),
+                                            day: String(todayDay),
+                                        },
+                                    } as any);
                                 }}
                             >
                                 <View style={styles.addIconCircle}>
@@ -932,42 +977,38 @@ export default function ParentHome() {
                             </View>
 
                             <View style={styles.calendarGrid}>
-                                {calendarDays.map((day, index) => {
-                                    const hasEvent = day !== null && calendarEvents.some((event) => (
-                                        event.year === calendarYear &&
-                                        event.month === calendarMonth &&
-                                        event.day === day
+                                {calendarDays.map((calendarDay, index) => {
+                                    const muted = calendarDay.monthOffset !== 0;
+                                    const hasEvent = calendarEvents.some((event) => (
+                                        event.year === calendarDay.year &&
+                                        event.month === calendarDay.month &&
+                                        event.day === calendarDay.day
                                     ));
-                                    const selected = day === selectedCalendarDay;
-                                    const isToday = day === todayDay;
+                                    const selected = !muted && calendarDay.day === selectedCalendarDay;
+                                    const isToday = (
+                                        calendarDay.year === currentYear &&
+                                        calendarDay.month === currentMonth &&
+                                        calendarDay.day === todayDay
+                                    );
 
                                     return (
                                         <Pressable
-                                            key={`${day ?? 'blank'}-${index}`}
+                                            key={`${calendarDay.year}-${calendarDay.month}-${calendarDay.day}-${index}`}
                                             style={[
                                                 styles.dayCell,
                                                 selected && styles.dayCellSelected,
                                             ]}
-                                            disabled={day === null}
-                                            onPress={() => {
-                                                if (day !== null) {
-                                                    cancelAddInputs();
-                                                    setSelectedCalendarDay(day);
-                                                }
-                                            }}
+                                            onPress={() => selectCalendarDay(calendarDay)}
                                         >
-                                            {day !== null ? (
-                                                <>
-                                                    <Text style={[
-                                                        styles.dayText,
-                                                        selected && styles.dayTextSelected,
-                                                        isToday && !selected && styles.todayText,
-                                                    ]}>
-                                                        {day}
-                                                    </Text>
-                                                    <View style={[styles.eventDot, !hasEvent && styles.eventDotHidden]} />
-                                                </>
-                                            ) : null}
+                                            <Text style={[
+                                                styles.dayText,
+                                                muted && styles.dayTextMuted,
+                                                selected && styles.dayTextSelected,
+                                                isToday && !selected && !muted && styles.todayText,
+                                            ]}>
+                                                {calendarDay.day}
+                                            </Text>
+                                            <View style={[styles.eventDot, !hasEvent && styles.eventDotHidden]} />
                                         </Pressable>
                                     );
                                 })}
@@ -1717,6 +1758,11 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '900',
         color: Colors.text,
+    },
+
+    dayTextMuted: {
+        color: Colors.textShadow,
+        opacity: 0.55,
     },
 
     dayTextSelected: {

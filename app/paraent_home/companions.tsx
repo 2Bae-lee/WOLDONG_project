@@ -77,9 +77,11 @@ export default function Companions() {
             companionId: companion.companion_id,
             childId: targetChildId,
             name: companion.companion_name,
-            relation: '동행인',
+            relation: companion.relation || '동행인',
             phone: '연락처는 회원가입 정보에서 확인돼요',
-            permissions: ['아이 프로필', '오늘 일정', '공유 캘린더', '주의사항'],
+            permissions: companion.permissions?.length
+                ? companion.permissions
+                : ['아이 프로필', '오늘 일정', '공유 캘린더', '주의사항'],
             status: '아이 정보를 함께 확인할 수 있어요.',
         });
 

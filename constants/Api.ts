@@ -243,6 +243,8 @@ export type InviteRequest = {
     request_id: string;
     companion_name: string;
     child_id: string;
+    relation?: string | null;
+    permissions?: string[];
     created_at: string;
 };
 
@@ -251,10 +253,19 @@ export type InviteCodeResponse = {
     expires_at: string;
 };
 
+export type InviteVerifyResponse = {
+    child_id: string;
+    child_name: string;
+    guardian_name: string;
+    status: 'pending' | string;
+};
+
 export type LinkedCompanion = {
     request_id: string;
     companion_id: string;
     companion_name: string;
+    relation?: string | null;
+    permissions?: string[];
     created_at: string;
 };
 
@@ -673,9 +684,22 @@ export const getInviteRequests = () => (
     apiRequest<InviteRequest[]>('/api/invite/requests')
 );
 
-export const approveInviteRequest = (requestId: string, approve: boolean) => (
-    apiRequest<null>(`/api/invite/approve?request_id=${encodeURIComponent(requestId)}&approve=${approve}`, {
+export const approveInviteRequest = (
+    requestId: string,
+    approve: boolean,
+    options: {
+        relation?: string;
+        permissions?: string[];
+    } = {}
+) => (
+    apiRequest<null>('/api/invite/approve', {
         method: 'POST',
+        body: JSON.stringify({
+            request_id: requestId,
+            approve,
+            relation: options.relation,
+            permissions: options.permissions ?? [],
+        }),
     })
 );
 
@@ -686,7 +710,7 @@ export const generateInviteCode = (childId: string) => (
 );
 
 export const verifyInviteCode = (code: string) => (
-    apiRequest<null>('/api/invite/verify', {
+    apiRequest<InviteVerifyResponse>('/api/invite/verify', {
         method: 'POST',
         body: JSON.stringify({ code }),
     })

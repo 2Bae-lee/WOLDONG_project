@@ -21,6 +21,7 @@ import {
     TodayScheduleSummary,
     getCompanionChildren,
     getCompanionProfile,
+    getSchedules,
     getTodaySchedules,
 } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
@@ -51,6 +52,7 @@ type CalendarTodo = {
 
 type CalendarEvent = {
     id: number;
+    scheduleId?: string;
     year: number;
     month: number;
     day: number;
@@ -58,6 +60,13 @@ type CalendarEvent = {
     title: string;
     guardian: string;
     todos: CalendarTodo[];
+};
+
+type CalendarDay = {
+    year: number;
+    month: number;
+    day: number;
+    monthOffset: -1 | 0 | 1;
 };
 
 const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
@@ -93,6 +102,44 @@ const mapTodaySchedules = (
                 : [],
         };
     })
+);
+
+const mapCalendarSchedules = (
+    schedules: TodayScheduleSummary[],
+    childById: Map<string, CompanionChild>
+): CalendarEvent[] => (
+    schedules.map((schedule) => {
+        const [year, month, day] = schedule.date.split('-').map(Number);
+
+        if (!year || !month || !day) return null;
+
+        const eventId = createNumericId(schedule.schedule_id);
+        const child = childById.get(schedule.child_id);
+        const place = getSchedulePlace(schedule);
+        const todoTexts = [
+            schedule.start_time ? `${schedule.start_time} 출발` : '',
+            place,
+            schedule.transport_type ? `${schedule.transport_type} 이동` : '',
+        ].filter(Boolean);
+
+        const event: CalendarEvent = {
+            id: eventId,
+            scheduleId: schedule.schedule_id,
+            year,
+            month,
+            day,
+            childName: child?.name ?? '담당 어린이',
+            title: schedule.title,
+            guardian: '연결된 보호자',
+            todos: todoTexts.map((text, index) => ({
+                id: eventId + index + 1,
+                text,
+                done: schedule.status === 'done',
+            })),
+        };
+
+        return event;
+    }).filter((event): event is CalendarEvent => event !== null)
 );
 
 export default function CompanionChildren() {
@@ -197,19 +244,21 @@ export default function CompanionChildren() {
 
     const loadCompanionHome = useCallback(async () => {
         try {
-            const [profileResponse, childrenResponse, todaySchedulesResponse] = await Promise.all([
+            const [profileResponse, childrenResponse, todaySchedulesResponse, allSchedulesResponse] = await Promise.all([
                 getCompanionProfile(),
                 getCompanionChildren(),
                 getTodaySchedules(),
+                getSchedules(),
             ]);
 
             const companionProfile = profileResponse.data;
             const assignedChildren = childrenResponse.data ?? [];
             const todaySchedules = todaySchedulesResponse.data ?? [];
+            const allSchedules = allSchedulesResponse.data ?? [];
             const scheduleCountByChildId = new Map<string, number>();
             const primaryScheduleByChildId = new Map<string, string>();
 
-            todaySchedules.forEach((schedule) => {
+            allSchedules.forEach((schedule) => {
                 scheduleCountByChildId.set(
                     schedule.child_id,
                     (scheduleCountByChildId.get(schedule.child_id) ?? 0) + 1
@@ -237,6 +286,7 @@ export default function CompanionChildren() {
 
             setApiCompanionName(companionProfile?.name ?? '');
             setTodayTodos(mapTodaySchedules(todaySchedules, childById));
+            setCalendarEvents(mapCalendarSchedules(allSchedules, childById));
             setChildren((current) => [
                 ...nextConnectedChildren,
                 ...current.filter((child) => (
@@ -358,7 +408,20 @@ export default function CompanionChildren() {
         if (!firstEvent) return;
 
         setCalendarEvents((current) => {
-            if (current.some((event) => event.id === addedEventId)) return current;
+            const alreadyLoaded = nextEvents.every((nextEvent) => (
+                current.some((event) => (
+                    event.id === nextEvent.id ||
+                    (
+                        event.year === nextEvent.year &&
+                        event.month === nextEvent.month &&
+                        event.day === nextEvent.day &&
+                        event.title === nextEvent.title &&
+                        event.childName === nextEvent.childName
+                    )
+                ))
+            ));
+
+            if (alreadyLoaded) return current;
 
             return [...current, ...nextEvents];
         });
@@ -437,11 +500,32 @@ export default function CompanionChildren() {
     const calendarDays = useMemo(() => {
         const firstDay = new Date(calendarYear, calendarMonth - 1, 1).getDay();
         const daysInMonth = new Date(calendarYear, calendarMonth, 0).getDate();
+        const previousMonthDays = new Date(calendarYear, calendarMonth - 1, 0).getDate();
+        const previousMonthDate = new Date(calendarYear, calendarMonth - 2, 1);
+        const nextMonthDate = new Date(calendarYear, calendarMonth, 1);
+        const previousDays: CalendarDay[] = Array.from({ length: firstDay }, (_, index) => ({
+            year: previousMonthDate.getFullYear(),
+            month: previousMonthDate.getMonth() + 1,
+            day: previousMonthDays - firstDay + index + 1,
+            monthOffset: -1,
+        }));
+        const currentDays: CalendarDay[] = Array.from({ length: daysInMonth }, (_, index) => ({
+            year: calendarYear,
+            month: calendarMonth,
+            day: index + 1,
+            monthOffset: 0,
+        }));
+        const trailingCount = Math.ceil((previousDays.length + currentDays.length) / 7) * 7
+            - previousDays.length
+            - currentDays.length;
+        const nextDays: CalendarDay[] = Array.from({ length: trailingCount }, (_, index) => ({
+            year: nextMonthDate.getFullYear(),
+            month: nextMonthDate.getMonth() + 1,
+            day: index + 1,
+            monthOffset: 1,
+        }));
 
-        return [
-            ...Array.from({ length: firstDay }, () => null),
-            ...Array.from({ length: daysInMonth }, (_, index) => index + 1),
-        ];
+        return [...previousDays, ...currentDays, ...nextDays];
     }, [calendarMonth, calendarYear]);
     const selectedEvents = calendarEvents.filter((event) => (
         event.year === calendarYear &&
@@ -487,6 +571,14 @@ export default function CompanionChildren() {
         setSelectedDay(Math.min(selectedDay, daysInNextMonth));
     };
 
+    const selectCalendarDay = (calendarDay: CalendarDay) => {
+        if (calendarDay.monthOffset !== 0) {
+            setCalendarYear(calendarDay.year);
+            setCalendarMonth(calendarDay.month);
+        }
+        setSelectedDay(calendarDay.day);
+    };
+
     const openNewCalendarEvent = () => {
         router.push({
             pathname: '/companion_home/calendar_create',
@@ -503,6 +595,7 @@ export default function CompanionChildren() {
             pathname: '/companion_home/calendar_edit',
             params: {
                 eventId: String(event.id),
+                scheduleId: event.scheduleId ?? '',
                 year: String(event.year),
                 month: String(event.month),
                 day: String(event.day),
@@ -895,36 +988,35 @@ export default function CompanionChildren() {
                             </View>
 
                             <View style={styles.calendarGrid}>
-                                {calendarDays.map((day, index) => {
-                                    const selected = day === selectedDay;
-                                    const hasEvent = day !== null && calendarEvents.some((event) => (
-                                        event.year === calendarYear &&
-                                        event.month === calendarMonth &&
-                                        event.day === day
+                                {calendarDays.map((calendarDay, index) => {
+                                    const muted = calendarDay.monthOffset !== 0;
+                                    const selected = !muted && calendarDay.day === selectedDay;
+                                    const hasEvent = calendarEvents.some((event) => (
+                                        event.year === calendarDay.year &&
+                                        event.month === calendarDay.month &&
+                                        event.day === calendarDay.day
                                     ));
-                                    const isToday = day === todayDay &&
-                                        calendarMonth === currentMonth &&
-                                        calendarYear === currentYear;
+                                    const isToday = (
+                                        calendarDay.year === currentYear &&
+                                        calendarDay.month === currentMonth &&
+                                        calendarDay.day === todayDay
+                                    );
 
                                     return (
                                         <Pressable
-                                            key={`${day ?? 'blank'}-${index}`}
+                                            key={`${calendarDay.year}-${calendarDay.month}-${calendarDay.day}-${index}`}
                                             style={[styles.dayCell, selected && styles.dayCellSelected]}
-                                            disabled={day === null}
-                                            onPress={() => day !== null && setSelectedDay(day)}
+                                            onPress={() => selectCalendarDay(calendarDay)}
                                         >
-                                            {day !== null ? (
-                                                <>
-                                                    <Text style={[
-                                                        styles.dayText,
-                                                        selected && styles.dayTextSelected,
-                                                        isToday && !selected && styles.todayText,
-                                                    ]}>
-                                                        {day}
-                                                    </Text>
-                                                    <View style={[styles.eventDot, !hasEvent && styles.eventDotHidden]} />
-                                                </>
-                                            ) : null}
+                                            <Text style={[
+                                                styles.dayText,
+                                                muted && styles.dayTextMuted,
+                                                selected && styles.dayTextSelected,
+                                                isToday && !selected && !muted && styles.todayText,
+                                            ]}>
+                                                {calendarDay.day}
+                                            </Text>
+                                            <View style={[styles.eventDot, !hasEvent && styles.eventDotHidden]} />
                                         </Pressable>
                                     );
                                 })}
@@ -1565,6 +1657,11 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '900',
         color: Colors.text,
+    },
+
+    dayTextMuted: {
+        color: Colors.textShadow,
+        opacity: 0.55,
     },
 
     dayTextSelected: {

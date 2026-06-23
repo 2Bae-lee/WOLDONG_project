@@ -63,8 +63,11 @@ export default function CompanionInviteCode() {
         setError('');
         setIsSubmitting(true);
 
+        let requestedChildName = `초대 코드 ${fullCode}`;
+
         try {
-            await verifyInviteCode(fullCode);
+            const response = await verifyInviteCode(fullCode);
+            requestedChildName = response.data?.child_name || requestedChildName;
         } catch (requestError) {
             setError(requestError instanceof Error ? requestError.message : '승인 요청을 보내지 못했어요.');
             setIsSubmitting(false);
@@ -82,7 +85,7 @@ export default function CompanionInviteCode() {
                 companionProfileImage: params.companionProfileImage,
                 requestSent: 'true',
                 requestedInviteCode: fullCode,
-                requestedChildName: `초대 코드 ${fullCode}`,
+                requestedChildName,
             },
         } as any);
     };

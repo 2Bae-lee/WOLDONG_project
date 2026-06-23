@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     Image,
     Keyboard,
@@ -17,7 +17,13 @@ import {
 import BackButton from '../../components/BackButton';
 import PrimaryButton from '../../components/PrimaryButton';
 import RepeatSelector from '../../components/RepeatSelector';
-import { ApiError, createSchedule, getParentHome } from '../../constants/Api';
+import {
+    ApiError,
+    LinkedCompanion,
+    createSchedule,
+    getLinkedCompanions,
+    getParentHome,
+} from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 import {
@@ -47,23 +53,6 @@ const scheduleTypes = [
     { label: '기타', description: '직접 정리해야 하는 일정' },
 ];
 
-const companions = [
-    {
-        name: '박민지',
-        relation: '담임 선생님',
-        description: '아이 프로필과 학교 관련 일정을 함께 확인해요.',
-    },
-    {
-        name: '이하늘',
-        relation: '활동지원사',
-        description: '외출 일정과 주의사항을 함께 확인해요.',
-    },
-    {
-        name: '최서윤',
-        relation: '치료사',
-        description: '치료 일정과 아이 반응 메모를 함께 확인해요.',
-    },
-];
 const transportTypes = ['버스', '지하철', '택시', '도보', '자가용'];
 const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -91,6 +80,8 @@ export default function CalendarAdd() {
     const [selectedDay, setSelectedDay] = useState(initialDay);
     const [selectedType, setSelectedType] = useState('');
     const [selectedCompanion, setSelectedCompanion] = useState('');
+    const [childId, setChildId] = useState(params.childId ?? '');
+    const [linkedCompanions, setLinkedCompanions] = useState<LinkedCompanion[]>([]);
     const [selectedTransport, setSelectedTransport] = useState('');
     const [startTime, setStartTime] = useState('10:00');
     const [scheduleTitle, setScheduleTitle] = useState('');
@@ -102,6 +93,7 @@ export default function CalendarAdd() {
     const [selectedFeatureValues, setSelectedFeatureValues] = useState<string[]>([]);
     const [excludedFeatureValues, setExcludedFeatureValues] = useState<string[]>([]);
     const [error, setError] = useState('');
+    const [companionLoadError, setCompanionLoadError] = useState('');
     const [saving, setSaving] = useState(false);
     const [sheetTarget, setSheetTarget] = useState<SheetTarget>(null);
     const [repeatOption, setRepeatOption] = useState<RepeatOption>('none');
@@ -120,6 +112,9 @@ export default function CalendarAdd() {
     const selectedScheduleFeatureLabels = getScheduleFeatureLabels(selectedScheduleFeatureValues);
     const waitPossible = selectedScheduleFeatureValues.includes(SCHEDULE_FEATURE_WAIT);
     const crowdPossible = selectedScheduleFeatureValues.includes(SCHEDULE_FEATURE_CROWD);
+    const selectedCompanionOption = useMemo(() => (
+        linkedCompanions.find((companion) => companion.companion_id === selectedCompanion)
+    ), [linkedCompanions, selectedCompanion]);
     const calendarDays = useMemo(() => {
         const firstDay = new Date(selectedYear, selectedMonth - 1, 1).getDay();
         const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
@@ -236,16 +231,69 @@ export default function CalendarAdd() {
         });
     };
 
+    useEffect(() => {
+        let active = true;
+
+        const loadLinkedCompanions = async () => {
+            setCompanionLoadError('');
+
+            try {
+                let nextChildId = params.childId ?? '';
+
+                if (!nextChildId) {
+                    const homeResponse = await getParentHome();
+                    nextChildId = homeResponse.data?.children?.[0]?.child_id ?? '';
+                }
+
+                if (!active) return;
+                setChildId(nextChildId);
+
+                if (!nextChildId) {
+                    setLinkedCompanions([]);
+                    setCompanionLoadError('아동 프로필을 먼저 등록해주세요.');
+                    return;
+                }
+
+                const companionsResponse = await getLinkedCompanions(nextChildId);
+                if (!active) return;
+
+                const nextCompanions = companionsResponse.data ?? [];
+                setLinkedCompanions(nextCompanions);
+                setSelectedCompanion((current) => (
+                    nextCompanions.some((companion) => companion.companion_id === current)
+                        ? current
+                        : ''
+                ));
+            } catch (loadError) {
+                if (!active) return;
+                setLinkedCompanions([]);
+                setCompanionLoadError(loadError instanceof Error
+                    ? loadError.message
+                    : '동행인 목록을 불러오지 못했어요.');
+            }
+        };
+
+        loadLinkedCompanions();
+
+        return () => {
+            active = false;
+        };
+    }, [params.childId]);
+
     const sheetOptions = sheetTarget === 'type'
         ? scheduleTypes.map((option) => ({
             value: option.label,
+            label: option.label,
             description: option.description,
             badge: '',
         }))
-        : companions.map((option) => ({
-            value: option.name,
-            description: option.description,
-            badge: option.relation,
+        : linkedCompanions.map((option) => ({
+            value: option.companion_id,
+            label: option.companion_name,
+            description: option.permissions?.length
+                ? option.permissions.join(', ')
+                : '승인된 동행인이에요.',
+            badge: option.relation ?? '승인됨',
         }));
 
     const formatApiDate = (date: RepeatDate) => {
@@ -256,10 +304,13 @@ export default function CalendarAdd() {
     };
 
     const getChildId = async () => {
+        if (childId) return childId;
         if (params.childId) return params.childId;
 
         const homeResponse = await getParentHome();
-        return homeResponse.data?.children?.[0]?.child_id ?? '';
+        const nextChildId = homeResponse.data?.children?.[0]?.child_id ?? '';
+        setChildId(nextChildId);
+        return nextChildId;
     };
 
     const handleSave = async () => {
@@ -267,6 +318,11 @@ export default function CalendarAdd() {
 
         if (!selectedType || !selectedCompanion || !selectedTransport || !scheduleTitle.trim()) {
             setError('날짜, 일정 종류, 동행인, 이동수단, 일정 이름을 모두 입력해주세요.');
+            return;
+        }
+
+        if (!selectedCompanionOption) {
+            setError('승인된 동행인을 다시 선택해주세요.');
             return;
         }
 
@@ -296,6 +352,7 @@ export default function CalendarAdd() {
 
             const responses = await Promise.all(datesToCreate.map((date) => createSchedule({
                 child_id: childId,
+                companion_id: selectedCompanion,
                 title: scheduleTitle.trim(),
                 date: formatApiDate(date),
                 start_time: startTime.trim(),
@@ -332,7 +389,7 @@ export default function CalendarAdd() {
                 addedEventMonth: String(selectedMonth),
                 addedEventDay: String(selectedDay),
                 addedEventTitle: scheduleTitle.trim(),
-                addedEventCompanion: selectedCompanion,
+                addedEventCompanion: selectedCompanionOption.companion_name,
                 addedEventTodos: JSON.stringify(todos),
                 addedEventDates: JSON.stringify(repeatDates),
                 addedEventFeatures: JSON.stringify(selectedScheduleFeatureValues),
@@ -493,11 +550,14 @@ export default function CalendarAdd() {
                             styles.selectFieldText,
                             !selectedCompanion && styles.selectFieldPlaceholder,
                         ]}>
-                            {selectedCompanion || '동행인을 선택해주세요'}
+                            {selectedCompanionOption?.companion_name || '동행인을 선택해주세요'}
                         </Text>
                     </View>
                     <Ionicons name="chevron-down" size={20} color={Colors.textShadow} />
                 </Pressable>
+                {companionLoadError ? (
+                    <Text style={styles.fieldHintError}>{companionLoadError}</Text>
+                ) : null}
             </View>
 
             <View style={styles.section}>
@@ -764,6 +824,13 @@ export default function CalendarAdd() {
                                 ? '동행인과 공유할 일정의 종류를 골라주세요.'
                                 : '이 일정을 함께 확인할 동행인을 골라주세요.'}
                         </Text>
+                        {sheetOptions.length === 0 ? (
+                            <Text style={styles.sheetEmptyText}>
+                                {sheetTarget === 'companion'
+                                    ? '승인된 동행인이 없어요.'
+                                    : '선택할 수 있는 항목이 없어요.'}
+                            </Text>
+                        ) : null}
                         {sheetOptions.map((option) => {
                             const selected = (sheetTarget === 'type' && selectedType === option.value) ||
                                 (sheetTarget === 'companion' && selectedCompanion === option.value);
@@ -799,7 +866,7 @@ export default function CalendarAdd() {
 
                                         <View style={styles.sheetOptionTextArea}>
                                             <View style={styles.sheetOptionTitleRow}>
-                                                <Text style={styles.sheetOptionText}>{option.value}</Text>
+                                                <Text style={styles.sheetOptionText}>{option.label}</Text>
                                                 {option.badge ? (
                                                     <Text style={styles.sheetOptionBadge}>{option.badge}</Text>
                                                 ) : null}
@@ -1364,6 +1431,14 @@ const styles = StyleSheet.create({
         marginBottom: 14,
     },
 
+    fieldHintError: {
+        marginTop: 8,
+        fontFamily: Fonts.body,
+        fontSize: 13,
+        lineHeight: 19,
+        color: Colors.highlight3,
+    },
+
     buttonArea: {
         width: '100%',
         marginTop: 'auto',
@@ -1411,6 +1486,18 @@ const styles = StyleSheet.create({
         color: Colors.textShadow,
         textAlign: 'center',
         marginBottom: 20,
+    },
+
+    sheetEmptyText: {
+        borderRadius: 14,
+        backgroundColor: '#F7F4E8',
+        paddingHorizontal: 14,
+        paddingVertical: 18,
+        fontFamily: Fonts.body,
+        fontSize: 14,
+        lineHeight: 21,
+        color: Colors.textShadow,
+        textAlign: 'center',
     },
 
     sheetOption: {

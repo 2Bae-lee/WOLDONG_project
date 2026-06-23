@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import BackButton from '../../components/BackButton';
 import PrimaryButton from '../../components/PrimaryButton';
+import { deleteSchedule, updateSchedule } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 
@@ -50,6 +51,7 @@ const parseTodos = (value?: string): EditTodo[] => {
 export default function CompanionCalendarEdit() {
     const params = useLocalSearchParams<{
         eventId?: string;
+        scheduleId?: string;
         year?: string;
         month?: string;
         day?: string;
@@ -59,6 +61,7 @@ export default function CompanionCalendarEdit() {
         todos?: string;
     }>();
     const eventId = Number(params.eventId);
+    const scheduleId = params.scheduleId || '';
     const year = params.year || '';
     const month = params.month || '';
     const day = params.day || '';
@@ -68,6 +71,8 @@ export default function CompanionCalendarEdit() {
     const [todos, setTodos] = useState<EditTodo[]>(() => parseTodos(params.todos));
     const [todoText, setTodoText] = useState('');
     const [error, setError] = useState('');
+    const [saving, setSaving] = useState(false);
+    const [deleting, setDeleting] = useState(false);
 
     const goBackToCalendar = (extraParams: Record<string, string>) => {
         router.replace({
@@ -100,7 +105,9 @@ export default function CompanionCalendarEdit() {
         setTodoText('');
     };
 
-    const saveEdit = () => {
+    const saveEdit = async () => {
+        if (saving || deleting) return;
+
         const trimmedTitle = title.trim();
 
         if (!trimmedTitle || Number.isNaN(eventId)) {
@@ -109,20 +116,49 @@ export default function CompanionCalendarEdit() {
         }
 
         Keyboard.dismiss();
-        goBackToCalendar({
-            updatedEventId: String(eventId),
-            updatedEventTitle: trimmedTitle,
-            updatedEventTodos: JSON.stringify(todos),
-        });
+        setSaving(true);
+        setError('');
+
+        try {
+            if (scheduleId) {
+                await updateSchedule(scheduleId, {
+                    title: trimmedTitle,
+                    checklist: todos.map((todo) => todo.text),
+                });
+            }
+
+            goBackToCalendar({
+                updatedEventId: String(eventId),
+                updatedEventTitle: trimmedTitle,
+                updatedEventTodos: JSON.stringify(todos),
+            });
+        } catch (saveError) {
+            setError(saveError instanceof Error ? saveError.message : '일정을 수정하지 못했어요.');
+        } finally {
+            setSaving(false);
+        }
     };
 
-    const deleteEvent = () => {
-        if (Number.isNaN(eventId)) return;
+    const deleteEvent = async () => {
+        if (saving || deleting || Number.isNaN(eventId)) return;
 
         Keyboard.dismiss();
-        goBackToCalendar({
-            deletedEventId: String(eventId),
-        });
+        setDeleting(true);
+        setError('');
+
+        try {
+            if (scheduleId) {
+                await deleteSchedule(scheduleId);
+            }
+
+            goBackToCalendar({
+                deletedEventId: String(eventId),
+            });
+        } catch (deleteError) {
+            setError(deleteError instanceof Error ? deleteError.message : '일정을 삭제하지 못했어요.');
+        } finally {
+            setDeleting(false);
+        }
     };
 
     return (
@@ -237,10 +273,10 @@ export default function CompanionCalendarEdit() {
 
                 <View style={styles.buttonRow}>
                     <Pressable style={styles.deleteButton} onPress={deleteEvent}>
-                        <Text style={styles.deleteButtonText}>삭제</Text>
+                        <Text style={styles.deleteButtonText}>{deleting ? '삭제 중...' : '삭제'}</Text>
                     </Pressable>
                     <View style={styles.saveButtonArea}>
-                        <PrimaryButton label="저장" width="100%" onPress={saveEdit} />
+                        <PrimaryButton label={saving ? '저장 중...' : '저장'} width="100%" onPress={saveEdit} />
                     </View>
                 </View>
             </ScrollView>

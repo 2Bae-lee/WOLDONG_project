@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../components/BackButton';
+import { deleteLinkedCompanion } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 
@@ -19,6 +20,8 @@ const permissionOptions = [
 
 export default function CompanionProfile() {
     const params = useLocalSearchParams<{
+        childId?: string;
+        companionId?: string;
         name?: string;
         relation?: string;
         phone?: string;
@@ -33,6 +36,8 @@ export default function CompanionProfile() {
     const [permissions, setPermissions] = useState(() => parsePermissions(params.permissions));
     const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
     const [draftPermissions, setDraftPermissions] = useState<string[]>(permissions);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [errorText, setErrorText] = useState('');
 
     const openPermissionModal = () => {
         setDraftPermissions(permissions);
@@ -50,6 +55,31 @@ export default function CompanionProfile() {
     const savePermissions = () => {
         setPermissions(draftPermissions);
         setIsPermissionModalOpen(false);
+    };
+
+    const deleteCompanion = async () => {
+        if (isDeleting) return;
+
+        setIsDeleting(true);
+        setErrorText('');
+
+        try {
+            if (params.childId && params.companionId && !params.companionId.startsWith('mock-')) {
+                await deleteLinkedCompanion(params.childId, params.companionId);
+            }
+
+            router.replace({
+                pathname: '/paraent_home/companions',
+                params: {
+                    childId: params.childId ?? '',
+                    removedCompanionId: params.companionId ?? '',
+                },
+            } as any);
+        } catch (error) {
+            setErrorText(error instanceof Error ? error.message : '동행인 권한 철회에 실패했어요.');
+        } finally {
+            setIsDeleting(false);
+        }
     };
 
     return (
@@ -120,6 +150,15 @@ export default function CompanionProfile() {
                     )}
                 </View>
             </View>
+
+            {errorText ? <Text style={styles.errorText}>{errorText}</Text> : null}
+
+            <Pressable style={styles.deleteButton} onPress={deleteCompanion}>
+                <Ionicons name="trash-outline" size={17} color={Colors.highlight3} />
+                <Text style={styles.deleteButtonText}>
+                    {isDeleting ? '철회 중' : '권한 철회하기'}
+                </Text>
+            </Pressable>
 
             <Modal
                 visible={isPermissionModalOpen}
@@ -371,6 +410,36 @@ const styles = StyleSheet.create({
         fontFamily: Fonts.body,
         fontSize: 14,
         color: Colors.textShadow,
+    },
+
+    errorText: {
+        marginTop: 14,
+        fontFamily: Fonts.body,
+        fontSize: 13,
+        lineHeight: 19,
+        color: Colors.highlight3,
+        textAlign: 'center',
+    },
+
+    deleteButton: {
+        width: '100%',
+        height: 48,
+        borderRadius: 24,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 22,
+    },
+
+    deleteButtonText: {
+        marginLeft: 6,
+        fontFamily: Fonts.bodyBold,
+        fontSize: 15,
+        fontWeight: '900',
+        color: Colors.highlight3,
     },
 
     modalBackdrop: {

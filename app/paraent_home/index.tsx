@@ -18,8 +18,14 @@ import {
 } from 'react-native';
 import {
     TodayScheduleSummary,
+    deleteSchedule,
+    getInviteRequests,
+    getNotifications,
     getParentHome,
+    getSchedule,
+    getSchedules,
     getTodaySchedules,
+    updateSchedule,
 } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
@@ -28,6 +34,7 @@ import { RepeatDate, parseRepeatDates } from '../../constants/Recurrence';
 
 type ScheduleItem = {
     id: number;
+    scheduleId?: string;
     text: string;
     done: boolean;
     companion: string;
@@ -49,6 +56,7 @@ type ActiveTab = 'today' | 'calendar';
 
 type CalendarEvent = {
     id: number;
+    scheduleId?: string;
     year: number;
     month: number;
     day: number;
@@ -127,6 +135,7 @@ const mapTodaySchedule = (schedule: TodayScheduleSummary): ScheduleItem => {
 
     return {
         id,
+        scheduleId: schedule.schedule_id,
         text: schedule.title,
         done: schedule.status === 'done',
         companion: '동행인 미정',
@@ -142,6 +151,7 @@ const mapCalendarEvent = (schedule: TodayScheduleSummary): CalendarEvent | null 
 
     return {
         id,
+        scheduleId: schedule.schedule_id,
         year,
         month,
         day,
@@ -188,6 +198,7 @@ export default function ParentHome() {
     }, [calendarMonth, calendarYear]);
     const scrollViewRef = useRef<ScrollView>(null);
     const [activeTab, setActiveTab] = useState<ActiveTab>('today');
+    const [childId, setChildId] = useState('');
     const [childName, setChildName] = useState('김월동');
     const [childProfileImage, setChildProfileImage] = useState('');
     const [childProfileSections, setChildProfileSections] = useState('');
@@ -251,6 +262,36 @@ export default function ParentHome() {
     useFocusEffect(
         useCallback(() => {
             setHasUnreadNotifications(hasUnreadParentNotifications());
+
+            let active = true;
+
+            const loadUnreadNotifications = async () => {
+                try {
+                    const [notificationsResponse, requestsResponse] = await Promise.all([
+                        getNotifications(),
+                        getInviteRequests(),
+                    ]);
+
+                    if (!active) return;
+
+                    const hasUnreadApiNotifications = notificationsResponse.data?.some((notification) => (
+                        !notification.is_read
+                    )) ?? false;
+                    const hasPendingRequests = (requestsResponse.data?.length ?? 0) > 0;
+
+                    setHasUnreadNotifications(hasUnreadApiNotifications || hasPendingRequests);
+                } catch {
+                    if (active) {
+                        setHasUnreadNotifications(hasUnreadParentNotifications());
+                    }
+                }
+            };
+
+            loadUnreadNotifications();
+
+            return () => {
+                active = false;
+            };
         }, [])
     );
 
@@ -259,14 +300,18 @@ export default function ParentHome() {
 
         const loadParentHome = async () => {
             try {
-                const [homeResponse, todaySchedulesResponse] = await Promise.all([
+                const [homeResponse, todaySchedulesResponse, schedulesResponse] = await Promise.all([
                     getParentHome(),
                     getTodaySchedules(),
+                    getSchedules(),
                 ]);
 
                 if (cancelled) return;
 
                 const firstChild = homeResponse.data?.children?.[0];
+                if (firstChild?.child_id) {
+                    setChildId(firstChild.child_id);
+                }
                 if (firstChild?.name) {
                     setChildName(firstChild.name);
                 }
@@ -276,7 +321,8 @@ export default function ParentHome() {
                     : homeResponse.data?.today_schedules ?? [];
 
                 setSchedules(apiSchedules.map(mapTodaySchedule));
-                setCalendarEvents(apiSchedules.map(mapCalendarEvent).filter((event): event is CalendarEvent => (
+                const allSchedules = schedulesResponse.data ?? apiSchedules;
+                setCalendarEvents(allSchedules.map(mapCalendarEvent).filter((event): event is CalendarEvent => (
                     event !== null
                 )));
             } catch {
@@ -364,6 +410,7 @@ export default function ParentHome() {
         const eventTitle = params.addedEventTitle;
         const eventCompanion = params.addedEventCompanion;
         const eventId = Number(params.addedEventId);
+        const fallbackEventId = params.addedEventId ? toNumericId(params.addedEventId) : Date.now();
         let parsedTodos: ScheduleTodo[] = [];
 
         try {
@@ -388,7 +435,8 @@ export default function ParentHome() {
         };
         const eventDates = parseRepeatDates(params.addedEventDates);
         const nextEvents = (eventDates.length > 0 ? eventDates : [fallbackDate]).map((date, index) => ({
-            id: eventId + index,
+            id: (Number.isNaN(eventId) ? fallbackEventId : eventId) + index,
+            scheduleId: params.addedEventId,
             year: date.year,
             month: date.month,
             day: date.day,
@@ -457,6 +505,15 @@ export default function ParentHome() {
     };
 
     const toggleSchedule = (id: number) => {
+        const target = schedules.find((item) => item.id === id);
+        if (target?.scheduleId) {
+            void updateSchedule(target.scheduleId, {
+                status: target.done ? 'upcoming' : 'done',
+            }).catch(() => {
+                // 로컬 목데이터 일정은 기존 화면 상태만 갱신합니다.
+            });
+        }
+
         setSchedules((current) => current.map((item) => (
             item.id === id ? { ...item, done: !item.done } : item
         )));
@@ -481,6 +538,22 @@ export default function ParentHome() {
         Keyboard.dismiss();
     };
 
+    const loadScheduleChecklist = async (scheduleId: string, baseId: number) => {
+        try {
+            const response = await getSchedule(scheduleId);
+            const checklist = response.data?.checklist ?? [];
+            if (checklist.length === 0) return;
+
+            setEditTodos(checklist.map((todo, index) => ({
+                id: toNumericId(todo.item_id || `${scheduleId}-${index}`) || baseId + index + 1,
+                text: todo.content,
+                done: todo.is_checked,
+            })));
+        } catch {
+            // 상세 조회가 실패해도 요약 화면에서 만든 Todo는 그대로 보여줍니다.
+        }
+    };
+
     const openScheduleEditor = (item: ScheduleItem) => {
         cancelAddInputs();
         setEditTarget({ type: 'schedule', item });
@@ -488,6 +561,9 @@ export default function ParentHome() {
         setEditCompanion(item.companion);
         setEditTodos(item.todos);
         setEditTodoText('');
+        if (item.scheduleId) {
+            void loadScheduleChecklist(item.scheduleId, item.id);
+        }
     };
 
     const addHandoff = () => {
@@ -516,6 +592,9 @@ export default function ParentHome() {
         setEditCompanion(item.companion);
         setEditTodos(item.todos);
         setEditTodoText('');
+        if (item.scheduleId) {
+            void loadScheduleChecklist(item.scheduleId, item.id);
+        }
     };
 
     const closeEditor = () => {
@@ -548,9 +627,23 @@ export default function ParentHome() {
         setEditTodoText('');
     };
 
-    const saveEdit = () => {
+    const saveEdit = async () => {
         const trimmedText = editText.trim();
         if (!trimmedText || !editTarget) return;
+
+        if (
+            (editTarget.type === 'schedule' || editTarget.type === 'calendar') &&
+            editTarget.item.scheduleId
+        ) {
+            try {
+                await updateSchedule(editTarget.item.scheduleId, {
+                    title: trimmedText,
+                    checklist: editTodos.map((todo) => todo.text),
+                });
+            } catch {
+                // 로컬 목데이터 일정은 기존 화면 상태만 갱신합니다.
+            }
+        }
 
         if (editTarget.type === 'schedule') {
             setSchedules((current) => current.map((item) => (
@@ -583,8 +676,19 @@ export default function ParentHome() {
         closeEditor();
     };
 
-    const deleteEdit = () => {
+    const deleteEdit = async () => {
         if (!editTarget) return;
+
+        if (
+            (editTarget.type === 'schedule' || editTarget.type === 'calendar') &&
+            editTarget.item.scheduleId
+        ) {
+            try {
+                await deleteSchedule(editTarget.item.scheduleId);
+            } catch {
+                // 로컬 목데이터 일정은 기존 화면 상태만 갱신합니다.
+            }
+        }
 
         if (editTarget.type === 'schedule') {
             setSchedules((current) => current.filter((item) => item.id !== editTarget.item.id));
@@ -632,7 +736,15 @@ export default function ParentHome() {
                         </Pressable>
                         <Pressable
                             style={styles.iconButton}
-                            onPress={() => router.push('/paraent_home/companions' as any)}
+                            onPress={() =>
+                                router.push({
+                                    pathname: '/paraent_home/companions',
+                                    params: {
+                                        childId,
+                                        childName,
+                                    },
+                                } as any)
+                            }
                         >
                             <Ionicons name="person-add-outline" size={23} color={Colors.text} />
                         </Pressable>
@@ -914,6 +1026,7 @@ export default function ParentHome() {
                                 router.push({
                                     pathname: '/paraent_home/calendar_add',
                                     params: {
+                                        childId,
                                         year: String(calendarYear),
                                         month: String(calendarMonth),
                                         day: String(selectedCalendarDay),

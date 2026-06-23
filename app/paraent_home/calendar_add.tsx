@@ -17,6 +17,7 @@ import {
 import BackButton from '../../components/BackButton';
 import PrimaryButton from '../../components/PrimaryButton';
 import RepeatSelector from '../../components/RepeatSelector';
+import { ApiError, createSchedule, getParentHome } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 import {
@@ -52,6 +53,7 @@ const companions = [
         description: '치료 일정과 아이 반응 메모를 함께 확인해요.',
     },
 ];
+const transportTypes = ['버스', '지하철', '택시', '도보', '자가용'];
 const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
 
 type CalendarDay = {
@@ -63,6 +65,7 @@ type SheetTarget = 'type' | 'companion' | null;
 
 export default function CalendarAdd() {
     const params = useLocalSearchParams<{
+        childId?: string;
         year?: string;
         month?: string;
         day?: string;
@@ -77,11 +80,18 @@ export default function CalendarAdd() {
     const [selectedDay, setSelectedDay] = useState(initialDay);
     const [selectedType, setSelectedType] = useState('');
     const [selectedCompanion, setSelectedCompanion] = useState('');
+    const [selectedTransport, setSelectedTransport] = useState('');
+    const [startTime, setStartTime] = useState('10:00');
     const [scheduleTitle, setScheduleTitle] = useState('');
     const [memo, setMemo] = useState('');
     const [todos, setTodos] = useState<string[]>([]);
     const [todoText, setTodoText] = useState('');
+    const [preparations, setPreparations] = useState<string[]>([]);
+    const [preparationText, setPreparationText] = useState('');
+    const [waitPossible, setWaitPossible] = useState(false);
+    const [crowdPossible, setCrowdPossible] = useState(false);
     const [error, setError] = useState('');
+    const [saving, setSaving] = useState(false);
     const [sheetTarget, setSheetTarget] = useState<SheetTarget>(null);
     const [repeatOption, setRepeatOption] = useState<RepeatOption>('none');
     const [customRepeatDates, setCustomRepeatDates] = useState<RepeatDate[]>([]);
@@ -178,18 +188,75 @@ export default function CalendarAdd() {
             badge: option.relation,
         }));
 
-    const handleSave = () => {
-        if (!selectedType || !selectedCompanion || !scheduleTitle.trim()) {
-            setError('날짜, 일정 종류, 동행인, 일정 이름을 모두 입력해주세요.');
+    const formatApiDate = (date: RepeatDate) => {
+        const month = String(date.month).padStart(2, '0');
+        const day = String(date.day).padStart(2, '0');
+
+        return `${date.year}-${month}-${day}`;
+    };
+
+    const getChildId = async () => {
+        if (params.childId) return params.childId;
+
+        const homeResponse = await getParentHome();
+        return homeResponse.data?.children?.[0]?.child_id ?? '';
+    };
+
+    const handleSave = async () => {
+        if (saving) return;
+
+        if (!selectedType || !selectedCompanion || !selectedTransport || !scheduleTitle.trim()) {
+            setError('날짜, 일정 종류, 동행인, 이동수단, 일정 이름을 모두 입력해주세요.');
+            return;
+        }
+
+        if (!/^\d{2}:\d{2}$/.test(startTime.trim())) {
+            setError('출발 시간은 10:00처럼 HH:MM 형식으로 입력해주세요.');
             return;
         }
 
         Keyboard.dismiss();
+        setSaving(true);
+
+        const scheduleIdFallback = String(Date.now());
+        let createdScheduleId = scheduleIdFallback;
+
+        try {
+            const childId = await getChildId();
+            if (!childId) {
+                throw new ApiError('아동 프로필을 먼저 등록해주세요.', 400);
+            }
+
+            const datesToCreate = repeatDates.length > 0 ? repeatDates : [selectedDate];
+
+            const responses = await Promise.all(datesToCreate.map((date) => createSchedule({
+                child_id: childId,
+                title: scheduleTitle.trim(),
+                date: formatApiDate(date),
+                start_time: startTime.trim(),
+                place_type: selectedType,
+                transport_type: selectedTransport,
+                activities: [selectedType],
+                wait_possible: waitPossible,
+                crowd_possible: crowdPossible,
+                preparations,
+                checklist: todos,
+            })));
+
+            createdScheduleId = responses[0]?.data?.schedule_id ?? scheduleIdFallback;
+        } catch (saveError) {
+            setError(saveError instanceof ApiError
+                ? saveError.message
+                : '일정을 저장하지 못했어요. 잠시 후 다시 시도해주세요.');
+            setSaving(false);
+            return;
+        }
+
         router.replace({
             pathname: '/paraent_home',
             params: {
                 tab: 'calendar',
-                addedEventId: String(Date.now()),
+                addedEventId: createdScheduleId,
                 addedEventYear: String(selectedYear),
                 addedEventMonth: String(selectedMonth),
                 addedEventDay: String(selectedDay),
@@ -211,6 +278,18 @@ export default function CalendarAdd() {
 
     const deleteTodo = (index: number) => {
         setTodos((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    };
+
+    const addPreparation = () => {
+        const trimmedText = preparationText.trim();
+        if (!trimmedText) return;
+
+        setPreparations((current) => [...current, trimmedText]);
+        setPreparationText('');
+    };
+
+    const deletePreparation = (index: number) => {
+        setPreparations((current) => current.filter((_, itemIndex) => itemIndex !== index));
     };
 
     return (
@@ -360,6 +439,49 @@ export default function CalendarAdd() {
             </View>
 
             <View style={styles.section}>
+                <Text style={styles.sectionTitle}>출발 시간</Text>
+                <TextInput
+                    style={styles.input}
+                    placeholder="ex) 10:00"
+                    placeholderTextColor={Colors.textShadow}
+                    value={startTime}
+                    onChangeText={(text) => {
+                        setStartTime(text);
+                        clearError();
+                    }}
+                    keyboardType="numbers-and-punctuation"
+                    maxLength={5}
+                />
+            </View>
+
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>이동수단</Text>
+                <View style={styles.optionGrid}>
+                    {transportTypes.map((transport) => {
+                        const selected = selectedTransport === transport;
+
+                        return (
+                            <Pressable
+                                key={transport}
+                                style={[styles.optionButton, selected && styles.optionButtonSelected]}
+                                onPress={() => {
+                                    setSelectedTransport(transport);
+                                    clearError();
+                                }}
+                            >
+                                <Text style={[
+                                    styles.optionText,
+                                    selected && styles.optionTextSelected,
+                                ]}>
+                                    {transport}
+                                </Text>
+                            </Pressable>
+                        );
+                    })}
+                </View>
+            </View>
+
+            <View style={styles.section}>
                 <Text style={styles.sectionTitle}>메모</Text>
                 <TextInput
                     style={styles.memoInput}
@@ -370,6 +492,67 @@ export default function CalendarAdd() {
                     multiline
                     textAlignVertical="top"
                 />
+            </View>
+
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>외출 환경</Text>
+                <View style={styles.toggleRow}>
+                    <Pressable
+                        style={[styles.toggleButton, waitPossible && styles.toggleButtonSelected]}
+                        onPress={() => setWaitPossible((current) => !current)}
+                    >
+                        <Ionicons
+                            name={waitPossible ? 'checkmark-circle' : 'ellipse-outline'}
+                            size={18}
+                            color={waitPossible ? Colors.highlight1 : Colors.textShadow}
+                        />
+                        <Text style={styles.toggleText}>대기 가능성</Text>
+                    </Pressable>
+                    <Pressable
+                        style={[styles.toggleButton, crowdPossible && styles.toggleButtonSelected]}
+                        onPress={() => setCrowdPossible((current) => !current)}
+                    >
+                        <Ionicons
+                            name={crowdPossible ? 'checkmark-circle' : 'ellipse-outline'}
+                            size={18}
+                            color={crowdPossible ? Colors.highlight1 : Colors.textShadow}
+                        />
+                        <Text style={styles.toggleText}>혼잡 가능성</Text>
+                    </Pressable>
+                </View>
+            </View>
+
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>필수 준비물</Text>
+                <View style={styles.todoCard}>
+                    {preparations.map((item, index) => (
+                        <View key={`${item}-${index}`} style={styles.todoRow}>
+                            <Ionicons name="checkmark-circle" size={16} color={Colors.highlight1} />
+                            <Text style={styles.todoText}>{item}</Text>
+                            <Pressable onPress={() => deletePreparation(index)} hitSlop={8}>
+                                <Ionicons name="close" size={18} color={Colors.textShadow} />
+                            </Pressable>
+                        </View>
+                    ))}
+
+                    <View style={[
+                        styles.todoInputRow,
+                        preparations.length > 0 && styles.todoInputRowDivider,
+                    ]}>
+                        <TextInput
+                            style={styles.todoInput}
+                            placeholder="ex) 이어폰, 선글라스"
+                            placeholderTextColor={Colors.textShadow}
+                            value={preparationText}
+                            onChangeText={setPreparationText}
+                            returnKeyType="done"
+                            onSubmitEditing={addPreparation}
+                        />
+                        <Pressable style={styles.todoAddButton} onPress={addPreparation}>
+                            <Ionicons name="add" size={18} color={Colors.text} />
+                        </Pressable>
+                    </View>
+                </View>
             </View>
 
             <View style={styles.section}>
@@ -408,7 +591,11 @@ export default function CalendarAdd() {
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
             <View style={styles.buttonArea}>
-                <PrimaryButton label="일정 저장하기" width="100%" onPress={handleSave} />
+                <PrimaryButton
+                    label={saving ? '저장 중...' : '일정 저장하기'}
+                    width="100%"
+                    onPress={handleSave}
+                />
             </View>
 
             <Modal
@@ -745,6 +932,37 @@ const styles = StyleSheet.create({
     },
 
     optionTextSelected: {
+        color: Colors.text,
+    },
+
+    toggleRow: {
+        flexDirection: 'row',
+        gap: 10,
+    },
+
+    toggleButton: {
+        flex: 1,
+        minHeight: 48,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 10,
+        gap: 6,
+    },
+
+    toggleButtonSelected: {
+        borderColor: Colors.highlight1,
+        backgroundColor: '#FFF4CF',
+    },
+
+    toggleText: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 14,
+        fontWeight: '900',
         color: Colors.text,
     },
 

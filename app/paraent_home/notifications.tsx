@@ -1,9 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../components/BackButton';
+import {
+    InviteRequest,
+    ParentNotification,
+    getInviteRequests,
+    getNotifications,
+    markNotificationRead,
+} from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 import {
@@ -13,18 +20,21 @@ import {
 } from '../../constants/NotificationState';
 
 type NotificationItem = {
-    id: number;
+    id: string;
     title: string;
     message: string;
     time: string;
-    type: 'companion_request' | 'schedule' | 'handoff';
+    type: 'companion_request' | 'schedule' | 'handoff' | 'emergency' | string;
     unread: boolean;
     companionName?: string;
+    childId?: string;
+    notificationId?: string;
+    requestId?: string;
 };
 
 const notifications: NotificationItem[] = [
     {
-        id: 1,
+        id: 'mock-companion-request',
         title: '동행인 승인 요청',
         message: '박민지님이 김월동 어린이의 동행인 권한을 요청했어요.',
         time: '방금 전',
@@ -33,7 +43,7 @@ const notifications: NotificationItem[] = [
         companionName: '박민지',
     },
     {
-        id: 2,
+        id: 'mock-schedule',
         title: '오늘 일정 확인',
         message: '병원 일정이 아직 남아 있어요.',
         time: '20분 전',
@@ -41,7 +51,7 @@ const notifications: NotificationItem[] = [
         unread: false,
     },
     {
-        id: 3,
+        id: 'mock-handoff',
         title: '주의사항',
         message: '아이에게 전달할 자료를 다시 확인해주세요.',
         time: '1시간 전',
@@ -50,40 +60,160 @@ const notifications: NotificationItem[] = [
     },
 ];
 
+const formatTime = (value: string) => {
+    const created = new Date(value).getTime();
+    if (Number.isNaN(created)) return '방금 전';
+
+    const diffMinutes = Math.max(0, Math.floor((Date.now() - created) / 60000));
+    if (diffMinutes < 1) return '방금 전';
+    if (diffMinutes < 60) return `${diffMinutes}분 전`;
+
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) return `${diffHours}시간 전`;
+
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}일 전`;
+};
+
+const getNotificationTitle = (type: string) => {
+    if (type === 'companion_request') return '동행인 승인 요청';
+    if (type === 'emergency') return '돌발상황 알림';
+    if (type === 'request_approved') return '승인 완료';
+    if (type === 'request_rejected') return '승인 거절';
+
+    return '알림';
+};
+
+const mapNotification = (notification: ParentNotification): NotificationItem => ({
+    id: notification.notification_id,
+    notificationId: notification.notification_id,
+    title: getNotificationTitle(notification.type),
+    message: notification.message,
+    time: formatTime(notification.created_at),
+    type: notification.type,
+    unread: !notification.is_read,
+    companionName: notification.sender_name,
+    childId: notification.child_id,
+});
+
+const mapInviteRequest = (request: InviteRequest): NotificationItem => ({
+    id: `request-${request.request_id}`,
+    requestId: request.request_id,
+    title: '동행인 승인 요청',
+    message: `${request.companion_name}님이 아동 연결을 요청했어요.`,
+    time: formatTime(request.created_at),
+    type: 'companion_request',
+    unread: true,
+    companionName: request.companion_name,
+    childId: request.child_id,
+});
+
 export default function Notifications() {
-    const [refreshKey, setRefreshKey] = useState(0);
+    const [visibleNotifications, setVisibleNotifications] = useState<NotificationItem[]>(notifications);
+    const [isLoading, setIsLoading] = useState(false);
+    const [loadError, setLoadError] = useState('');
 
     useFocusEffect(
         useCallback(() => {
             markParentNotificationsRead();
-            setRefreshKey((current) => current + 1);
+
+            let active = true;
+
+            const loadNotifications = async () => {
+                setIsLoading(true);
+                setLoadError('');
+
+                try {
+                    const [notificationResponse, requestResponse] = await Promise.all([
+                        getNotifications(),
+                        getInviteRequests(),
+                    ]);
+
+                    if (!active) return;
+
+                    const apiNotifications = notificationResponse.data ?? [];
+                    const apiRequests = requestResponse.data ?? [];
+                    const requestMap = new Map(apiRequests.map((request) => [
+                        `${request.companion_name}-${request.child_id}`,
+                        request,
+                    ]));
+                    const requestKeys = new Set(apiNotifications.map((notification) => (
+                        `${notification.sender_name}-${notification.child_id}`
+                    )));
+                    const requestNotifications = apiRequests
+                        .filter((request) => !requestKeys.has(`${request.companion_name}-${request.child_id}`))
+                        .map(mapInviteRequest);
+                    const nextNotifications = [
+                        ...requestNotifications,
+                        ...apiNotifications.map((notification) => {
+                            const item = mapNotification(notification);
+                            const matchedRequest = requestMap.get(`${notification.sender_name}-${notification.child_id}`);
+
+                            return matchedRequest && notification.type === 'companion_request'
+                                ? { ...item, requestId: matchedRequest.request_id }
+                                : item;
+                        }),
+                    ];
+
+                    setVisibleNotifications(nextNotifications);
+
+                    const unreadIds = apiNotifications
+                        .filter((notification) => !notification.is_read)
+                        .map((notification) => notification.notification_id);
+
+                    await Promise.allSettled(unreadIds.map(markNotificationRead));
+                } catch (error) {
+                    if (!active) return;
+
+                    const companionRequest = getCompanionRequestNotification();
+                    const currentNotifications = notifications.map((notification) => (
+                        notification.type === 'companion_request'
+                            ? {
+                                ...notification,
+                                message: `${companionRequest.companionName}님이 ${companionRequest.childName} 어린이의 동행인 권한을 요청했어요.`,
+                                companionName: companionRequest.companionName,
+                            }
+                            : notification
+                    )).filter((notification) => {
+                        if (notification.type !== 'companion_request') return true;
+
+                        return !isCompanionRequestNotificationApproved(notification.companionName ?? '');
+                    });
+
+                    setVisibleNotifications(currentNotifications);
+                    setLoadError(error instanceof Error ? error.message : '알림을 불러오지 못했어요.');
+                } finally {
+                    if (active) setIsLoading(false);
+                }
+            };
+
+            loadNotifications();
+
+            return () => {
+                active = false;
+            };
         }, [])
     );
 
-    const visibleNotifications = useMemo(() => {
-        const companionRequest = getCompanionRequestNotification();
-        const currentNotifications = notifications.map((notification) => (
-            notification.type === 'companion_request'
-                ? {
-                    ...notification,
-                    message: `${companionRequest.companionName}님이 ${companionRequest.childName} 어린이의 동행인 권한을 요청했어요.`,
-                    companionName: companionRequest.companionName,
-                }
-                : notification
-        ));
-
-        return currentNotifications.filter((notification) => {
-            if (notification.type !== 'companion_request') {
-                return true;
+    const openNotification = async (notification: NotificationItem) => {
+        if (notification.notificationId) {
+            try {
+                await markNotificationRead(notification.notificationId);
+            } catch {
+                // 이미 읽음 처리되었거나 목 서버 상태여도 화면 이동은 유지합니다.
             }
+        }
 
-            return !isCompanionRequestNotificationApproved(notification.companionName ?? '');
-        });
-    }, [refreshKey]);
-
-    const openNotification = (notification: NotificationItem) => {
         if (notification.type === 'companion_request') {
-            router.push('/paraent_home/notification_request' as any);
+            router.push({
+                pathname: '/paraent_home/notification_request',
+                params: {
+                    requestId: notification.requestId ?? '',
+                    notificationId: notification.notificationId ?? '',
+                    companionName: notification.companionName ?? '',
+                    childId: notification.childId ?? '',
+                },
+            } as any);
         }
     };
 
@@ -111,6 +241,12 @@ export default function Notifications() {
             </View>
 
             <View style={styles.listArea}>
+                {isLoading ? (
+                    <Text style={styles.statusText}>알림을 불러오는 중이에요.</Text>
+                ) : null}
+                {loadError ? (
+                    <Text style={styles.statusText}>목데이터로 알림을 보여주고 있어요.</Text>
+                ) : null}
                 {visibleNotifications.map((notification) => (
                     <Pressable
                         key={notification.id}
@@ -215,6 +351,14 @@ const styles = StyleSheet.create({
     listArea: {
         width: '100%',
         gap: 12,
+    },
+
+    statusText: {
+        fontFamily: Fonts.body,
+        fontSize: 13,
+        lineHeight: 19,
+        color: Colors.textShadow,
+        marginBottom: 2,
     },
 
     notificationCard: {

@@ -86,10 +86,98 @@ export type TodayScheduleSummary = {
     child_id: string;
 };
 
+export type SchedulePayload = {
+    child_id: string;
+    companion_id?: string;
+    title: string;
+    date: string;
+    start_time: string;
+    place_type: string;
+    transport_type: string;
+    activities?: string[];
+    wait_possible?: boolean;
+    crowd_possible?: boolean;
+    preparations?: string[];
+    checklist?: string[];
+};
+
+export type ScheduleCreateResponse = {
+    schedule_id: string;
+    title: string;
+    created_at: string;
+};
+
+export type ScheduleChecklistItem = {
+    item_id: string;
+    content: string;
+    is_checked: boolean;
+};
+
+export type ScheduleDetail = {
+    schedule_id: string;
+    title: string;
+    date: string;
+    start_time: string;
+    place_type: string;
+    transport_type: string;
+    activities: string[];
+    wait_possible: boolean;
+    crowd_possible: boolean;
+    status: 'upcoming' | 'ongoing' | 'done' | string;
+    child_id: string;
+    companion_id?: string | null;
+    preparations: string[];
+    checklist: ScheduleChecklistItem[];
+    child_traits?: {
+        caution_situations?: string[];
+        required_actions?: string;
+        calming_methods?: string[];
+        avoid_behaviors?: string;
+        difficult_environments?: string[];
+        notice_time?: string;
+    };
+    journal?: Record<string, unknown> | null;
+    created_at: string;
+    updated_at: string;
+};
+
+export type ScheduleUpdatePayload = Partial<SchedulePayload> & {
+    status?: 'upcoming' | 'ongoing' | 'done' | string;
+};
+
 export type ParentHomeResponse = {
     guardian: AuthUser;
     children: ParentHomeChild[];
     today_schedules: TodayScheduleSummary[];
+};
+
+export type ParentNotification = {
+    notification_id: string;
+    type: 'companion_request' | 'request_approved' | 'request_rejected' | 'emergency' | string;
+    message: string;
+    sender_name: string;
+    child_id: string;
+    is_read: boolean;
+    created_at: string;
+};
+
+export type InviteRequest = {
+    request_id: string;
+    companion_name: string;
+    child_id: string;
+    created_at: string;
+};
+
+export type InviteCodeResponse = {
+    code: string;
+    expires_at: string;
+};
+
+export type LinkedCompanion = {
+    request_id: string;
+    companion_id: string;
+    companion_name: string;
+    created_at: string;
 };
 
 const blobToDataUri = (blob: Blob) => (
@@ -327,6 +415,71 @@ export const getParentHome = () => (
 
 export const getTodaySchedules = () => (
     apiRequest<TodayScheduleSummary[]>('/api/schedules/today')
+);
+
+export const getSchedules = () => (
+    apiRequest<TodayScheduleSummary[]>('/api/schedules')
+);
+
+export const createSchedule = (body: SchedulePayload) => (
+    apiRequest<ScheduleCreateResponse>('/api/schedules', {
+        method: 'POST',
+        body: JSON.stringify(body),
+    })
+);
+
+export const getSchedule = (scheduleId: string) => (
+    apiRequest<ScheduleDetail>(`/api/schedules/${encodeURIComponent(scheduleId)}`)
+);
+
+export const updateSchedule = (scheduleId: string, body: ScheduleUpdatePayload) => (
+    apiRequest<null>(`/api/schedules/${encodeURIComponent(scheduleId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+    })
+);
+
+export const deleteSchedule = (scheduleId: string) => (
+    apiRequest<null>(`/api/schedules/${encodeURIComponent(scheduleId)}`, {
+        method: 'DELETE',
+    })
+);
+
+export const getNotifications = () => (
+    apiRequest<ParentNotification[]>('/api/notifications')
+);
+
+export const markNotificationRead = (notificationId: string) => (
+    apiRequest<null>(`/api/notifications/${notificationId}/read`, {
+        method: 'PATCH',
+    })
+);
+
+export const getInviteRequests = () => (
+    apiRequest<InviteRequest[]>('/api/invite/requests')
+);
+
+export const approveInviteRequest = (requestId: string, approve: boolean) => (
+    apiRequest<null>(`/api/invite/approve?request_id=${encodeURIComponent(requestId)}&approve=${approve}`, {
+        method: 'POST',
+    })
+);
+
+export const generateInviteCode = (childId: string) => (
+    apiRequest<InviteCodeResponse>(`/api/invite/generate?child_id=${encodeURIComponent(childId)}`, {
+        method: 'POST',
+    })
+);
+
+export const getLinkedCompanions = (childId: string) => (
+    apiRequest<LinkedCompanion[]>(`/api/invite/companions/${encodeURIComponent(childId)}`)
+);
+
+export const deleteLinkedCompanion = (childId: string, companionId: string) => (
+    apiRequest<null>(
+        `/api/invite/companions/${encodeURIComponent(childId)}/${encodeURIComponent(companionId)}`,
+        { method: 'DELETE' }
+    )
 );
 
 export const generateCharacterImage = async (traits: string) => {

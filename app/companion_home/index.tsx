@@ -461,6 +461,7 @@ export default function CompanionChildren() {
         router.push({
             pathname: '/companion_home/child_home',
             params: {
+                childId: child.childId ?? child.id,
                 childName: child.name,
                 guardian: child.guardian,
             },

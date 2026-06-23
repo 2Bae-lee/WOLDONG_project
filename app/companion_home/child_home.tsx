@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../components/BackButton';
+import { ChildNotification, getChildNotifications, markNotificationRead } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import {
     CompanionTodaySchedule,
@@ -85,8 +86,42 @@ const handoffs = [
     '선택지를 두 개 정도로 짧게 제시해주세요.',
 ];
 
+const formatTime = (value: string) => {
+    const created = new Date(value).getTime();
+    if (Number.isNaN(created)) return '방금 전';
+
+    const diffMinutes = Math.max(0, Math.floor((Date.now() - created) / 60000));
+    if (diffMinutes < 1) return '방금 전';
+    if (diffMinutes < 60) return `${diffMinutes}분 전`;
+
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) return `${diffHours}시간 전`;
+
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}일 전`;
+};
+
+const getNotificationTitle = (type: string) => {
+    if (type === 'request_approved') return '승인 완료';
+    if (type === 'request_rejected') return '승인 거절';
+    if (type === 'emergency') return '돌발상황 알림';
+    if (type === 'schedule') return '공유 일정';
+
+    return '알림';
+};
+
+const getNotificationIcon = (type: string) => {
+    if (type === 'request_approved') return 'checkmark-circle-outline';
+    if (type === 'request_rejected') return 'close-circle-outline';
+    if (type === 'emergency') return 'alert-circle-outline';
+    if (type === 'schedule') return 'calendar-outline';
+
+    return 'notifications-outline';
+};
+
 export default function CompanionChildHome() {
     const params = useLocalSearchParams<{
+        childId?: string;
         childName?: string;
         guardian?: string;
         tab?: string;
@@ -99,6 +134,7 @@ export default function CompanionChildHome() {
         addedEventTodos?: string;
         addedEventDates?: string;
     }>();
+    const childId = params.childId || '';
     const childName = params.childName || '김월동';
     const guardian = params.guardian || '김보호자';
     const today = useMemo(() => new Date(), []);
@@ -115,6 +151,8 @@ export default function CompanionChildHome() {
     const [todayEvents, setTodayEvents] = useState<CompanionTodaySchedule[]>(() => (
         getCompanionTodaySchedulesForChild(childName)
     ));
+    const [childNotifications, setChildNotifications] = useState<ChildNotification[]>([]);
+    const [notificationError, setNotificationError] = useState('');
     const calendarDays = useMemo(() => {
         const firstDay = new Date(calendarYear, calendarMonth - 1, 1).getDay();
         const daysInMonth = new Date(calendarYear, calendarMonth, 0).getDate();
@@ -148,9 +186,42 @@ export default function CompanionChildHome() {
             const unsubscribe = subscribeCompanionTodaySchedules(() => {
                 setTodayEvents(getCompanionTodaySchedulesForChild(childName));
             });
+            let active = true;
 
-            return unsubscribe;
-        }, [childName])
+            const loadChildNotifications = async () => {
+                if (!childId) {
+                    setChildNotifications([]);
+                    return;
+                }
+
+                setNotificationError('');
+
+                try {
+                    const response = await getChildNotifications(childId);
+                    if (!active) return;
+
+                    const notifications = response.data ?? [];
+                    setChildNotifications(notifications);
+
+                    const unreadIds = notifications
+                        .filter((notification) => !notification.is_read)
+                        .map((notification) => notification.notification_id);
+
+                    await Promise.allSettled(unreadIds.map(markNotificationRead));
+                } catch (error) {
+                    if (!active) return;
+                    setChildNotifications([]);
+                    setNotificationError(error instanceof Error ? error.message : '알림을 불러오지 못했어요.');
+                }
+            };
+
+            loadChildNotifications();
+
+            return () => {
+                active = false;
+                unsubscribe();
+            };
+        }, [childId, childName])
     );
 
     const toggleTodayTodo = (scheduleId: number, todoId: number) => {
@@ -298,6 +369,49 @@ export default function CompanionChildHome() {
                 <View style={styles.childSummary}>
                     <Text style={styles.childName}>{childName}</Text>
                     <Text style={styles.summaryText}>{guardian} 보호자가 공유한 일정이에요.</Text>
+                </View>
+
+                <View style={styles.notificationSection}>
+                    <View style={styles.notificationSectionHeader}>
+                        <Text style={styles.notificationSectionTitle}>푸시알림 확인</Text>
+                        <Ionicons name="notifications-outline" size={19} color={Colors.textShadow} />
+                    </View>
+                    {notificationError ? (
+                        <Text style={styles.notificationStatusText}>{notificationError}</Text>
+                    ) : null}
+                    {childNotifications.length > 0 ? (
+                        <View style={styles.notificationList}>
+                            {childNotifications.slice(0, 3).map((notification) => (
+                                <View key={notification.notification_id} style={styles.notificationCard}>
+                                    <View style={[
+                                        styles.notificationIconCircle,
+                                        !notification.is_read && styles.notificationIconCircleUnread,
+                                    ]}>
+                                        <Ionicons
+                                            name={getNotificationIcon(notification.type) as any}
+                                            size={18}
+                                            color={Colors.text}
+                                        />
+                                    </View>
+                                    <View style={styles.notificationTextArea}>
+                                        <View style={styles.notificationTitleRow}>
+                                            <Text style={styles.notificationTitle}>
+                                                {getNotificationTitle(notification.type)}
+                                            </Text>
+                                            <Text style={styles.notificationTime}>
+                                                {formatTime(notification.created_at)}
+                                            </Text>
+                                        </View>
+                                        <Text style={styles.notificationMessage}>{notification.message}</Text>
+                                    </View>
+                                </View>
+                            ))}
+                        </View>
+                    ) : (
+                        <View style={styles.notificationEmptyCard}>
+                            <Text style={styles.notificationEmptyText}>확인할 알림이 없어요.</Text>
+                        </View>
+                    )}
                 </View>
 
                 {activeTab === 'today' ? (
@@ -610,6 +724,112 @@ const styles = StyleSheet.create({
     summaryText: {
         fontFamily: Fonts.body,
         fontSize: 15,
+        color: Colors.textShadow,
+    },
+
+    notificationSection: {
+        marginBottom: 28,
+    },
+
+    notificationSectionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 12,
+    },
+
+    notificationSectionTitle: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 18,
+        fontWeight: '900',
+        color: Colors.text,
+    },
+
+    notificationStatusText: {
+        marginBottom: 10,
+        fontFamily: Fonts.body,
+        fontSize: 13,
+        color: Colors.highlight3,
+    },
+
+    notificationList: {
+        gap: 10,
+    },
+
+    notificationCard: {
+        minHeight: 76,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+    },
+
+    notificationIconCircle: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#FFF8DF',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 10,
+    },
+
+    notificationIconCircleUnread: {
+        borderColor: Colors.highlight1,
+        backgroundColor: Colors.pageBg2,
+    },
+
+    notificationTextArea: {
+        flex: 1,
+    },
+
+    notificationTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 10,
+        marginBottom: 5,
+    },
+
+    notificationTitle: {
+        flex: 1,
+        fontFamily: Fonts.bodyBold,
+        fontSize: 14,
+        fontWeight: '900',
+        color: Colors.text,
+    },
+
+    notificationTime: {
+        fontFamily: Fonts.body,
+        fontSize: 11,
+        color: Colors.textShadow,
+    },
+
+    notificationMessage: {
+        fontFamily: Fonts.body,
+        fontSize: 13,
+        lineHeight: 18,
+        color: Colors.text,
+    },
+
+    notificationEmptyCard: {
+        minHeight: 58,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    notificationEmptyText: {
+        fontFamily: Fonts.body,
+        fontSize: 13,
         color: Colors.textShadow,
     },
 

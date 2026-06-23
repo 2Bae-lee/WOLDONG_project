@@ -227,6 +227,8 @@ export type ParentNotification = {
     created_at: string;
 };
 
+export type ChildNotification = Omit<ParentNotification, 'child_id'>;
+
 export type InviteRequest = {
     request_id: string;
     companion_name: string;
@@ -624,6 +626,10 @@ export const deleteSchedule = (scheduleId: string) => (
 
 export const getNotifications = () => (
     apiRequest<ParentNotification[]>('/api/notifications')
+);
+
+export const getChildNotifications = (childId: string) => (
+    apiRequest<ChildNotification[]>(`/api/notifications/child/${encodeURIComponent(childId)}`)
 );
 
 export const markNotificationRead = (notificationId: string) => (

@@ -42,6 +42,7 @@ class ChildCreateRequest(BaseModel):
     # 7단계
     calming_methods: list[str] = []
     avoid_behaviors: str = ""
+    profile_image_url: Optional[str] = None
     # 소셜 스토리 캐릭터 음성 설정
     character_name: str = ""
     character_tone: Optional[CharacterToneEnum] = None
@@ -86,6 +87,7 @@ class ChildUpdateRequest(BaseModel):
     notice_time: Optional[str] = None
     calming_methods: Optional[list[str]] = None
     avoid_behaviors: Optional[str] = None
+    profile_image_url: Optional[str] = None
     character_image_url: Optional[dict] = None
     character_name: Optional[str] = None
     character_tone: Optional[CharacterToneEnum] = None
@@ -143,6 +145,7 @@ async def create_child(body: ChildCreateRequest, user: User = Depends(parent_onl
         notice_time=body.notice_time,
         calming_methods=body.calming_methods,
         avoid_behaviors=body.avoid_behaviors,
+        profile_image_url=body.profile_image_url,
         character_name=body.character_name,
         character_tone=body.character_tone,
         character_speed=body.character_speed,
@@ -168,6 +171,7 @@ async def get_my_children(user: User = Depends(parent_only)):
             "gender": c.gender,
             "birth_date": c.birth_date,
             "disability_type": c.disability_type,
+            "profile_image_url": c.profile_image_url,
             "character_image_url": c.character_image_url,
             "character_name": c.character_name,
             "character_tone": c.character_tone,
@@ -209,6 +213,7 @@ async def get_child(child_id: str, user: User = Depends(parent_only)):
         "notice_time": child.notice_time,
         "calming_methods": child.calming_methods,
         "avoid_behaviors": child.avoid_behaviors,
+        "profile_image_url": child.profile_image_url,
         "character_image_url": child.character_image_url,
         "character_name": child.character_name,
         "character_tone": child.character_tone,

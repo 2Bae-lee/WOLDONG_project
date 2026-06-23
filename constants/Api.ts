@@ -80,6 +80,7 @@ export type ChildProfilePayload = {
     notice_time?: string;
     calming_methods?: string[];
     avoid_behaviors?: string;
+    profile_image_url?: string;
     character_name?: string;
     character_tone?: CharacterTone;
     character_speed?: CharacterSpeed;
@@ -100,6 +101,7 @@ export type ParentHomeChild = {
     gender: string;
     birth_date: string;
     disability_type: string;
+    profile_image_url?: string | null;
     character_name?: string;
     character_tone?: CharacterTone | null;
     character_speed?: CharacterSpeed | null;

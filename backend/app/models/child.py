@@ -158,6 +158,7 @@ class Child(Document):
     avoid_behaviors: str = ""
 
     # 캐릭터 설정
+    profile_image_url: Optional[str] = None
     character_image_url: Optional[dict] = None
     character_name: str = ""
     character_tone: Optional[CharacterToneEnum] = CharacterToneEnum.kind

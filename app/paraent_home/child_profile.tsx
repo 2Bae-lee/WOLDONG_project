@@ -364,15 +364,29 @@ export default function ParentChildProfile() {
             }
 
             await updateChildProfile(nextChildId, payload);
+            const savedResponse = await getChildProfile(nextChildId);
+            const savedDetail = savedResponse.data;
+
+            if (!savedDetail) {
+                throw new Error('저장된 아동 프로필을 다시 확인하지 못했어요.');
+            }
+
+            const savedSections = sectionsFromDetail(savedDetail);
+            const savedProfileImage = savedDetail.character_image_url?.idle ?? profileImage ?? '';
+
             setResolvedChildId(nextChildId);
+            setChildName(savedDetail.name);
+            setSections(savedSections);
+            setCharacterImages(savedDetail.character_image_url ?? null);
+            setProfileImage(savedProfileImage || null);
 
             router.replace({
                 pathname: '/paraent_home',
                 params: {
                     updatedChildId: nextChildId,
-                    updatedChildName: childName,
-                    updatedProfileImage: profileImage ?? '',
-                    updatedProfileSections: JSON.stringify(sections.map((section) => ({
+                    updatedChildName: savedDetail.name,
+                    updatedProfileImage: savedProfileImage,
+                    updatedProfileSections: JSON.stringify(savedSections.map((section) => ({
                         id: section.id,
                         items: section.items,
                     }))),

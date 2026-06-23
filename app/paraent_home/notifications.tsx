@@ -23,6 +23,9 @@ type NotificationItem = {
     type: 'companion_request' | 'schedule' | 'handoff' | 'emergency' | string;
     unread: boolean;
     companionName?: string;
+    companionPhone?: string | null;
+    companionIntro?: string | null;
+    companionProfileImage?: string | null;
     childId?: string;
     notificationId?: string;
     requestId?: string;
@@ -58,6 +61,9 @@ const mapInviteRequest = (request: InviteRequest): NotificationItem => ({
     type: 'companion_request',
     unread: true,
     companionName: request.companion_name,
+    companionPhone: request.companion_phone,
+    companionIntro: request.companion_intro,
+    companionProfileImage: request.companion_profile_image_url,
     childId: request.child_id,
 });
 
@@ -101,7 +107,13 @@ export default function Notifications() {
                             const matchedRequest = requestMap.get(`${notification.sender_name}-${notification.child_id}`);
 
                             return matchedRequest && notification.type === 'companion_request'
-                                ? { ...item, requestId: matchedRequest.request_id }
+                                ? {
+                                    ...item,
+                                    requestId: matchedRequest.request_id,
+                                    companionPhone: matchedRequest.companion_phone,
+                                    companionIntro: matchedRequest.companion_intro,
+                                    companionProfileImage: matchedRequest.companion_profile_image_url,
+                                }
                                 : item;
                         }),
                     ];
@@ -147,6 +159,9 @@ export default function Notifications() {
                     requestId: notification.requestId ?? '',
                     notificationId: notification.notificationId ?? '',
                     companionName: notification.companionName ?? '',
+                    companionPhone: notification.companionPhone ?? '',
+                    companionIntro: notification.companionIntro ?? '',
+                    companionProfileImage: notification.companionProfileImage ?? '',
                     childId: notification.childId ?? '',
                 },
             } as any);

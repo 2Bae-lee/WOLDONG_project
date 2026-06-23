@@ -233,16 +233,17 @@ async def update_child(child_id: str, body: ChildUpdateRequest, user: User = Dep
     if child.guardian_id != str(user.id):
         return error("접근 권한이 없습니다", 403)
 
-    update_data = body.model_dump(exclude_none=True)
+    update_data = body.model_dump(exclude_none=True, mode="json")
     err = validate_fields(update_data)
     if err:
         return err
 
-    if "birth_date" in update_data:
-        update_data["birth_date"] = update_data["birth_date"].isoformat()
     update_data["updated_at"] = datetime.utcnow()
 
-    await child.set(update_data)
+    for key, value in update_data.items():
+        setattr(child, key, value)
+
+    await child.save()
     return success(None, "아동 프로필이 수정되었습니다")
 
 

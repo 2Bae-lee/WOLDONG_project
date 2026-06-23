@@ -329,7 +329,13 @@ export type ChildNotification = Omit<ParentNotification, 'child_id'>;
 
 export type InviteRequest = {
     request_id: string;
+    companion_id?: string;
     companion_name: string;
+    companion_phone?: string | null;
+    companion_intro?: string | null;
+    companion_relation?: string | null;
+    companion_job?: string | null;
+    companion_profile_image_url?: string | null;
     child_id: string;
     relation?: string | null;
     permissions?: string[];

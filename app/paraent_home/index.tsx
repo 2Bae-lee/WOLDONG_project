@@ -21,6 +21,7 @@ import {
     CharacterImages,
     TodayScheduleSummary,
     deleteSchedule,
+    getChildProfile,
     getInviteRequests,
     getNotifications,
     getParentHome,
@@ -260,54 +261,89 @@ export default function ParentHome() {
         }, [])
     );
 
-    useEffect(() => {
-        let cancelled = false;
+    useFocusEffect(
+        useCallback(() => {
+            let cancelled = false;
 
-        const loadParentHome = async () => {
-            try {
-                const [homeResponse, todaySchedulesResponse, schedulesResponse] = await Promise.all([
-                    getParentHome(),
-                    getTodaySchedules(),
-                    getSchedules(),
-                ]);
+            const loadParentHome = async () => {
+                try {
+                    const [homeResult, todaySchedulesResult, schedulesResult] = await Promise.allSettled([
+                        getParentHome(),
+                        getTodaySchedules(),
+                        getSchedules(),
+                    ]);
 
-                if (cancelled) return;
+                    if (cancelled) return;
 
-                const firstChild = homeResponse.data?.children?.[0];
-                if (firstChild?.child_id) {
-                    setChildId(firstChild.child_id);
+                    if (homeResult.status === 'rejected') throw homeResult.reason;
+
+                    const homeResponse = homeResult.value;
+                    const allSchedules = schedulesResult.status === 'fulfilled'
+                        ? schedulesResult.value.data ?? []
+                        : [];
+                    const todayDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(todayDay).padStart(2, '0')}`;
+                    const apiSchedules = todaySchedulesResult.status === 'fulfilled'
+                        ? todaySchedulesResult.value.data ?? []
+                        : allSchedules.filter((schedule) => schedule.date === todayDate);
+                    const firstChild = homeResponse.data?.children?.[0];
+
+                    if (firstChild?.child_id) {
+                        setChildId(firstChild.child_id);
+                    }
+                    if (firstChild?.name) {
+                        setChildName(firstChild.name);
+                    }
+                    if (firstChild?.child_id) {
+                        let characterImages = firstChild.character_image_url ?? null;
+
+                        try {
+                            const childProfileResult = await getChildProfile(firstChild.child_id);
+                            characterImages = childProfileResult.data?.character_image_url ?? characterImages;
+                        } catch {
+                            // 홈 표시용 사진만 상세 API로 보강하므로 실패해도 홈 로딩은 유지합니다.
+                        }
+
+                        if (cancelled) return;
+
+                        setChildCharacterImages(characterImages);
+                        setChildProfileImage(characterImages?.idle ?? '');
+                    } else if (firstChild && 'character_image_url' in firstChild) {
+                        setChildCharacterImages(firstChild.character_image_url ?? null);
+                        setChildProfileImage(firstChild.character_image_url?.idle ?? '');
+                    }
+
+                    const todaySchedules = apiSchedules.length
+                        ? apiSchedules
+                        : homeResponse.data?.today_schedules ?? [];
+
+                    const calendarSchedules = schedulesResult.status === 'fulfilled'
+                        ? allSchedules
+                        : todaySchedules;
+                    const nextCalendarEvents = calendarSchedules.map(mapCalendarEvent).filter((event): event is CalendarEvent => (
+                        event !== null
+                    ));
+
+                    setSchedules(todaySchedules.map(mapTodaySchedule));
+                    setCalendarEvents((current) => (
+                        schedulesResult.status === 'rejected' && nextCalendarEvents.length === 0
+                            ? current
+                            : nextCalendarEvents
+                    ));
+                } catch {
+                    if (cancelled) return;
+                    setSchedules([]);
+                    setCalendarEvents([]);
+                    setHandoffs([]);
                 }
-                if (firstChild?.name) {
-                    setChildName(firstChild.name);
-                }
-                setChildCharacterImages(firstChild?.character_image_url ?? null);
-                if (firstChild?.character_image_url?.idle) {
-                    setChildProfileImage(firstChild.character_image_url.idle);
-                }
+            };
 
-                const apiSchedules = todaySchedulesResponse.data?.length
-                    ? todaySchedulesResponse.data
-                    : homeResponse.data?.today_schedules ?? [];
+            loadParentHome();
 
-                setSchedules(apiSchedules.map(mapTodaySchedule));
-                const allSchedules = schedulesResponse.data ?? apiSchedules;
-                setCalendarEvents(allSchedules.map(mapCalendarEvent).filter((event): event is CalendarEvent => (
-                    event !== null
-                )));
-            } catch {
-                if (cancelled) return;
-                setSchedules([]);
-                setCalendarEvents([]);
-                setHandoffs([]);
-            }
-        };
-
-        loadParentHome();
-
-        return () => {
-            cancelled = true;
-        };
-    }, []);
+            return () => {
+                cancelled = true;
+            };
+        }, [currentMonth, currentYear, todayDay])
+    );
 
     useEffect(() => {
         if (params.tab === 'calendar') {
@@ -336,6 +372,9 @@ export default function ParentHome() {
 
         if (addedScheduleId && addedScheduleTitle && addedScheduleCompanion) {
             const scheduleId = Number(addedScheduleId);
+            const scheduleNumericId = Number.isNaN(scheduleId)
+                ? toNumericId(addedScheduleId)
+                : scheduleId;
             let parsedTodos: ScheduleTodo[] = [];
 
             try {
@@ -344,7 +383,7 @@ export default function ParentHome() {
                     ? parsed
                         .filter((item) => typeof item === 'string' && item.trim())
                         .map((item, index) => ({
-                            id: scheduleId + index + 1,
+                            id: scheduleNumericId + index + 1,
                             text: item.trim(),
                             done: false,
                         }))
@@ -353,15 +392,16 @@ export default function ParentHome() {
                 parsedTodos = [];
             }
 
-            if (!Number.isNaN(scheduleId)) {
+            if (!Number.isNaN(scheduleNumericId)) {
                 setActiveTab('today');
                 setSchedules((current) => (
-                    current.some((schedule) => schedule.id === scheduleId)
+                    current.some((schedule) => schedule.id === scheduleNumericId)
                         ? current
                         : [
                             ...current,
                             {
-                                id: scheduleId,
+                                id: scheduleNumericId,
+                                scheduleId: addedScheduleId,
                                 text: addedScheduleTitle,
                                 done: false,
                                 companion: addedScheduleCompanion,
@@ -387,6 +427,7 @@ export default function ParentHome() {
         const eventCompanion = params.addedEventCompanion;
         const eventId = Number(params.addedEventId);
         const fallbackEventId = params.addedEventId ? toNumericId(params.addedEventId) : Date.now();
+        const eventNumericId = Number.isNaN(eventId) ? fallbackEventId : eventId;
         let parsedTodos: ScheduleTodo[] = [];
 
         try {
@@ -395,7 +436,7 @@ export default function ParentHome() {
                 ? parsed
                     .filter((item) => typeof item === 'string' && item.trim())
                     .map((item, index) => ({
-                        id: eventId + index + 1,
+                        id: eventNumericId + index + 1,
                         text: item.trim(),
                         done: false,
                     }))
@@ -411,7 +452,7 @@ export default function ParentHome() {
         };
         const eventDates = parseRepeatDates(params.addedEventDates);
         const nextEvents = (eventDates.length > 0 ? eventDates : [fallbackDate]).map((date, index) => ({
-            id: (Number.isNaN(eventId) ? fallbackEventId : eventId) + index,
+            id: eventNumericId + index,
             scheduleId: params.addedEventId,
             year: date.year,
             month: date.month,

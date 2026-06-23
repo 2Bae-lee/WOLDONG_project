@@ -31,6 +31,7 @@ async def get_home(user: User = Depends(parent_only)):
                 "character_tone": c.character_tone,
                 "character_speed": c.character_speed,
                 "character_voice": c.character_voice,
+                "character_image_url": c.character_image_url,
             }
             for c in children
         ],

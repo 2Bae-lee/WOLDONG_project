@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../components/BackButton';
 import PrimaryButton from '../../components/PrimaryButton';
-import { approveInviteRequest, markNotificationRead } from '../../constants/Api';
+import { approveInviteRequest, getInviteRequests, markNotificationRead } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 
@@ -21,9 +21,15 @@ export default function NotificationRequest() {
         requestId?: string;
         notificationId?: string;
         companionName?: string;
+        companionPhone?: string;
+        companionIntro?: string;
+        companionProfileImage?: string;
         childId?: string;
     }>();
-    const companionName = params.companionName || '동행인';
+    const [companionName, setCompanionName] = useState(params.companionName || '동행인');
+    const [companionPhone, setCompanionPhone] = useState(params.companionPhone || '');
+    const [companionIntro, setCompanionIntro] = useState(params.companionIntro || '');
+    const [companionProfileImage, setCompanionProfileImage] = useState(params.companionProfileImage || '');
     const [selectedRelation, setSelectedRelation] = useState('담임 선생님');
     const [selectedPermissions, setSelectedPermissions] = useState([
         '아이 프로필',
@@ -32,6 +38,34 @@ export default function NotificationRequest() {
     ]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errorText, setErrorText] = useState('');
+
+    useEffect(() => {
+        if (!params.requestId) return;
+        if (companionPhone || companionIntro || companionProfileImage) return;
+
+        let active = true;
+
+        const loadRequestDetail = async () => {
+            try {
+                const response = await getInviteRequests();
+                const request = response.data?.find((item) => item.request_id === params.requestId);
+                if (!active || !request) return;
+
+                setCompanionName(request.companion_name || '동행인');
+                setCompanionPhone(request.companion_phone ?? '');
+                setCompanionIntro(request.companion_intro ?? '');
+                setCompanionProfileImage(request.companion_profile_image_url ?? '');
+            } catch {
+                if (active) setErrorText('동행인 요청 정보를 불러오지 못했어요.');
+            }
+        };
+
+        loadRequestDetail();
+
+        return () => {
+            active = false;
+        };
+    }, [companionIntro, companionPhone, companionProfileImage, params.requestId]);
 
     const togglePermission = (permission: string) => {
         setSelectedPermissions((current) => (
@@ -126,11 +160,29 @@ export default function NotificationRequest() {
 
                 <View style={styles.profileCard}>
                     <Image
-                        source={require('../../assets/images/icon_companion.png')}
-                        style={styles.profileImage}
-                        resizeMode="contain"
+                        source={
+                            companionProfileImage
+                                ? { uri: companionProfileImage }
+                                : require('../../assets/images/icon_companion.png')
+                        }
+                        style={companionProfileImage ? styles.profileImageFilled : styles.profileImage}
+                        resizeMode={companionProfileImage ? 'cover' : 'contain'}
                     />
                     <Text style={styles.name}>{companionName}</Text>
+                    <View style={styles.profileInfoList}>
+                        <View style={styles.profileInfoRow}>
+                            <Ionicons name="call-outline" size={16} color={Colors.textShadow} />
+                            <Text style={styles.profileInfoText}>
+                                {companionPhone || '전화번호가 등록되지 않았어요.'}
+                            </Text>
+                        </View>
+                        <View style={styles.profileInfoRow}>
+                            <Ionicons name="chatbubble-ellipses-outline" size={16} color={Colors.textShadow} />
+                            <Text style={styles.profileInfoText}>
+                                {companionIntro || '자기소개가 등록되지 않았어요.'}
+                            </Text>
+                        </View>
+                    </View>
                 </View>
 
                 <View style={styles.section}>
@@ -282,12 +334,39 @@ const styles = StyleSheet.create({
         marginBottom: 14,
     },
 
+    profileImageFilled: {
+        width: 82,
+        height: 82,
+        borderRadius: 41,
+        marginBottom: 14,
+    },
+
     name: {
         fontFamily: Fonts.bodyBold,
         fontSize: 20,
         fontWeight: '900',
         color: Colors.text,
         marginBottom: 6,
+    },
+
+    profileInfoList: {
+        width: '100%',
+        gap: 8,
+        marginTop: 10,
+    },
+
+    profileInfoRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 8,
+    },
+
+    profileInfoText: {
+        flex: 1,
+        fontFamily: Fonts.body,
+        fontSize: 14,
+        lineHeight: 21,
+        color: Colors.textShadow,
     },
 
     section: {

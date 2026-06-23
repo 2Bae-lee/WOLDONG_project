@@ -1,3 +1,4 @@
+from typing import Optional
 from beanie import Document
 from pydantic import Field
 from datetime import datetime
@@ -59,7 +60,6 @@ DIFFICULT_ENVIRONMENTS = {
     "신체 접촉",
     "갑작스러운 움직임",
     "대기",
-    "밝은 빛",
 }
 
 # 5단계 - 힘들어하는 장소
@@ -140,6 +140,12 @@ class Child(Document):
     # 7단계
     calming_methods: list[str] = []
     avoid_behaviors: str = ""
+
+    # 캐릭터 설정
+    character_image_url: Optional[dict] = None
+    character_tone: Optional[str] = "kind"
+    character_speed: Optional[str] = "normal"
+    character_voice: Optional[str] = "female"
 
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

@@ -81,6 +81,60 @@ class JournalCreateRequest(BaseModel):
     memo: Optional[str] = None
 
 
+def build_schedule_warnings(schedule: Schedule, child: Child) -> list[str]:
+    warnings: list[str] = []
+
+    risk_score = 0
+    if schedule.wait_possible:
+        risk_score += 1
+    if schedule.crowd_possible:
+        risk_score += 1
+    if schedule.place_type in child.difficult_places:
+        risk_score += 1
+    if schedule.transport_type in child.difficult_places:
+        risk_score += 1
+    if child.caution_situations:
+        risk_score += 1
+
+    if risk_score >= 3:
+        warnings.append("오늘 일정의 전체 주의 수준은 높을 수 있습니다.")
+    else:
+        warnings.append("오늘 일정에 맞춰 아이가 편안하게 이동할 수 있도록 미리 안내해주세요.")
+
+    difficult_environment_text = " ".join(child.difficult_environments)
+    if schedule.crowd_possible or "사람 많은 곳" in child.difficult_environments:
+        warnings.append("사람이 많은 환경에서는 이동 경로와 쉴 수 있는 장소를 미리 확인해주세요.")
+    if "큰 소리" in child.difficult_environments:
+        warnings.append("큰 소리가 날 수 있는 환경에서는 미리 알려주고 안정할 수 있도록 도와주세요.")
+    if schedule.wait_possible or "대기" in child.difficult_environments or "기다리기" in child.transition_difficulties:
+        warnings.append("아이가 기다리는 상황을 어려워할 수 있으니 대기 시간을 미리 알려주세요.")
+    if schedule.place_type in child.difficult_places:
+        warnings.append(f"{schedule.place_type} 장소를 어려워할 수 있으니 도착 전 짧게 설명해주세요.")
+    if schedule.transport_type in child.difficult_places:
+        warnings.append(f"{schedule.transport_type} 이동을 어려워할 수 있으니 탑승 전 과정을 차분히 알려주세요.")
+    if any(keyword in " ".join(child.caution_situations) for keyword in ["차도", "차량", "횡단보도", "신호등"]):
+        warnings.append("차도나 횡단보도 근처에서는 손을 잡고 규칙을 짧게 반복해서 알려주세요.")
+    if any(keyword in " ".join(child.caution_situations) for keyword in ["뛰어", "떨어지"]):
+        warnings.append("갑자기 뛰거나 떨어질 수 있으니 이동 중 가까운 거리에서 함께해주세요.")
+    if child.required_actions:
+        warnings.append(f"필수 행동: {child.required_actions}")
+    if child.calming_methods:
+        warnings.append(f"진정이 필요할 때는 {child.calming_methods[0]}을 먼저 시도해주세요.")
+    if child.avoid_behaviors:
+        warnings.append(f"피해야 할 행동: {child.avoid_behaviors}")
+    if child.notice_time:
+        warnings.append(f"일정 변화나 이동은 {child.notice_time}에 미리 알려주세요.")
+    if not difficult_environment_text and not child.difficult_places and not child.caution_situations:
+        warnings.append("일정 전후로 아이의 표정과 몸짓 변화를 천천히 관찰해주세요.")
+
+    deduped: list[str] = []
+    for warning in warnings:
+        if warning and warning not in deduped:
+            deduped.append(warning)
+
+    return deduped[:5]
+
+
 # ─── 라우트 ────────────────────────────────────────────
 
 # POST /api/schedules - 일정 등록 (부모/동행인 공통)
@@ -197,6 +251,34 @@ async def get_today_schedules(user: User = Depends(get_current_user)):
         }
         for s in schedules
     ])
+
+
+# GET /api/schedules/{schedule_id}/warnings - 일정/장소 맞춤형 아동 특이사항 핵심 카드 조회
+@router.get("/{schedule_id}/warnings")
+async def get_schedule_warnings(schedule_id: str, user: User = Depends(companion_only)):
+    try:
+        oid = PydanticObjectId(schedule_id)
+    except Exception:
+        return error("유효하지 않은 schedule_id입니다", 400)
+
+    schedule = await Schedule.get(oid)
+    if not schedule:
+        return error("일정을 찾을 수 없습니다", 404)
+    if schedule.companion_id != str(user.id):
+        return error("접근 권한이 없습니다", 403)
+
+    try:
+        child_oid = PydanticObjectId(schedule.child_id)
+    except Exception:
+        return error("아동 프로필을 찾을 수 없습니다", 404)
+
+    child = await Child.get(child_oid)
+    if not child:
+        return error("아동 프로필을 찾을 수 없습니다", 404)
+
+    return success({
+        "warnings": build_schedule_warnings(schedule, child)
+    })
 
 
 # GET /api/schedules/{schedule_id} - 일정 상세 조회

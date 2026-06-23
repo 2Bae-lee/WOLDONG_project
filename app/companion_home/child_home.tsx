@@ -4,7 +4,12 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../components/BackButton';
-import { ChildNotification, getChildNotifications, markNotificationRead } from '../../constants/Api';
+import {
+    ChildNotification,
+    getChildNotifications,
+    getScheduleWarnings,
+    markNotificationRead,
+} from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import {
     CompanionTodaySchedule,
@@ -122,6 +127,7 @@ const getNotificationIcon = (type: string) => {
 export default function CompanionChildHome() {
     const params = useLocalSearchParams<{
         childId?: string;
+        scheduleId?: string;
         childName?: string;
         guardian?: string;
         tab?: string;
@@ -135,6 +141,7 @@ export default function CompanionChildHome() {
         addedEventDates?: string;
     }>();
     const childId = params.childId || '';
+    const scheduleId = params.scheduleId || '';
     const childName = params.childName || '김월동';
     const guardian = params.guardian || '김보호자';
     const today = useMemo(() => new Date(), []);
@@ -153,6 +160,8 @@ export default function CompanionChildHome() {
     ));
     const [childNotifications, setChildNotifications] = useState<ChildNotification[]>([]);
     const [notificationError, setNotificationError] = useState('');
+    const [scheduleWarnings, setScheduleWarnings] = useState<string[]>([]);
+    const [warningsError, setWarningsError] = useState('');
     const calendarDays = useMemo(() => {
         const firstDay = new Date(calendarYear, calendarMonth - 1, 1).getDay();
         const daysInMonth = new Date(calendarYear, calendarMonth, 0).getDate();
@@ -172,13 +181,14 @@ export default function CompanionChildHome() {
     const storyScript = storySource
         ? `오늘은 ${storySource.title} 일정이 있어요.`
         : `${childName}의 외출 이야기를 준비해요.`;
+    const visibleHandoffs = scheduleWarnings.length > 0 ? scheduleWarnings : handoffs;
     const storyCheckedItems = storySource
         ? [
             `일정_${storySource.title}`,
             ...storySource.todos.map((todo) => `체크_${todo.text}`),
-            ...handoffs.map((handoff) => `아동_주의_${handoff}`),
+            ...visibleHandoffs.map((handoff) => `아동_주의_${handoff}`),
         ]
-        : handoffs.map((handoff) => `아동_주의_${handoff}`);
+        : visibleHandoffs.map((handoff) => `아동_주의_${handoff}`);
 
     useFocusEffect(
         useCallback(() => {
@@ -215,13 +225,36 @@ export default function CompanionChildHome() {
                 }
             };
 
+            const loadScheduleWarnings = async () => {
+                if (!scheduleId) {
+                    setScheduleWarnings([]);
+                    setWarningsError('');
+                    return;
+                }
+
+                setWarningsError('');
+
+                try {
+                    const response = await getScheduleWarnings(scheduleId);
+                    if (!active) return;
+
+                    setScheduleWarnings(response.data?.warnings ?? []);
+                } catch (error) {
+                    if (!active) return;
+
+                    setScheduleWarnings([]);
+                    setWarningsError(error instanceof Error ? error.message : '주의사항을 불러오지 못했어요.');
+                }
+            };
+
             loadChildNotifications();
+            loadScheduleWarnings();
 
             return () => {
                 active = false;
                 unsubscribe();
             };
-        }, [childId, childName])
+        }, [childId, childName, scheduleId])
     );
 
     const toggleTodayTodo = (scheduleId: number, todoId: number) => {
@@ -479,8 +512,11 @@ export default function CompanionChildHome() {
 
                         <View style={styles.section}>
                             <Text style={styles.sectionTitle}>아이 주의사항</Text>
+                            {warningsError ? (
+                                <Text style={styles.warningStatusText}>{warningsError}</Text>
+                            ) : null}
                             <View style={styles.handoffCard}>
-                                {handoffs.map((handoff) => (
+                                {visibleHandoffs.map((handoff) => (
                                     <View key={handoff} style={styles.handoffRow}>
                                         <Ionicons name="checkmark" size={18} color={Colors.highlight1} />
                                         <Text style={styles.handoffText}>{handoff}</Text>
@@ -616,6 +652,7 @@ export default function CompanionChildHome() {
                                 childName,
                                 title: storySource?.title ?? '',
                                 script: storyScript,
+                                scheduleId,
                                 checkedItems: JSON.stringify(storyCheckedItems),
                             },
                         } as any)
@@ -947,6 +984,14 @@ const styles = StyleSheet.create({
         backgroundColor: '#F7F4E8',
         padding: 14,
         gap: 12,
+    },
+
+    warningStatusText: {
+        marginTop: -8,
+        marginBottom: 12,
+        fontFamily: Fonts.body,
+        fontSize: 13,
+        color: Colors.highlight3,
     },
 
     handoffRow: {

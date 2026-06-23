@@ -172,6 +172,10 @@ export type ScheduleDetail = {
     updated_at: string;
 };
 
+export type ScheduleWarningsResponse = {
+    warnings: string[];
+};
+
 export type ScheduleUpdatePayload = Partial<SchedulePayload> & {
     status?: 'upcoming' | 'ongoing' | 'done' | string;
 };
@@ -609,6 +613,10 @@ export const createSchedule = (body: SchedulePayload) => (
 
 export const getSchedule = (scheduleId: string) => (
     apiRequest<ScheduleDetail>(`/api/schedules/${encodeURIComponent(scheduleId)}`)
+);
+
+export const getScheduleWarnings = (scheduleId: string) => (
+    apiRequest<ScheduleWarningsResponse>(`/api/schedules/${encodeURIComponent(scheduleId)}/warnings`)
 );
 
 export const updateSchedule = (scheduleId: string, body: ScheduleUpdatePayload) => (

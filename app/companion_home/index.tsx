@@ -34,6 +34,7 @@ type ActiveTab = 'today' | 'calendar';
 type ChildItem = {
     id: string;
     childId?: string;
+    primaryScheduleId?: string;
     name: string;
     guardian: string;
     schedules: number;
@@ -82,6 +83,7 @@ const mapTodaySchedules = (
 
         return {
             id: scheduleId,
+            scheduleId: schedule.schedule_id,
             childName: child?.name ?? '담당 어린이',
             title: schedule.title,
             guardian: '연결된 보호자',
@@ -205,18 +207,23 @@ export default function CompanionChildren() {
             const assignedChildren = childrenResponse.data ?? [];
             const todaySchedules = todaySchedulesResponse.data ?? [];
             const scheduleCountByChildId = new Map<string, number>();
+            const primaryScheduleByChildId = new Map<string, string>();
 
             todaySchedules.forEach((schedule) => {
                 scheduleCountByChildId.set(
                     schedule.child_id,
                     (scheduleCountByChildId.get(schedule.child_id) ?? 0) + 1
                 );
+                if (!primaryScheduleByChildId.has(schedule.child_id)) {
+                    primaryScheduleByChildId.set(schedule.child_id, schedule.schedule_id);
+                }
             });
 
             const childById = new Map(assignedChildren.map((child) => [child.child_id, child]));
             const nextConnectedChildren: ChildItem[] = assignedChildren.map((child) => ({
                 id: child.child_id,
                 childId: child.child_id,
+                primaryScheduleId: primaryScheduleByChildId.get(child.child_id),
                 name: child.name,
                 guardian: '연결된 보호자',
                 schedules: scheduleCountByChildId.get(child.child_id) ?? 0,
@@ -462,6 +469,7 @@ export default function CompanionChildren() {
             pathname: '/companion_home/child_home',
             params: {
                 childId: child.childId ?? child.id,
+                scheduleId: child.primaryScheduleId ?? '',
                 childName: child.name,
                 guardian: child.guardian,
             },

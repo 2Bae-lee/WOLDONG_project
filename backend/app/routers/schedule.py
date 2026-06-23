@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, date
+from zoneinfo import ZoneInfo
 from beanie import PydanticObjectId
 import uuid
 import httpx
@@ -10,7 +11,7 @@ from app.models.user import User
 from app.models.child import Child
 from app.models.invite import CompanionRequest, RequestStatus
 from app.models.schedule import Schedule, ScheduleStatus, ChecklistItem
-from app.middleware.auth import parent_only, companion_only, get_current_user
+from app.middleware.auth import companion_only, get_current_user
 from app.utils.response import success, error
 from app.routers.ai import AI_SERVER_URL
 
@@ -19,6 +20,22 @@ router = APIRouter(prefix="/api/schedules", tags=["외출 일정"])
 
 
 # ─── 요청 스키마 ────────────────────────────────────────
+def can_access_schedule(schedule: Schedule, user: User) -> bool:
+    return (
+        (user.role == "parent" and schedule.guardian_id == str(user.id))
+        or (user.role == "companion" and schedule.companion_id == str(user.id))
+    )
+
+
+async def is_approved_companion(child_id: str, companion_id: str) -> bool:
+    companion_check = await CompanionRequest.find_one(
+        CompanionRequest.companion_id == companion_id,
+        CompanionRequest.child_id == child_id,
+        CompanionRequest.status == RequestStatus.approved
+    )
+    return companion_check is not None
+
+
 class ScheduleCreateRequest(BaseModel):
     child_id: str
     companion_id: Optional[str] = None
@@ -152,18 +169,16 @@ async def create_schedule(body: ScheduleCreateRequest, user: User = Depends(get_
     companion_id = body.companion_id
     if user.role == "parent":
         if child.guardian_id != str(user.id):
-            return error("접근 권한이 없습니다", 403)
+            return error("?? ??? ????", 403)
+        if companion_id and not await is_approved_companion(body.child_id, companion_id):
+            return error("?? ??? ?? ??? ???? ????", 403)
     elif user.role == "companion":
-        approved_request = await CompanionRequest.find_one(
-            CompanionRequest.companion_id == str(user.id),
-            CompanionRequest.child_id == body.child_id,
-            CompanionRequest.status == RequestStatus.approved
-        )
-        if not approved_request:
-            return error("접근 권한이 없습니다", 403)
+        if not await is_approved_companion(body.child_id, str(user.id)):
+            return error("?? ??? ????", 403)
         companion_id = str(user.id)
     else:
-        return error("접근 권한이 없습니다", 403)
+        return error("?? ??? ????", 403)
+
 
     checklist_items = [
         ChecklistItem(item_id=str(uuid.uuid4()), content=c)
@@ -226,7 +241,7 @@ async def get_schedules(user: User = Depends(get_current_user)):
 # GET /api/schedules/today - 오늘 일정 조회 (부모/동행인 공통)
 @router.get("/today")
 async def get_today_schedules(user: User = Depends(get_current_user)):
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = datetime.now(ZoneInfo("Asia/Seoul")).date().isoformat()
 
     if user.role == "parent":
         schedules = await Schedule.find(
@@ -348,7 +363,7 @@ async def get_schedule(schedule_id: str, user: User = Depends(get_current_user))
 
 # PATCH /api/schedules/{schedule_id} - 일정 수정 (부모 전용)
 @router.patch("/{schedule_id}")
-async def update_schedule(schedule_id: str, body: ScheduleUpdateRequest, user: User = Depends(parent_only)):
+async def update_schedule(schedule_id: str, body: ScheduleUpdateRequest, user: User = Depends(get_current_user)):
     try:
         oid = PydanticObjectId(schedule_id)
     except Exception:
@@ -357,10 +372,14 @@ async def update_schedule(schedule_id: str, body: ScheduleUpdateRequest, user: U
     schedule = await Schedule.get(oid)
     if not schedule:
         return error("일정을 찾을 수 없습니다", 404)
-    if schedule.guardian_id != str(user.id):
+    if not can_access_schedule(schedule, user):
         return error("접근 권한이 없습니다", 403)
 
     update_data = body.model_dump(exclude_none=True)
+
+    if "companion_id" in update_data and update_data["companion_id"]:
+        if not await is_approved_companion(schedule.child_id, update_data["companion_id"]):
+            return error("해당 아동에 대해 승인된 동행인이 아닙니다", 403)
     if "date" in update_data:
         update_data["date"] = update_data["date"].isoformat()
     if "checklist" in update_data:
@@ -376,7 +395,7 @@ async def update_schedule(schedule_id: str, body: ScheduleUpdateRequest, user: U
 
 # DELETE /api/schedules/{schedule_id} - 일정 삭제 (부모 전용)
 @router.delete("/{schedule_id}")
-async def delete_schedule(schedule_id: str, user: User = Depends(parent_only)):
+async def delete_schedule(schedule_id: str, user: User = Depends(get_current_user)):
     try:
         oid = PydanticObjectId(schedule_id)
     except Exception:
@@ -385,7 +404,7 @@ async def delete_schedule(schedule_id: str, user: User = Depends(parent_only)):
     schedule = await Schedule.get(oid)
     if not schedule:
         return error("일정을 찾을 수 없습니다", 404)
-    if schedule.guardian_id != str(user.id):
+    if not can_access_schedule(schedule, user):
         return error("접근 권한이 없습니다", 403)
 
     await schedule.delete()

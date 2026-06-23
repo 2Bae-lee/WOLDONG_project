@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends
-from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import Optional
 import httpx
@@ -127,9 +126,9 @@ async def social_story_tts(body: SocialStoryTTSRequest, user: User = Depends(get
 async def get_social_story(
     schedule_id: str,
     script: str,
-    tone: str = "kind",
-    speed: str = "normal",
-    voice: str = "female",
+    tone: Optional[str] = None,
+    speed: Optional[str] = None,
+    voice: Optional[str] = None,
     user: User = Depends(get_current_user)
 ):
     from beanie import PydanticObjectId
@@ -150,13 +149,18 @@ async def get_social_story(
     if user.role == "companion" and schedule.companion_id != str(user.id):
         return error("접근 권한이 없습니다", 403)
 
-    # 아동 특성 가져오기
-    child = None
+    # 아동 특성 + 캐릭터 설정 가져오기
     try:
         child_oid = PydanticObjectId(schedule.child_id)
         child = await Child.get(child_oid)
     except Exception:
-        pass
+        return error("유효하지 않은 child_id입니다", 400)
+    if not child:
+        return error("아동 프로필을 찾을 수 없습니다", 404)
+
+    final_tone = tone or child.character_tone or "kind"
+    final_speed = speed or child.character_speed or "normal"
+    final_voice = voice or child.character_voice or "female"
 
     # checked_items 만들기
     checked_items = []
@@ -241,9 +245,9 @@ async def get_social_story(
                 f"{AI_SERVER_URL}/social-story/tts",
                 json={
                     "script": script,
-                    "tone": tone,
-                    "speed": speed,
-                    "voice": voice,
+                    "tone": final_tone,
+                    "speed": final_speed,
+                    "voice": final_voice,
                     "checked_items": checked_items,
                     "threshold": 0.5
                 },

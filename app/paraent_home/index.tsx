@@ -258,6 +258,7 @@ export default function ParentHome() {
         event.month === calendarMonth &&
         event.day === selectedCalendarDay
     ));
+    const selectedStoryEvent = selectedCalendarEvents[0];
 
     useFocusEffect(
         useCallback(() => {
@@ -1020,6 +1021,30 @@ export default function ParentHome() {
                             )}
                         </View>
 
+                        {selectedStoryEvent ? (
+                            <Pressable
+                                style={styles.socialStoryButton}
+                                onPress={() =>
+                                    router.push({
+                                        pathname: '/social_story',
+                                        params: {
+                                            scheduleId: selectedStoryEvent.scheduleId ?? '',
+                                            childName,
+                                            title: selectedStoryEvent.title,
+                                            script: `오늘은 ${selectedStoryEvent.title} 일정이 있어요.`,
+                                            checkedItems: JSON.stringify([
+                                                `일정_${selectedStoryEvent.title}`,
+                                                ...selectedStoryEvent.todos.map((todo) => `체크_${todo.text}`),
+                                            ]),
+                                        },
+                                    } as any)
+                                }
+                            >
+                                <Ionicons name="book-outline" size={19} color={Colors.text} />
+                                <Text style={styles.socialStoryButtonText}>소셜 스토리 만들기</Text>
+                            </Pressable>
+                        ) : null}
+
                         <Pressable
                             style={styles.addButton}
                             onPress={() =>
@@ -1453,6 +1478,27 @@ const styles = StyleSheet.create({
     addButtonText: {
         fontFamily: Fonts.bodyBold,
         fontSize: 15,
+        fontWeight: '900',
+        color: Colors.text,
+    },
+
+    socialStoryButton: {
+        alignSelf: 'flex-start',
+        minHeight: 38,
+        borderRadius: 19,
+        backgroundColor: Colors.pageBg2,
+        borderWidth: 1,
+        borderColor: Colors.highlight1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 14,
+        marginBottom: 14,
+        gap: 7,
+    },
+
+    socialStoryButtonText: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 14,
         fontWeight: '900',
         color: Colors.text,
     },

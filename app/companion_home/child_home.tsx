@@ -130,6 +130,17 @@ export default function CompanionChildHome() {
         event.month === calendarMonth &&
         event.day === selectedDay
     ));
+    const storySource = activeTab === 'calendar' ? selectedEvents[0] : todayEvents[0];
+    const storyScript = storySource
+        ? `오늘은 ${storySource.title} 일정이 있어요.`
+        : `${childName}의 외출 이야기를 준비해요.`;
+    const storyCheckedItems = storySource
+        ? [
+            `일정_${storySource.title}`,
+            ...storySource.todos.map((todo) => `체크_${todo.text}`),
+            ...handoffs.map((handoff) => `아동_주의_${handoff}`),
+        ]
+        : handoffs.map((handoff) => `아동_주의_${handoff}`);
 
     useFocusEffect(
         useCallback(() => {
@@ -480,7 +491,20 @@ export default function CompanionChildHome() {
                     </View>
                 )}
 
-                <Pressable style={styles.socialStoryButton}>
+                <Pressable
+                    style={styles.socialStoryButton}
+                    onPress={() =>
+                        router.push({
+                            pathname: '/social_story',
+                            params: {
+                                childName,
+                                title: storySource?.title ?? '',
+                                script: storyScript,
+                                checkedItems: JSON.stringify(storyCheckedItems),
+                            },
+                        } as any)
+                    }
+                >
                     <Ionicons name="book-outline" size={20} color={Colors.text} />
                     <Text style={styles.socialStoryButtonText}>소셜 스토리 만들기</Text>
                 </Pressable>

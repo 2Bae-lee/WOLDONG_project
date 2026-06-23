@@ -145,6 +145,28 @@ export type ScheduleUpdatePayload = Partial<SchedulePayload> & {
     status?: 'upcoming' | 'ongoing' | 'done' | string;
 };
 
+export type SocialStoryTone = 'kind' | 'strict';
+export type SocialStorySpeed = 'slow' | 'normal' | 'fast';
+export type SocialStoryVoice = 'female' | 'male';
+
+export type SocialStoryRequest = {
+    script: string;
+    tone?: SocialStoryTone;
+    speed?: SocialStorySpeed;
+    voice?: SocialStoryVoice;
+    checked_items?: string[];
+    threshold?: number;
+};
+
+export type SocialStoryResponse = {
+    original_script: string;
+    converted_script: string;
+    audio_url?: string;
+    story_category?: string;
+    story_difficulty?: string;
+    predicted_warnings?: string[];
+};
+
 export type ParentHomeResponse = {
     guardian: AuthUser;
     children: ParentHomeChild[];
@@ -303,6 +325,58 @@ export const apiRequest = async <T>(
     }
 
     return body;
+};
+
+const apiRawJsonRequest = async <T>(
+    path: string,
+    options: RequestInit = {}
+): Promise<T> => {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+            ...options.headers,
+        },
+    });
+
+    const responseText = await response.text();
+    let body: (ApiResponse<T> | T) | null = null;
+
+    try {
+        body = responseText ? JSON.parse(responseText) as ApiResponse<T> | T : null;
+    } catch {
+        throw new ApiError('서버 응답을 확인할 수 없어요.', response.status);
+    }
+
+    if (!response.ok) {
+        const message = body && typeof body === 'object' && 'message' in body
+            ? String(body.message)
+            : '서버 요청에 실패했어요.';
+
+        throw new ApiError(message, response.status);
+    }
+
+    if (body && typeof body === 'object' && 'success' in body) {
+        if (!body.success) {
+            throw new ApiError(body.message ?? '서버 요청에 실패했어요.', response.status);
+        }
+
+        return body.data as T;
+    }
+
+    if (!body) {
+        throw new ApiError('서버 응답을 확인할 수 없어요.', response.status);
+    }
+
+    return body as T;
+};
+
+export const toApiAssetUrl = (path?: string) => {
+    if (!path) return '';
+    if (/^https?:\/\//.test(path)) return path;
+
+    return `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
 };
 
 export const sendSignupCode = (email: string) => (
@@ -481,6 +555,28 @@ export const deleteLinkedCompanion = (childId: string, companionId: string) => (
         { method: 'DELETE' }
     )
 );
+
+export const generateSocialStoryTts = (body: SocialStoryRequest) => (
+    apiRawJsonRequest<SocialStoryResponse>('/api/ai/social-story/tts', {
+        method: 'POST',
+        body: JSON.stringify(body),
+    })
+);
+
+export const generateScheduleSocialStory = (
+    scheduleId: string,
+    options: Pick<SocialStoryRequest, 'script' | 'tone' | 'speed' | 'voice'>
+) => {
+    const params = new URLSearchParams();
+    params.set('script', options.script);
+    if (options.tone) params.set('tone', options.tone);
+    if (options.speed) params.set('speed', options.speed);
+    if (options.voice) params.set('voice', options.voice);
+
+    return apiRawJsonRequest<SocialStoryResponse>(
+        `/api/ai/social-story/${encodeURIComponent(scheduleId)}?${params.toString()}`
+    );
+};
 
 export const generateCharacterImage = async (traits: string) => {
     const response = await fetch(`${API_BASE_URL}/api/ai/generate-character`, {

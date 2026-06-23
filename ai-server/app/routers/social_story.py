@@ -9,10 +9,14 @@ from app.models.social_story import SocialStoryRequest, SocialStoryResponse
 from app.services.story_style import convert_tone
 from app.services.tts_service import synthesize_speech
 
-router = APIRouter()
+router = APIRouter(tags=["소셜스토리"])
 
 
-@router.post("/social-story/tts", response_model=SocialStoryResponse)
+@router.post(
+    "/social-story/tts",
+    response_model=SocialStoryResponse,
+    summary="소셜스토리 생성 및 음성 생성",
+)
 def generate_social_story_tts(req: SocialStoryRequest):
     if not req.script.strip():
         raise HTTPException(status_code=400, detail="script must not be empty")

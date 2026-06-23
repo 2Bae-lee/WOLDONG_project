@@ -626,6 +626,7 @@ export default function CompanionChildHome() {
                                 router.push({
                                     pathname: '/companion_home/calendar_add',
                                     params: {
+                                        childId,
                                         childName,
                                         guardian,
                                         year: String(calendarYear),

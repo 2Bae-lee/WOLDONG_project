@@ -8,10 +8,10 @@ import httpx
 
 from app.models.user import User
 from app.models.child import Child
+from app.models.invite import CompanionRequest, RequestStatus
 from app.models.schedule import Schedule, ScheduleStatus, ChecklistItem
 from app.middleware.auth import parent_only, companion_only, get_current_user
 from app.utils.response import success, error
-from app.models.invite import CompanionRequest, RequestStatus
 from app.routers.ai import AI_SERVER_URL
 
 
@@ -149,19 +149,21 @@ async def create_schedule(body: ScheduleCreateRequest, user: User = Depends(get_
     if not child:
         return error("아동 프로필을 찾을 수 없습니다", 404)
 
-    # 부모면 본인 아동인지 확인
-    if user.role == "parent" and child.guardian_id != str(user.id):
-        return error("접근 권한이 없습니다", 403)
-
-    # 동행인이면 담당 아동인지 확인
-    if user.role == "companion":
-        companion_check = await CompanionRequest.find_one(
+    companion_id = body.companion_id
+    if user.role == "parent":
+        if child.guardian_id != str(user.id):
+            return error("접근 권한이 없습니다", 403)
+    elif user.role == "companion":
+        approved_request = await CompanionRequest.find_one(
             CompanionRequest.companion_id == str(user.id),
             CompanionRequest.child_id == body.child_id,
             CompanionRequest.status == RequestStatus.approved
         )
-        if not companion_check:
-            return error("담당 아동이 아닙니다", 403)
+        if not approved_request:
+            return error("접근 권한이 없습니다", 403)
+        companion_id = str(user.id)
+    else:
+        return error("접근 권한이 없습니다", 403)
 
     checklist_items = [
         ChecklistItem(item_id=str(uuid.uuid4()), content=c)
@@ -171,7 +173,7 @@ async def create_schedule(body: ScheduleCreateRequest, user: User = Depends(get_
     schedule = Schedule(
         guardian_id=child.guardian_id,
         child_id=body.child_id,
-        companion_id=body.companion_id if user.role == "parent" else str(user.id),
+        companion_id=companion_id,
         title=body.title,
         date=body.date.isoformat(),
         start_time=body.start_time,

@@ -17,6 +17,7 @@ import {
 import BackButton from '../../components/BackButton';
 import PrimaryButton from '../../components/PrimaryButton';
 import RepeatSelector from '../../components/RepeatSelector';
+import { createSchedule } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 import {
@@ -44,6 +45,7 @@ type CalendarDay = {
 
 export default function CompanionCalendarAdd() {
     const params = useLocalSearchParams<{
+        childId?: string;
         childName?: string;
         guardian?: string;
         year?: string;
@@ -51,6 +53,7 @@ export default function CompanionCalendarAdd() {
         day?: string;
     }>();
     const today = useMemo(() => new Date(), []);
+    const childId = params.childId || '';
     const childName = params.childName || '김월동';
     const guardian = params.guardian || '김보호자';
     const initialYear = Number(params.year) || today.getFullYear();
@@ -65,6 +68,7 @@ export default function CompanionCalendarAdd() {
     const [todos, setTodos] = useState<string[]>([]);
     const [todoText, setTodoText] = useState('');
     const [error, setError] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
     const [isTypeSheetOpen, setIsTypeSheetOpen] = useState(false);
     const [repeatOption, setRepeatOption] = useState<RepeatOption>('none');
     const [customRepeatDates, setCustomRepeatDates] = useState<RepeatDate[]>([]);
@@ -148,8 +152,19 @@ export default function CompanionCalendarAdd() {
         setTodos((current) => current.filter((_, itemIndex) => itemIndex !== index));
     };
 
-    const handleSave = () => {
+    const formatDate = (date: RepeatDate) => (
+        `${date.year}-${String(date.month).padStart(2, '0')}-${String(date.day).padStart(2, '0')}`
+    );
+
+    const handleSave = async () => {
+        if (isSaving) return;
+
         const title = scheduleTitle.trim();
+
+        if (!childId) {
+            setError('담당 어린이 정보를 불러오지 못했어요.');
+            return;
+        }
 
         if (!selectedType || !title) {
             setError('날짜, 일정 종류, 일정 이름을 입력해주세요.');
@@ -162,22 +177,55 @@ export default function CompanionCalendarAdd() {
         }
 
         Keyboard.dismiss();
-        router.replace({
-            pathname: '/companion_home/child_home',
-            params: {
-                childName,
-                guardian,
-                tab: 'calendar',
-                addedEventId: String(Date.now()),
-                addedEventYear: String(selectedYear),
-                addedEventMonth: String(selectedMonth),
-                addedEventDay: String(selectedDay),
-                addedEventTitle: title,
-                addedEventGuardian: guardian,
-                addedEventTodos: JSON.stringify(todos),
-                addedEventDates: JSON.stringify(repeatDates),
-            },
-        } as any);
+        setIsSaving(true);
+        setError('');
+
+        try {
+            const responses = await Promise.all(repeatDates.map((date) => createSchedule({
+                child_id: childId,
+                title,
+                date: formatDate(date),
+                start_time: '09:00',
+                place_type: selectedType,
+                transport_type: '기타',
+                activities: memo.trim() ? [memo.trim()] : [],
+                wait_possible: false,
+                crowd_possible: false,
+                preparations: [],
+                checklist: todos,
+            })));
+            const firstResponse = responses[0];
+
+            if (!firstResponse?.data?.schedule_id) {
+                setError('일정 저장 결과를 확인하지 못했어요.');
+                return;
+            }
+
+            const firstDate = repeatDates[0] ?? selectedDate;
+
+            router.replace({
+                pathname: '/companion_home/child_home',
+                params: {
+                    childId,
+                    childName,
+                    guardian,
+                    scheduleId: firstResponse.data.schedule_id,
+                    tab: 'calendar',
+                    addedEventId: String(Date.now()),
+                    addedEventYear: String(firstDate.year),
+                    addedEventMonth: String(firstDate.month),
+                    addedEventDay: String(firstDate.day),
+                    addedEventTitle: title,
+                    addedEventGuardian: guardian,
+                    addedEventTodos: JSON.stringify(todos),
+                    addedEventDates: JSON.stringify(repeatDates),
+                },
+            } as any);
+        } catch (saveError) {
+            setError(saveError instanceof Error ? saveError.message : '일정을 저장하지 못했어요.');
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     return (
@@ -301,7 +349,7 @@ export default function CompanionCalendarAdd() {
                         </View>
                         <View style={styles.guardianTextArea}>
                             <Text style={styles.guardianName}>{guardian} 보호자</Text>
-                            <Text style={styles.guardianDescription}>저장하면 보호자 홈 캘린더에도 공유되는 목데이터 흐름이에요.</Text>
+                            <Text style={styles.guardianDescription}>저장하면 보호자 홈 캘린더에도 함께 공유돼요.</Text>
                         </View>
                     </View>
                 </View>
@@ -367,7 +415,7 @@ export default function CompanionCalendarAdd() {
                 {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
                 <View style={styles.buttonArea}>
-                    <PrimaryButton label="일정 저장하기" width="100%" onPress={handleSave} />
+                    <PrimaryButton label={isSaving ? '저장 중...' : '일정 저장하기'} width="100%" onPress={handleSave} />
                 </View>
             </ScrollView>
 

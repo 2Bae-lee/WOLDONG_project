@@ -132,17 +132,30 @@ async def get_requests(user: User = Depends(parent_only)):
         CompanionRequest.status == RequestStatus.pending
     ).to_list()
 
-    return success([
-        {
+    result = []
+    for r in requests:
+        companion = None
+        try:
+            companion = await User.get(PydanticObjectId(r.companion_id))
+        except Exception:
+            companion = None
+
+        result.append({
             "request_id": str(r.id),
-            "companion_name": r.companion_name,
+            "companion_id": r.companion_id,
+            "companion_name": companion.name if companion else r.companion_name,
+            "companion_phone": companion.phone if companion else None,
+            "companion_intro": companion.intro if companion else None,
+            "companion_relation": companion.relation if companion else None,
+            "companion_job": companion.job if companion else None,
+            "companion_profile_image_url": companion.profile_image_url if companion else None,
             "child_id": r.child_id,
             "relation": r.relation,
             "permissions": r.permissions,
             "created_at": str(r.created_at)
-        }
-        for r in requests
-    ])
+        })
+
+    return success(result)
 
 
 # POST /api/invite/approve - 승인/거절 (부모 전용)

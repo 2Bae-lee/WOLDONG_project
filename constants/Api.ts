@@ -30,6 +30,30 @@ type AuthData = {
     user: AuthUser;
 };
 
+export type ChildProfilePayload = {
+    name: string;
+    gender: '남자아이' | '여자아이';
+    birth_date: string;
+    guardian_relation: '주양육자' | '부모' | '조부모';
+    disability_type: '지적장애' | '자폐스펙트럼장애';
+    explanation_styles?: string[];
+    communication_styles?: string[];
+    caution_situations?: string[];
+    required_actions?: string;
+    difficult_environments?: string[];
+    difficult_places?: string[];
+    transition_difficulties?: string[];
+    notice_time?: string;
+    calming_methods?: string[];
+    avoid_behaviors?: string;
+};
+
+export type ChildProfileCreateResponse = {
+    child_id: string;
+    name: string;
+    created_at: string;
+};
+
 let authToken: string | null = null;
 let authUser: AuthUser | null = null;
 
@@ -224,3 +248,10 @@ export const logout = async () => {
         await clearAuthSession();
     }
 };
+
+export const createChildProfile = (body: ChildProfilePayload) => (
+    apiRequest<ChildProfileCreateResponse>('/api/children', {
+        method: 'POST',
+        body: JSON.stringify(body),
+    })
+);

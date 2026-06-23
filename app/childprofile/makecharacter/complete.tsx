@@ -10,6 +10,7 @@ export default function MakeCharacterComplete() {
         name?: string;
         profileImage?: string;
         profileSections?: string;
+        childId?: string;
         characterName?: string;
     }>();
 

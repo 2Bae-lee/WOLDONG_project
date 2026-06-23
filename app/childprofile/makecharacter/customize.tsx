@@ -89,6 +89,7 @@ export default function MakeCharacterCustomize() {
         name?: string;
         profileImage?: string;
         profileSections?: string;
+        childId?: string;
         story?: string;
     }>();
 
@@ -126,6 +127,7 @@ export default function MakeCharacterCustomize() {
                 name: childName,
                 profileImage,
                 profileSections: params.profileSections ?? '',
+                childId: params.childId ?? '',
                 characterName: trimmedName,
                 gender,
                 tone,

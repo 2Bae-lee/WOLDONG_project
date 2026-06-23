@@ -24,6 +24,7 @@ export default function MakeCharacterStory() {
         name?: string;
         profileImage?: string;
         profileSections?: string;
+        childId?: string;
     }>();
 
     const childName = params.name || '아이';
@@ -47,6 +48,7 @@ export default function MakeCharacterStory() {
                 name: childName,
                 profileImage,
                 profileSections: params.profileSections ?? '',
+                childId: params.childId ?? '',
                 story: trimmedStory,
             },
         } as any);

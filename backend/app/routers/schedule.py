@@ -19,7 +19,6 @@ from app.routers.ai import AI_SERVER_URL
 router = APIRouter(prefix="/api/schedules", tags=["외출 일정"])
 
 
-# ─── 요청 스키마 ────────────────────────────────────────
 def can_access_schedule(schedule: Schedule, user: User) -> bool:
     return (
         (user.role == "parent" and schedule.guardian_id == str(user.id))
@@ -42,12 +41,12 @@ class ScheduleCreateRequest(BaseModel):
     title: str
     date: date
     start_time: str
-    place_type: str                     # 장소 유형 (병원, 마트, 공원 등)
-    transport_type: str                 # 이동수단 (버스, 지하철, 택시 등)
-    activities: list[str] = []          # 활동 목록 (진료, 주사 등)
-    wait_possible: bool = False         # 대기 가능성
-    crowd_possible: bool = False        # 혼잡 가능성
-    schedule_features: list[str] = []   # AI 모델 입력용 일정 특성 값
+    place_type: str
+    transport_type: str
+    activities: list[str] = []
+    wait_possible: bool = False
+    crowd_possible: bool = False
+    schedule_features: list[str] = []
     preparations: list[str] = []
     checklist: list[str] = []
 
@@ -169,16 +168,15 @@ async def create_schedule(body: ScheduleCreateRequest, user: User = Depends(get_
     companion_id = body.companion_id
     if user.role == "parent":
         if child.guardian_id != str(user.id):
-            return error("?? ??? ????", 403)
+            return error("접근 권한이 없습니다", 403)
         if companion_id and not await is_approved_companion(body.child_id, companion_id):
-            return error("?? ??? ?? ??? ???? ????", 403)
+            return error("해당 아동에 승인된 동행인이 아닙니다", 403)
     elif user.role == "companion":
         if not await is_approved_companion(body.child_id, str(user.id)):
-            return error("?? ??? ????", 403)
+            return error("담당 아동이 아닙니다", 403)
         companion_id = str(user.id)
     else:
-        return error("?? ??? ????", 403)
-
+        return error("접근 권한이 없습니다", 403)
 
     checklist_items = [
         ChecklistItem(item_id=str(uuid.uuid4()), content=c)
@@ -222,20 +220,54 @@ async def get_schedules(user: User = Depends(get_current_user)):
             Schedule.companion_id == str(user.id)
         ).sort(-Schedule.date).to_list()
 
-    return success([
-        {
+    result = []
+    for s in schedules:
+        # 아동 이름 가져오기
+        child_name = None
+        try:
+            child_oid = PydanticObjectId(s.child_id)
+            child = await Child.get(child_oid)
+            if child:
+                child_name = child.name
+        except Exception:
+            pass
+
+        # 동행인 이름 가져오기
+        companion_name = None
+        if s.companion_id:
+            try:
+                req = await CompanionRequest.find_one(
+                    CompanionRequest.companion_id == s.companion_id,
+                    CompanionRequest.child_id == s.child_id
+                )
+                if req:
+                    companion_name = req.companion_name
+            except Exception:
+                pass
+
+        result.append({
             "schedule_id": str(s.id),
             "title": s.title,
             "date": s.date,
             "start_time": s.start_time,
-            "destination": s.place_type,
             "place_type": s.place_type,
             "transport_type": s.transport_type,
             "status": s.status,
             "child_id": s.child_id,
-        }
-        for s in schedules
-    ])
+            "child_name": child_name,
+            "companion_id": s.companion_id,
+            "companion_name": companion_name,
+            "checklist": [
+                {
+                    "item_id": c.item_id,
+                    "content": c.content,
+                    "is_checked": c.is_checked
+                }
+                for c in s.checklist
+            ],
+        })
+
+    return success(result)
 
 
 # GET /api/schedules/today - 오늘 일정 조회 (부모/동행인 공통)
@@ -260,7 +292,6 @@ async def get_today_schedules(user: User = Depends(get_current_user)):
             "title": s.title,
             "date": s.date,
             "start_time": s.start_time,
-            "destination": s.place_type,
             "place_type": s.place_type,
             "transport_type": s.transport_type,
             "status": s.status,
@@ -272,7 +303,7 @@ async def get_today_schedules(user: User = Depends(get_current_user)):
 
 # GET /api/schedules/{schedule_id}/warnings - 일정/장소 맞춤형 아동 특이사항 핵심 카드 조회
 @router.get("/{schedule_id}/warnings")
-async def get_schedule_warnings(schedule_id: str, user: User = Depends(companion_only)):
+async def get_schedule_warnings(schedule_id: str, user: User = Depends(get_current_user)):
     try:
         oid = PydanticObjectId(schedule_id)
     except Exception:
@@ -281,7 +312,10 @@ async def get_schedule_warnings(schedule_id: str, user: User = Depends(companion
     schedule = await Schedule.get(oid)
     if not schedule:
         return error("일정을 찾을 수 없습니다", 404)
-    if schedule.companion_id != str(user.id):
+
+    if user.role == "parent" and schedule.guardian_id != str(user.id):
+        return error("접근 권한이 없습니다", 403)
+    if user.role == "companion" and schedule.companion_id != str(user.id):
         return error("접근 권한이 없습니다", 403)
 
     try:
@@ -293,9 +327,97 @@ async def get_schedule_warnings(schedule_id: str, user: User = Depends(companion
     if not child:
         return error("아동 프로필을 찾을 수 없습니다", 404)
 
-    return success({
-        "warnings": build_schedule_warnings(schedule, child)
-    })
+    # checked_items 만들기
+    checked_items = []
+
+    place_map = {
+        "병원": "일정_장소_병원방문",
+        "학교": "일정_장소_학교방문",
+        "마트": "일정_장소_마트방문",
+        "공공기관": "일정_장소_공공기관방문",
+        "새로운 장소": "일정_장소_새로운장소",
+        "야외": "일정_장소_야외활동",
+    }
+    transport_map = {
+        "버스": "일정_이동_버스이용",
+        "지하철": "일정_이동_지하철이용",
+        "택시": "일정_이동_차량이동",
+        "도보": "일정_이동_도보이동",
+    }
+    activity_map = {
+        "진료": "일정_활동_진료있음",
+        "검사": "일정_활동_검사있음",
+        "주사": "일정_활동_주사또는치료있음",
+        "식사": "일정_활동_식사있음",
+        "구매": "일정_활동_구매또는계산있음",
+        "상담": "일정_활동_상담또는설명듣기",
+    }
+
+    if schedule.place_type in place_map:
+        checked_items.append(place_map[schedule.place_type])
+    if schedule.transport_type in transport_map:
+        checked_items.append(transport_map[schedule.transport_type])
+    for activity in schedule.activities:
+        if activity in activity_map:
+            checked_items.append(activity_map[activity])
+    if schedule.wait_possible:
+        checked_items.append("일정_환경_대기시간있음")
+    if schedule.crowd_possible:
+        checked_items.append("일정_환경_사람많음")
+
+    env_map = {
+        "큰 소리": "아동_환경_큰 소리",
+        "사람 많은 곳": "아동_환경_사람 많은 곳",
+        "밝은 빛": "아동_환경_밝은 빛",
+        "냄새": "아동_환경_냄새",
+        "신체 접촉": "아동_환경_신체 접촉",
+        "갑작스러운 움직임": "아동_환경_갑작스러운 움직임",
+        "대기": "아동_환경_대기",
+    }
+    caution_map = {
+        "차도/차량 위험 인지를 어려워해요": "아동_외출주의_차도/차량 위험 인지를 어려워해요",
+        "신호등/횡단보도 규칙을 어려워해요": "아동_외출주의_신호등/횡단보도 규칙을 어려워해요",
+        "낯선 사람을 쉽게 따라갈 수 있어요": "아동_외출주의_낯선 사람을 쉽게 따라갈 수 있어요",
+        "동행인과 떨어지면 위험을 잘 인지하지 못해요": "아동_외출주의_동행인과 떨어지면 위험을 잘 인지하지 못해요",
+        "갑자기 뛰어갈 수 있어요": "아동_외출주의_갑자기 뛰어갈 수 있어요",
+        "위험한 물건을 만질 수 있어요": "아동_외출주의_위험한 물건을 만질 수 있어요",
+    }
+    place_difficult_map = {
+        "지하철": "아동_장소_지하철",
+        "새로운 장소": "아동_장소_새로운 장소",
+        "병원": "아동_장소_병원",
+        "식당": "아동_장소_식당",
+        "버스": "아동_장소_버스",
+        "마트": "아동_장소_마트",
+        "놀이공원": "아동_장소_놀이공원",
+        "영화관/공연장": "아동_장소_영화관/공연장",
+    }
+
+    for env in child.difficult_environments:
+        if env in env_map:
+            checked_items.append(env_map[env])
+    for caution in child.caution_situations:
+        if caution in caution_map:
+            checked_items.append(caution_map[caution])
+    for place in child.difficult_places:
+        if place in place_difficult_map:
+            checked_items.append(place_difficult_map[place])
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{AI_SERVER_URL}/predict-warning",
+                json={
+                    "checked_items": checked_items,
+                    "threshold": 0.5
+                },
+                timeout=30.0
+            )
+        return success(response.json(), "주의사항 예측 완료")
+    except httpx.ConnectError:
+        return error("AI 서버에 연결할 수 없습니다", 503)
+    except Exception as e:
+        return error(f"AI 서버 오류: {str(e)}", 500)
 
 
 # GET /api/schedules/{schedule_id} - 일정 상세 조회
@@ -361,7 +483,7 @@ async def get_schedule(schedule_id: str, user: User = Depends(get_current_user))
     })
 
 
-# PATCH /api/schedules/{schedule_id} - 일정 수정 (부모 전용)
+# PATCH /api/schedules/{schedule_id} - 일정 수정
 @router.patch("/{schedule_id}")
 async def update_schedule(schedule_id: str, body: ScheduleUpdateRequest, user: User = Depends(get_current_user)):
     try:
@@ -393,7 +515,7 @@ async def update_schedule(schedule_id: str, body: ScheduleUpdateRequest, user: U
     return success(None, "일정이 수정되었습니다")
 
 
-# DELETE /api/schedules/{schedule_id} - 일정 삭제 (부모 전용)
+# DELETE /api/schedules/{schedule_id} - 일정 삭제
 @router.delete("/{schedule_id}")
 async def delete_schedule(schedule_id: str, user: User = Depends(get_current_user)):
     try:
@@ -413,7 +535,7 @@ async def delete_schedule(schedule_id: str, user: User = Depends(get_current_use
 
 # PATCH /api/schedules/{schedule_id}/checklist - 체크리스트 완료 체크
 @router.patch("/{schedule_id}/checklist")
-async def update_checklist(schedule_id: str, body: ChecklistUpdateRequest, user: User = Depends(companion_only)):
+async def update_checklist(schedule_id: str, body: ChecklistUpdateRequest, user: User = Depends(get_current_user)):
     try:
         oid = PydanticObjectId(schedule_id)
     except Exception:
@@ -423,7 +545,7 @@ async def update_checklist(schedule_id: str, body: ChecklistUpdateRequest, user:
     if not schedule:
         return error("일정을 찾을 수 없습니다", 404)
 
-    if schedule.companion_id != str(user.id):
+    if not can_access_schedule(schedule, user):
         return error("접근 권한이 없습니다", 403)
 
     updated = False
@@ -469,124 +591,3 @@ async def create_journal(schedule_id: str, body: JournalCreateRequest, user: Use
     })
 
     return success(None, "동행일지가 등록되었습니다")
-
-# GET /api/schedules/{schedule_id}/warnings - 주의사항 예측
-@router.get("/{schedule_id}/warnings")
-async def get_warnings(schedule_id: str, user: User = Depends(get_current_user)):
-    try:
-        oid = PydanticObjectId(schedule_id)
-    except Exception:
-        return error("유효하지 않은 schedule_id입니다", 400)
-
-    schedule = await Schedule.get(oid)
-    if not schedule:
-        return error("일정을 찾을 수 없습니다", 404)
-
-    if user.role == "parent" and schedule.guardian_id != str(user.id):
-        return error("접근 권한이 없습니다", 403)
-    if user.role == "companion" and schedule.companion_id != str(user.id):
-        return error("접근 권한이 없습니다", 403)
-
-    # 아동 특성 가져오기
-    child = None
-    try:
-        child_oid = PydanticObjectId(schedule.child_id)
-        child = await Child.get(child_oid)
-    except Exception:
-        pass
-
-    # checked_items 만들기
-    checked_items = []
-
-    # 일정 정보 변환
-    place_map = {
-        "병원": "일정_장소_병원방문",
-        "학교": "일정_장소_학교방문",
-        "마트": "일정_장소_마트방문",
-        "공공기관": "일정_장소_공공기관방문",
-        "새로운 장소": "일정_장소_새로운장소",
-        "야외": "일정_장소_야외활동",
-    }
-    transport_map = {
-        "버스": "일정_이동_버스이용",
-        "지하철": "일정_이동_지하철이용",
-        "택시": "일정_이동_차량이동",
-        "도보": "일정_이동_도보이동",
-    }
-    activity_map = {
-        "진료": "일정_활동_진료있음",
-        "검사": "일정_활동_검사있음",
-        "주사": "일정_활동_주사또는치료있음",
-        "식사": "일정_활동_식사있음",
-        "구매": "일정_활동_구매또는계산있음",
-        "상담": "일정_활동_상담또는설명듣기",
-    }
-
-    if schedule.place_type in place_map:
-        checked_items.append(place_map[schedule.place_type])
-    if schedule.transport_type in transport_map:
-        checked_items.append(transport_map[schedule.transport_type])
-    for activity in schedule.activities:
-        if activity in activity_map:
-            checked_items.append(activity_map[activity])
-    if schedule.wait_possible:
-        checked_items.append("일정_환경_대기시간있음")
-    if schedule.crowd_possible:
-        checked_items.append("일정_환경_사람많음")
-
-    # 아동 특성 변환
-    if child:
-        env_map = {
-            "큰 소리": "아동_환경_큰 소리",
-            "사람 많은 곳": "아동_환경_사람 많은 곳",
-            "밝은 빛": "아동_환경_밝은 빛",
-            "냄새": "아동_환경_냄새",
-            "신체 접촉": "아동_환경_신체 접촉",
-            "갑작스러운 움직임": "아동_환경_갑작스러운 움직임",
-            "대기": "아동_환경_대기",
-        }
-        caution_map = {
-            "차도/차량 위험 인지를 어려워해요": "아동_외출주의_차도/차량 위험 인지를 어려워해요",
-            "신호등/횡단보도 규칙을 어려워해요": "아동_외출주의_신호등/횡단보도 규칙을 어려워해요",
-            "낯선 사람을 쉽게 따라갈 수 있어요": "아동_외출주의_낯선 사람을 쉽게 따라갈 수 있어요",
-            "동행인과 떨어지면 위험을 잘 인지하지 못해요": "아동_외출주의_동행인과 떨어지면 위험을 잘 인지하지 못해요",
-            "갑자기 뛰어갈 수 있어요": "아동_외출주의_갑자기 뛰어갈 수 있어요",
-            "위험한 물건을 만질 수 있어요": "아동_외출주의_위험한 물건을 만질 수 있어요",
-        }
-        place_difficult_map = {
-            "지하철": "아동_장소_지하철",
-            "새로운 장소": "아동_장소_새로운 장소",
-            "병원": "아동_장소_병원",
-            "식당": "아동_장소_식당",
-            "버스": "아동_장소_버스",
-            "마트": "아동_장소_마트",
-            "놀이공원": "아동_장소_놀이공원",
-            "영화관/공연장": "아동_장소_영화관/공연장",
-        }
-
-        for env in child.difficult_environments:
-            if env in env_map:
-                checked_items.append(env_map[env])
-        for caution in child.caution_situations:
-            if caution in caution_map:
-                checked_items.append(caution_map[caution])
-        for place in child.difficult_places:
-            if place in place_difficult_map:
-                checked_items.append(place_difficult_map[place])
-
-    # AI 서버로 전송
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{AI_SERVER_URL}/predict-warning",
-                json={
-                    "checked_items": checked_items,
-                    "threshold": 0.5
-                },
-                timeout=30.0
-            )
-        return success(response.json(), "주의사항 예측 완료")
-    except httpx.ConnectError:
-        return error("AI 서버에 연결할 수 없습니다", 503)
-    except Exception as e:
-        return error(f"AI 서버 오류: {str(e)}", 500)

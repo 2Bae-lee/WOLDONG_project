@@ -886,7 +886,15 @@ export default function ParentHome() {
                                 style={styles.addButton}
                                 onPress={() => {
                                     cancelAddInputs();
-                                    router.push('/paraent_home/schedule_add' as any);
+                                    router.push({
+                                        pathname: '/paraent_home/calendar_add',
+                                        params: {
+                                            childId,
+                                            year: String(currentYear),
+                                            month: String(currentMonth),
+                                            day: String(todayDay),
+                                        },
+                                    } as any);
                                 }}
                             >
                                 <View style={styles.addIconCircle}>

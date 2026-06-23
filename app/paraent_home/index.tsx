@@ -440,6 +440,7 @@ export default function ParentHome() {
         const eventCompanion = params.addedEventCompanion;
         const eventId = Number(params.addedEventId);
         const fallbackEventId = params.addedEventId ? toNumericId(params.addedEventId) : Date.now();
+        const numericEventId = Number.isNaN(eventId) ? fallbackEventId : eventId;
         let parsedTodos: ScheduleTodo[] = [];
 
         try {
@@ -448,7 +449,7 @@ export default function ParentHome() {
                 ? parsed
                     .filter((item) => typeof item === 'string' && item.trim())
                     .map((item, index) => ({
-                        id: eventId + index + 1,
+                        id: numericEventId + index + 1,
                         text: item.trim(),
                         done: false,
                     }))
@@ -464,7 +465,7 @@ export default function ParentHome() {
         };
         const eventDates = parseRepeatDates(params.addedEventDates);
         const nextEvents = (eventDates.length > 0 ? eventDates : [fallbackDate]).map((date, index) => ({
-            id: (Number.isNaN(eventId) ? fallbackEventId : eventId) + index,
+            id: numericEventId + index,
             scheduleId: params.addedEventId,
             year: date.year,
             month: date.month,

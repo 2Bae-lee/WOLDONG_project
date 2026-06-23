@@ -662,6 +662,24 @@ export default function CompanionChildHome() {
                     <Ionicons name="book-outline" size={20} color={Colors.text} />
                     <Text style={styles.socialStoryButtonText}>소셜 스토리 만들기</Text>
                 </Pressable>
+
+                {scheduleId ? (
+                    <Pressable
+                        style={styles.recordButton}
+                        onPress={() =>
+                            router.push({
+                                pathname: '/companion_home/outing_record',
+                                params: {
+                                    scheduleId,
+                                    childName,
+                                },
+                            } as any)
+                        }
+                    >
+                        <Ionicons name="clipboard-outline" size={20} color={Colors.text} />
+                        <Text style={styles.recordButtonText}>외출 후 기록하기</Text>
+                    </Pressable>
+                ) : null}
             </ScrollView>
 
             <View style={styles.bottomTabWrap}>
@@ -1223,6 +1241,27 @@ const styles = StyleSheet.create({
     },
 
     socialStoryButtonText: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 16,
+        fontWeight: '900',
+        color: Colors.text,
+    },
+
+    recordButton: {
+        width: '100%',
+        minHeight: 52,
+        borderRadius: 26,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        marginTop: 12,
+    },
+
+    recordButtonText: {
         fontFamily: Fonts.bodyBold,
         fontSize: 16,
         fontWeight: '900',

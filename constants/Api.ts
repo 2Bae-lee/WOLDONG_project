@@ -141,6 +141,12 @@ export type ScheduleJournal = {
     recorded_at?: string;
 };
 
+export type ScheduleJournalPayload = {
+    reaction: string;
+    difficulties: string;
+    memo?: string;
+};
+
 export type ScheduleDetail = {
     schedule_id: string;
     title: string;
@@ -617,6 +623,23 @@ export const getSchedule = (scheduleId: string) => (
 
 export const getScheduleWarnings = (scheduleId: string) => (
     apiRequest<ScheduleWarningsResponse>(`/api/schedules/${encodeURIComponent(scheduleId)}/warnings`)
+);
+
+export const updateScheduleChecklist = (scheduleId: string, itemId: string, isChecked: boolean) => (
+    apiRequest<null>(`/api/schedules/${encodeURIComponent(scheduleId)}/checklist`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+            item_id: itemId,
+            is_checked: isChecked,
+        }),
+    })
+);
+
+export const createScheduleJournal = (scheduleId: string, body: ScheduleJournalPayload) => (
+    apiRequest<null>(`/api/schedules/${encodeURIComponent(scheduleId)}/journal`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+    })
 );
 
 export const updateSchedule = (scheduleId: string, body: ScheduleUpdatePayload) => (

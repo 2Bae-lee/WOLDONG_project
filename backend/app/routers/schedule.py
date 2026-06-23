@@ -394,7 +394,7 @@ async def delete_schedule(schedule_id: str, user: User = Depends(parent_only)):
 
 # PATCH /api/schedules/{schedule_id}/checklist - 체크리스트 완료 체크
 @router.patch("/{schedule_id}/checklist")
-async def update_checklist(schedule_id: str, body: ChecklistUpdateRequest, user: User = Depends(get_current_user)):
+async def update_checklist(schedule_id: str, body: ChecklistUpdateRequest, user: User = Depends(companion_only)):
     try:
         oid = PydanticObjectId(schedule_id)
     except Exception:
@@ -404,9 +404,7 @@ async def update_checklist(schedule_id: str, body: ChecklistUpdateRequest, user:
     if not schedule:
         return error("일정을 찾을 수 없습니다", 404)
 
-    if user.role == "parent" and schedule.guardian_id != str(user.id):
-        return error("접근 권한이 없습니다", 403)
-    if user.role == "companion" and schedule.companion_id != str(user.id):
+    if schedule.companion_id != str(user.id):
         return error("접근 권한이 없습니다", 403)
 
     updated = False

@@ -8,3 +8,4 @@ pandas
 joblib
 tensorflow
 msvc-runtime
+scikit-learn

@@ -14,7 +14,9 @@ import {
     ApiError,
     ScheduleDetail,
     ScheduleJournal,
+    TodayScheduleSummary,
     getSchedule,
+    getSchedules,
 } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
@@ -23,6 +25,36 @@ const formatDate = (date: string) => date.replaceAll('-', '.');
 
 const listOrEmpty = (items?: string[]) => (
     items?.filter((item) => item.trim()) ?? []
+);
+
+type DayOuting = {
+    scheduleId: string;
+    title: string;
+    date: string;
+    startTime: string;
+};
+
+const getTimeValue = (time?: string) => {
+    const [hourText, minuteText] = (time || '').split(':');
+    const hour = Number(hourText);
+    const minute = Number(minuteText);
+
+    if (Number.isNaN(hour) || Number.isNaN(minute)) return Number.MAX_SAFE_INTEGER;
+    return hour * 60 + minute;
+};
+
+const toDayOuting = (schedule: TodayScheduleSummary): DayOuting => ({
+    scheduleId: schedule.schedule_id,
+    title: schedule.title,
+    date: schedule.date,
+    startTime: schedule.start_time,
+});
+
+const sortDayOutings = (outings: DayOuting[]) => (
+    [...outings].sort((a, b) => (
+        getTimeValue(a.startTime) - getTimeValue(b.startTime) ||
+        a.title.localeCompare(b.title)
+    ))
 );
 
 function InfoRow({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string }) {
@@ -96,14 +128,20 @@ export default function OutingRecordScreen() {
         commentUpdated?: string;
     }>();
     const [schedule, setSchedule] = useState<ScheduleDetail | null>(null);
+    const [activeScheduleId, setActiveScheduleId] = useState(params.scheduleId ?? '');
+    const [dayOutings, setDayOutings] = useState<DayOuting[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+
+    useEffect(() => {
+        setActiveScheduleId(params.scheduleId ?? '');
+    }, [params.scheduleId]);
 
     useEffect(() => {
         let active = true;
 
         const loadSchedule = async () => {
-            if (!params.scheduleId) {
+            if (!activeScheduleId) {
                 setError('일정 ID가 없어 외출 기록을 불러올 수 없어요.');
                 setLoading(false);
                 return;
@@ -113,9 +151,51 @@ export default function OutingRecordScreen() {
             setError('');
 
             try {
-                const response = await getSchedule(params.scheduleId);
+                const response = await getSchedule(activeScheduleId);
+                const nextSchedule = response.data ?? null;
+
                 if (active) {
-                    setSchedule(response.data ?? null);
+                    setSchedule(nextSchedule);
+                }
+
+                if (!nextSchedule) {
+                    if (active) setDayOutings([]);
+                    return;
+                }
+
+                try {
+                    const schedulesResponse = await getSchedules();
+                    const sameDayOutings = (schedulesResponse.data ?? [])
+                        .filter((item) => (
+                            item.date === nextSchedule.date &&
+                            (!nextSchedule.child_id || item.child_id === nextSchedule.child_id)
+                        ))
+                        .map(toDayOuting);
+                    const hasActiveOuting = sameDayOutings.some((item) => (
+                        item.scheduleId === nextSchedule.schedule_id
+                    ));
+                    const nextDayOutings = sortDayOutings(hasActiveOuting
+                        ? sameDayOutings
+                        : [
+                            ...sameDayOutings,
+                            {
+                                scheduleId: nextSchedule.schedule_id,
+                                title: nextSchedule.title,
+                                date: nextSchedule.date,
+                                startTime: nextSchedule.start_time,
+                            },
+                        ]);
+
+                    if (active) setDayOutings(nextDayOutings);
+                } catch {
+                    if (active) {
+                        setDayOutings([{
+                            scheduleId: nextSchedule.schedule_id,
+                            title: nextSchedule.title,
+                            date: nextSchedule.date,
+                            startTime: nextSchedule.start_time,
+                        }]);
+                    }
                 }
             } catch (loadError) {
                 if (active) {
@@ -133,12 +213,25 @@ export default function OutingRecordScreen() {
         return () => {
             active = false;
         };
-    }, [params.scheduleId, params.commentUpdated]);
+    }, [activeScheduleId, params.commentUpdated]);
 
     const childTraits = schedule?.child_traits;
     const checklist = schedule?.checklist ?? [];
     const place = schedule?.destination || schedule?.place_type || '장소 정보 없음';
     const transport = schedule?.transport || schedule?.transport_type || '이동수단 정보 없음';
+    const activeOutingIndex = dayOutings.findIndex((outing) => outing.scheduleId === schedule?.schedule_id);
+    const outingPosition = activeOutingIndex >= 0 ? activeOutingIndex + 1 : 1;
+    const outingCount = Math.max(dayOutings.length, schedule ? 1 : 0);
+    const canGoPrevious = activeOutingIndex > 0;
+    const canGoNext = activeOutingIndex >= 0 && activeOutingIndex < dayOutings.length - 1;
+
+    const moveOuting = (direction: -1 | 1) => {
+        const nextIndex = activeOutingIndex + direction;
+        const nextOuting = dayOutings[nextIndex];
+
+        if (!nextOuting) return;
+        setActiveScheduleId(nextOuting.scheduleId);
+    };
 
     const openCommentEditor = () => {
         if (!schedule?.child_id) return;
@@ -191,14 +284,44 @@ export default function OutingRecordScreen() {
             ) : schedule ? (
                 <>
                     <View style={styles.heroCard}>
-                        <View style={styles.heroIcon}>
-                            <Ionicons name="calendar-outline" size={24} color={Colors.text} />
+                        <View style={styles.heroMainRow}>
+                            <View style={styles.heroIcon}>
+                                <Ionicons name="calendar-outline" size={24} color={Colors.text} />
+                            </View>
+                            <View style={styles.heroTextArea}>
+                                <Text style={styles.heroTitle}>{schedule.title}</Text>
+                                <Text style={styles.heroMeta}>
+                                    {formatDate(schedule.date)} · {schedule.start_time} · {schedule.status}
+                                </Text>
+                            </View>
                         </View>
-                        <View style={styles.heroTextArea}>
-                            <Text style={styles.heroTitle}>{schedule.title}</Text>
-                            <Text style={styles.heroMeta}>
-                                {formatDate(schedule.date)} · {schedule.start_time} · {schedule.status}
+
+                        <View style={styles.outingPager}>
+                            <Pressable
+                                style={[styles.pagerButton, !canGoPrevious && styles.pagerButtonDisabled]}
+                                onPress={() => moveOuting(-1)}
+                                disabled={!canGoPrevious}
+                            >
+                                <Ionicons
+                                    name="chevron-back"
+                                    size={20}
+                                    color={canGoPrevious ? Colors.text : Colors.textShadow}
+                                />
+                            </Pressable>
+                            <Text style={styles.pagerText}>
+                                {formatDate(schedule.date)} {outingPosition}/{outingCount}
                             </Text>
+                            <Pressable
+                                style={[styles.pagerButton, !canGoNext && styles.pagerButtonDisabled]}
+                                onPress={() => moveOuting(1)}
+                                disabled={!canGoNext}
+                            >
+                                <Ionicons
+                                    name="chevron-forward"
+                                    size={20}
+                                    color={canGoNext ? Colors.text : Colors.textShadow}
+                                />
+                            </Pressable>
                         </View>
                     </View>
 
@@ -336,10 +459,13 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#E8DDC8',
         backgroundColor: '#F7F4E8',
-        flexDirection: 'row',
-        alignItems: 'center',
         padding: 16,
         marginBottom: 14,
+    },
+
+    heroMainRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
 
     heroIcon: {
@@ -368,6 +494,39 @@ const styles = StyleSheet.create({
         fontFamily: Fonts.body,
         fontSize: 13,
         color: Colors.textShadow,
+    },
+
+    outingPager: {
+        minHeight: 42,
+        borderRadius: 21,
+        backgroundColor: Colors.pageBg,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginTop: 14,
+        paddingHorizontal: 8,
+    },
+
+    pagerButton: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: Colors.pageBg2,
+    },
+
+    pagerButtonDisabled: {
+        opacity: 0.45,
+    },
+
+    pagerText: {
+        flex: 1,
+        textAlign: 'center',
+        fontFamily: Fonts.bodyBold,
+        fontSize: 14,
+        fontWeight: '900',
+        color: Colors.text,
     },
 
     card: {

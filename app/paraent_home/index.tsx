@@ -1104,7 +1104,7 @@ export default function ParentHome() {
                                         }
                                     >
                                         <Ionicons name="document-text-outline" size={19} color={Colors.text} />
-                                        <Text style={styles.socialStoryButtonText}>외출 기록 보기</Text>
+                                        <Text style={styles.socialStoryButtonText}>당일 외출 기록 보기</Text>
                                     </Pressable>
                                 ) : null}
                             </View>

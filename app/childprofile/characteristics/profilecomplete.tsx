@@ -1,7 +1,9 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../../components/BackButton';
 import PrimaryButton from '../../../components/PrimaryButton';
+import { createChildProfile } from '../../../constants/Api';
 import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
 
@@ -57,6 +59,72 @@ const labelMap: Record<string, string> = {
     one_hour: '1시간 전',
     three_hours: '3시간 전',
     day_before: '전 날',
+
+    intellectual: '지적장애',
+    autism: '자폐스펙트럼',
+};
+
+const apiLabelMap: Record<string, string> = {
+    one_by_one: '한번에 하나씩 말해줘야해요',
+    visual_support: '그림이나 사진이 있으면 좋아요',
+    short_sentence: '짧고 쉬운 문장으로 말해줘야해요',
+    need_repetition: '반복 설명이 필요해요',
+    choice_question: '선택지로 물어보면 잘 대답해요',
+    show_first: '먼저 보여주고 설명하면 잘 이해해요',
+
+    sentence_answer: '문장으로 대답해요',
+    word_answer: '단어로 대답해요',
+    gesture_answer: '고개 끄덕이나 손짓으로 대답해요',
+    picture_card: '그림/사진 카드가 필요해요',
+    yes_no_answer: '네/아니오로 대답해요',
+    hard_to_express: '불편함을 말로 표현하기 어려워요',
+
+    car_danger: '차도/차량 위험 인지를 어려워해요',
+    crosswalk_danger: '신호등/횡단보도 규칙을 어려워해요',
+    stranger_danger: '낯선 사람을 쉽게 따라갈 수 있어요',
+    apartfromcompanion_danger: '동행인과 떨어지면 위험을 잘 인지하지 못해요',
+    suddenrun_danger: '갑자기 뛰어갈 수 있어요',
+    touch_danger: '위험한 물건을 만질 수 있어요',
+
+    loud_noise: '큰 소리',
+    crowded_place: '사람 많은 곳',
+    light: '밝은 빛',
+    bad_smell: '냄새',
+    body_contact: '신체 접촉',
+    movement: '갑작스러운 움직임',
+    wait: '대기',
+
+    take_transport: '이동 수단 타기',
+    waiting: '기다리기',
+    stop_activity: '하던 활동 멈추기',
+    move_place: '장소 이동하기',
+    go_home: '집에 돌아가기',
+    go_toilet: '화장실 가기',
+    unexpected_change: '예정과 다른 일이 생기기',
+
+    right_before: '바로 직전',
+    five_minutes: '5분 전',
+    ten_minutes: '10분 전',
+    thirty_minutes: '30분 전',
+    one_hour: '1시간 전',
+    three_hours: '3시간 전',
+    day_before: '전 날',
+};
+
+const genderMap: Record<string, '남자아이' | '여자아이'> = {
+    male: '남자아이',
+    female: '여자아이',
+};
+
+const relationMap: Record<string, '주양육자' | '부모' | '조부모'> = {
+    primarycaregiver: '주양육자',
+    parent: '부모',
+    grandparent: '조부모',
+};
+
+const disabilityMap: Record<string, '지적장애' | '자폐스펙트럼장애'> = {
+    intellectual: '지적장애',
+    autism: '자폐스펙트럼장애',
 };
 
 const parseList = (value?: string) => {
@@ -71,6 +139,8 @@ const parseList = (value?: string) => {
 };
 
 const toLabels = (values: string[]) => values.map((value) => labelMap[value] ?? value);
+
+const toApiLabels = (values: string[]) => values.map((value) => apiLabelMap[value] ?? value);
 
 type SummarySectionProps = {
     title: string;
@@ -98,6 +168,10 @@ export default function ChildProfileComplete() {
     const params = useLocalSearchParams<{
         name?: string;
         profileImage?: string;
+        gender?: string;
+        birth?: string;
+        relationship?: string;
+        typeofdisability?: string;
         guidanceOptions?: string;
         communicationOptions?: string;
         dangerSituations?: string;
@@ -107,17 +181,94 @@ export default function ChildProfileComplete() {
         scheduleChangeOptions?: string;
         advanceNoticeOptions?: string;
     }>();
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [submitError, setSubmitError] = useState('');
 
     const childName = params.name || '아이';
     const profileImage = params.profileImage ?? '';
-    const guidanceItems = toLabels(parseList(params.guidanceOptions));
-    const communicationItems = toLabels(parseList(params.communicationOptions));
-    const dangerItems = toLabels(parseList(params.dangerSituations));
-    const companionItems = toLabels(parseList(params.companionAction));
-    const sensoryItems = toLabels(parseList(params.sensoryOptions));
-    const placeItems = parseList(params.placeOptions);
-    const scheduleChangeItems = toLabels(parseList(params.scheduleChangeOptions));
-    const advanceNoticeItems = toLabels(parseList(params.advanceNoticeOptions));
+    const guidanceValues = parseList(params.guidanceOptions);
+    const communicationValues = parseList(params.communicationOptions);
+    const dangerValues = parseList(params.dangerSituations);
+    const companionValues = parseList(params.companionAction);
+    const sensoryValues = parseList(params.sensoryOptions);
+    const placeValues = parseList(params.placeOptions);
+    const scheduleChangeValues = parseList(params.scheduleChangeOptions);
+    const advanceNoticeValues = parseList(params.advanceNoticeOptions);
+    const disabilityItems = params.typeofdisability
+        ? [labelMap[params.typeofdisability] ?? params.typeofdisability]
+        : [];
+    const guidanceItems = toLabels(guidanceValues);
+    const communicationItems = toLabels(communicationValues);
+    const dangerItems = toLabels(dangerValues);
+    const companionItems = toLabels(companionValues);
+    const sensoryItems = toLabels(sensoryValues);
+    const placeItems = placeValues;
+    const scheduleChangeItems = toLabels(scheduleChangeValues);
+    const advanceNoticeItems = toLabels(advanceNoticeValues);
+    const profileSections = [
+        { id: 'info', items: disabilityItems },
+        { id: 'guidance', items: guidanceItems },
+        { id: 'communication', items: communicationItems },
+        { id: 'danger', items: dangerItems },
+        { id: 'companion', items: companionItems },
+        { id: 'sensory', items: sensoryItems },
+        { id: 'place', items: placeItems },
+        { id: 'schedule', items: scheduleChangeItems },
+        { id: 'notice', items: advanceNoticeItems },
+    ];
+
+    const openMakeCharacter = (childId?: string) => {
+        router.push({
+            pathname: '/childprofile/makecharacter',
+            params: {
+                name: childName,
+                profileImage,
+                profileSections: JSON.stringify(profileSections),
+                childId: childId ?? '',
+            },
+        } as any);
+    };
+
+    const handleCreateProfile = async () => {
+        if (isSubmitting) return;
+
+        const gender = genderMap[params.gender ?? ''];
+        const disabilityType = disabilityMap[params.typeofdisability ?? ''];
+
+        if (!gender || !disabilityType || !params.birth) {
+            setSubmitError('아동 기본 정보가 부족해요. 이전 화면을 다시 확인해주세요.');
+            return;
+        }
+
+        setSubmitError('');
+        setIsSubmitting(true);
+
+        try {
+            const response = await createChildProfile({
+                name: childName,
+                gender,
+                birth_date: params.birth.replace(/\./g, '-'),
+                guardian_relation: relationMap[params.relationship ?? ''] ?? '주양육자',
+                disability_type: disabilityType,
+                explanation_styles: toApiLabels(guidanceValues),
+                communication_styles: toApiLabels(communicationValues),
+                caution_situations: toApiLabels(dangerValues),
+                required_actions: toApiLabels(companionValues).join(', '),
+                difficult_environments: toApiLabels(sensoryValues),
+                difficult_places: placeValues,
+                transition_difficulties: toApiLabels(scheduleChangeValues),
+                notice_time: toApiLabels(advanceNoticeValues)[0] ?? '',
+                calming_methods: [],
+                avoid_behaviors: '',
+            });
+
+            openMakeCharacter(response.data?.child_id);
+        } catch (error) {
+            setSubmitError(error instanceof Error ? error.message : '아동 프로필 등록에 실패했어요.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
     return (
         <ScrollView
@@ -168,6 +319,7 @@ export default function ChildProfileComplete() {
                 <Text style={styles.childName}>{childName}</Text>
 
                 <View style={styles.summaryArea}>
+                    <SummarySection title="공유 정보" items={disabilityItems} />
                     <SummarySection title="설명 방식" items={guidanceItems} />
                     <SummarySection title="의사소통 방식" items={communicationItems} />
                     <SummarySection title="외출 중 주의 상황" items={dangerItems} />
@@ -181,18 +333,11 @@ export default function ChildProfileComplete() {
 
             <View style={styles.buttonArea}>
                 <PrimaryButton
-                    label="캐릭터 만들기"
+                    label={isSubmitting ? '등록 중' : '캐릭터 만들기'}
                     width="100%"
-                    onPress={() =>
-                        router.push({
-                            pathname: '/childprofile/makecharacter',
-                            params: {
-                                name: childName,
-                                profileImage,
-                            },
-                        } as any)
-                    }
+                    onPress={handleCreateProfile}
                 />
+                {submitError ? <Text style={styles.errorText}>{submitError}</Text> : null}
             </View>
         </ScrollView>
     );
@@ -364,5 +509,14 @@ const styles = StyleSheet.create({
     buttonArea: {
         width: '100%',
         marginTop: 34,
+    },
+
+    errorText: {
+        marginTop: 12,
+        fontFamily: Fonts.body,
+        fontSize: 13,
+        lineHeight: 19,
+        color: Colors.highlight3,
+        textAlign: 'center',
     },
 });

@@ -16,12 +16,25 @@ import {
     TextInput,
     View,
 } from 'react-native';
+import {
+    TodayScheduleSummary,
+    deleteSchedule,
+    getInviteRequests,
+    getNotifications,
+    getParentHome,
+    getSchedule,
+    getSchedules,
+    getTodaySchedules,
+    updateSchedule,
+} from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 import { hasUnreadParentNotifications } from '../../constants/NotificationState';
+import { RepeatDate, parseRepeatDates } from '../../constants/Recurrence';
 
 type ScheduleItem = {
     id: number;
+    scheduleId?: string;
     text: string;
     done: boolean;
     companion: string;
@@ -43,6 +56,7 @@ type ActiveTab = 'today' | 'calendar';
 
 type CalendarEvent = {
     id: number;
+    scheduleId?: string;
     year: number;
     month: number;
     day: number;
@@ -98,6 +112,55 @@ function getTodayTitle() {
     return `${month}월 ${date}일 오늘의 일정`;
 }
 
+const toNumericId = (id: string) => (
+    id.split('').reduce((sum, char, index) => sum + char.charCodeAt(0) * (index + 1), 0)
+);
+
+const mapScheduleTodos = (schedule: TodayScheduleSummary, baseId: number): ScheduleTodo[] => {
+    const details = [
+        schedule.start_time ? `${schedule.start_time} 시작` : '',
+        schedule.destination || schedule.place_type || '',
+        schedule.transport_type ? `${schedule.transport_type} 이동` : '',
+    ].filter(Boolean);
+
+    return details.map((text, index) => ({
+        id: baseId + index + 1,
+        text,
+        done: schedule.status === 'done',
+    }));
+};
+
+const mapTodaySchedule = (schedule: TodayScheduleSummary): ScheduleItem => {
+    const id = toNumericId(schedule.schedule_id);
+
+    return {
+        id,
+        scheduleId: schedule.schedule_id,
+        text: schedule.title,
+        done: schedule.status === 'done',
+        companion: '동행인 미정',
+        todos: mapScheduleTodos(schedule, id),
+    };
+};
+
+const mapCalendarEvent = (schedule: TodayScheduleSummary): CalendarEvent | null => {
+    const [year, month, day] = schedule.date.split('-').map(Number);
+    const id = toNumericId(schedule.schedule_id);
+
+    if ([year, month, day].some(Number.isNaN)) return null;
+
+    return {
+        id,
+        scheduleId: schedule.schedule_id,
+        year,
+        month,
+        day,
+        title: schedule.title,
+        companion: '동행인 미정',
+        todos: mapScheduleTodos(schedule, id),
+    };
+};
+
 export default function ParentHome() {
     const params = useLocalSearchParams<{
         tab?: string;
@@ -108,6 +171,7 @@ export default function ParentHome() {
         addedEventTitle?: string;
         addedEventCompanion?: string;
         addedEventTodos?: string;
+        addedEventDates?: string;
         addedScheduleId?: string;
         addedScheduleTitle?: string;
         addedScheduleCompanion?: string;
@@ -134,6 +198,7 @@ export default function ParentHome() {
     }, [calendarMonth, calendarYear]);
     const scrollViewRef = useRef<ScrollView>(null);
     const [activeTab, setActiveTab] = useState<ActiveTab>('today');
+    const [childId, setChildId] = useState('');
     const [childName, setChildName] = useState('김월동');
     const [childProfileImage, setChildProfileImage] = useState('');
     const [childProfileSections, setChildProfileSections] = useState('');
@@ -193,12 +258,85 @@ export default function ParentHome() {
         event.month === calendarMonth &&
         event.day === selectedCalendarDay
     ));
+    const selectedStoryEvent = selectedCalendarEvents[0];
 
     useFocusEffect(
         useCallback(() => {
             setHasUnreadNotifications(hasUnreadParentNotifications());
+
+            let active = true;
+
+            const loadUnreadNotifications = async () => {
+                try {
+                    const [notificationsResponse, requestsResponse] = await Promise.all([
+                        getNotifications(),
+                        getInviteRequests(),
+                    ]);
+
+                    if (!active) return;
+
+                    const hasUnreadApiNotifications = notificationsResponse.data?.some((notification) => (
+                        !notification.is_read
+                    )) ?? false;
+                    const hasPendingRequests = (requestsResponse.data?.length ?? 0) > 0;
+
+                    setHasUnreadNotifications(hasUnreadApiNotifications || hasPendingRequests);
+                } catch {
+                    if (active) {
+                        setHasUnreadNotifications(hasUnreadParentNotifications());
+                    }
+                }
+            };
+
+            loadUnreadNotifications();
+
+            return () => {
+                active = false;
+            };
         }, [])
     );
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadParentHome = async () => {
+            try {
+                const [homeResponse, todaySchedulesResponse, schedulesResponse] = await Promise.all([
+                    getParentHome(),
+                    getTodaySchedules(),
+                    getSchedules(),
+                ]);
+
+                if (cancelled) return;
+
+                const firstChild = homeResponse.data?.children?.[0];
+                if (firstChild?.child_id) {
+                    setChildId(firstChild.child_id);
+                }
+                if (firstChild?.name) {
+                    setChildName(firstChild.name);
+                }
+
+                const apiSchedules = todaySchedulesResponse.data?.length
+                    ? todaySchedulesResponse.data
+                    : homeResponse.data?.today_schedules ?? [];
+
+                setSchedules(apiSchedules.map(mapTodaySchedule));
+                const allSchedules = schedulesResponse.data ?? apiSchedules;
+                setCalendarEvents(allSchedules.map(mapCalendarEvent).filter((event): event is CalendarEvent => (
+                    event !== null
+                )));
+            } catch {
+                // 목 로그인이나 로컬 서버 미실행 상태에서는 기존 목데이터 홈을 유지합니다.
+            }
+        };
+
+        loadParentHome();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     useEffect(() => {
         if (params.tab === 'calendar') {
@@ -270,7 +408,10 @@ export default function ParentHome() {
             return;
         }
 
+        const eventTitle = params.addedEventTitle;
+        const eventCompanion = params.addedEventCompanion;
         const eventId = Number(params.addedEventId);
+        const fallbackEventId = params.addedEventId ? toNumericId(params.addedEventId) : Date.now();
         let parsedTodos: ScheduleTodo[] = [];
 
         try {
@@ -288,35 +429,50 @@ export default function ParentHome() {
             parsedTodos = [];
         }
 
-        const nextEvent = {
-            id: eventId,
+        const fallbackDate: RepeatDate = {
             year: Number(params.addedEventYear),
             month: Number(params.addedEventMonth),
             day: Number(params.addedEventDay),
-            title: params.addedEventTitle,
-            companion: params.addedEventCompanion,
-            todos: parsedTodos,
         };
+        const eventDates = parseRepeatDates(params.addedEventDates);
+        const nextEvents = (eventDates.length > 0 ? eventDates : [fallbackDate]).map((date, index) => ({
+            id: (Number.isNaN(eventId) ? fallbackEventId : eventId) + index,
+            scheduleId: params.addedEventId,
+            year: date.year,
+            month: date.month,
+            day: date.day,
+            title: eventTitle,
+            companion: eventCompanion,
+            todos: parsedTodos.map((todo) => ({
+                ...todo,
+                id: todo.id + index * 1000,
+            })),
+        }));
+        const firstEvent = nextEvents[0];
 
         if (
-            Number.isNaN(nextEvent.id) ||
-            Number.isNaN(nextEvent.year) ||
-            Number.isNaN(nextEvent.month) ||
-            Number.isNaN(nextEvent.day)
+            !firstEvent ||
+            nextEvents.some((event) => (
+                Number.isNaN(event.id) ||
+                Number.isNaN(event.year) ||
+                Number.isNaN(event.month) ||
+                Number.isNaN(event.day)
+            ))
         ) {
             return;
         }
 
-        setCalendarYear(nextEvent.year);
-        setCalendarMonth(nextEvent.month);
-        setSelectedCalendarDay(nextEvent.day);
+        setCalendarYear(firstEvent.year);
+        setCalendarMonth(firstEvent.month);
+        setSelectedCalendarDay(firstEvent.day);
         setCalendarEvents((current) => (
-            current.some((event) => event.id === nextEvent.id)
+            current.some((event) => event.id === firstEvent.id)
                 ? current
-                : [...current, nextEvent]
+                : [...current, ...nextEvents]
         ));
     }, [
         params.addedEventCompanion,
+        params.addedEventDates,
         params.addedEventDay,
         params.addedEventId,
         params.addedEventMonth,
@@ -350,6 +506,15 @@ export default function ParentHome() {
     };
 
     const toggleSchedule = (id: number) => {
+        const target = schedules.find((item) => item.id === id);
+        if (target?.scheduleId) {
+            void updateSchedule(target.scheduleId, {
+                status: target.done ? 'upcoming' : 'done',
+            }).catch(() => {
+                // 로컬 목데이터 일정은 기존 화면 상태만 갱신합니다.
+            });
+        }
+
         setSchedules((current) => current.map((item) => (
             item.id === id ? { ...item, done: !item.done } : item
         )));
@@ -374,6 +539,22 @@ export default function ParentHome() {
         Keyboard.dismiss();
     };
 
+    const loadScheduleChecklist = async (scheduleId: string, baseId: number) => {
+        try {
+            const response = await getSchedule(scheduleId);
+            const checklist = response.data?.checklist ?? [];
+            if (checklist.length === 0) return;
+
+            setEditTodos(checklist.map((todo, index) => ({
+                id: toNumericId(todo.item_id || `${scheduleId}-${index}`) || baseId + index + 1,
+                text: todo.content,
+                done: todo.is_checked,
+            })));
+        } catch {
+            // 상세 조회가 실패해도 요약 화면에서 만든 Todo는 그대로 보여줍니다.
+        }
+    };
+
     const openScheduleEditor = (item: ScheduleItem) => {
         cancelAddInputs();
         setEditTarget({ type: 'schedule', item });
@@ -381,6 +562,9 @@ export default function ParentHome() {
         setEditCompanion(item.companion);
         setEditTodos(item.todos);
         setEditTodoText('');
+        if (item.scheduleId) {
+            void loadScheduleChecklist(item.scheduleId, item.id);
+        }
     };
 
     const addHandoff = () => {
@@ -409,6 +593,9 @@ export default function ParentHome() {
         setEditCompanion(item.companion);
         setEditTodos(item.todos);
         setEditTodoText('');
+        if (item.scheduleId) {
+            void loadScheduleChecklist(item.scheduleId, item.id);
+        }
     };
 
     const closeEditor = () => {
@@ -441,9 +628,23 @@ export default function ParentHome() {
         setEditTodoText('');
     };
 
-    const saveEdit = () => {
+    const saveEdit = async () => {
         const trimmedText = editText.trim();
         if (!trimmedText || !editTarget) return;
+
+        if (
+            (editTarget.type === 'schedule' || editTarget.type === 'calendar') &&
+            editTarget.item.scheduleId
+        ) {
+            try {
+                await updateSchedule(editTarget.item.scheduleId, {
+                    title: trimmedText,
+                    checklist: editTodos.map((todo) => todo.text),
+                });
+            } catch {
+                // 로컬 목데이터 일정은 기존 화면 상태만 갱신합니다.
+            }
+        }
 
         if (editTarget.type === 'schedule') {
             setSchedules((current) => current.map((item) => (
@@ -476,8 +677,19 @@ export default function ParentHome() {
         closeEditor();
     };
 
-    const deleteEdit = () => {
+    const deleteEdit = async () => {
         if (!editTarget) return;
+
+        if (
+            (editTarget.type === 'schedule' || editTarget.type === 'calendar') &&
+            editTarget.item.scheduleId
+        ) {
+            try {
+                await deleteSchedule(editTarget.item.scheduleId);
+            } catch {
+                // 로컬 목데이터 일정은 기존 화면 상태만 갱신합니다.
+            }
+        }
 
         if (editTarget.type === 'schedule') {
             setSchedules((current) => current.filter((item) => item.id !== editTarget.item.id));
@@ -525,7 +737,15 @@ export default function ParentHome() {
                         </Pressable>
                         <Pressable
                             style={styles.iconButton}
-                            onPress={() => router.push('/paraent_home/companions' as any)}
+                            onPress={() =>
+                                router.push({
+                                    pathname: '/paraent_home/companions',
+                                    params: {
+                                        childId,
+                                        childName,
+                                    },
+                                } as any)
+                            }
                         >
                             <Ionicons name="person-add-outline" size={23} color={Colors.text} />
                         </Pressable>
@@ -535,6 +755,7 @@ export default function ParentHome() {
                                 router.push({
                                     pathname: '/paraent_home/child_profile',
                                     params: {
+                                        childId,
                                         childName,
                                         profileImage: childProfileImage,
                                         sections: childProfileSections,
@@ -563,7 +784,7 @@ export default function ParentHome() {
                             </Pressable>
 
                             <View style={styles.scheduleCard}>
-                                {schedules.map((item) => (
+                                {schedules.length > 0 ? schedules.map((item) => (
                                     <View key={item.id} style={styles.scheduleRow}>
                                         <Pressable
                                             style={[styles.checkBox, item.done && styles.checkBoxDone]}
@@ -619,7 +840,9 @@ export default function ParentHome() {
                                             ) : null}
                                         </Pressable>
                                     </View>
-                                ))}
+                                )) : (
+                                    <Text style={styles.emptyScheduleText}>오늘 예정된 일정이 없어요.</Text>
+                                )}
                             </View>
 
                             <Pressable
@@ -636,9 +859,11 @@ export default function ParentHome() {
                             </Pressable>
                         </View>
 
+                        <View style={styles.sectionDivider} />
+
                         <View style={styles.section}>
                             <Pressable onPress={cancelAddInputs}>
-                                <Text style={styles.sectionTitle}>아이 인수인계 자료</Text>
+                                <Text style={styles.sectionTitle}>아이 주의사항</Text>
                             </Pressable>
 
                             <View style={styles.handoffCard}>
@@ -799,12 +1024,57 @@ export default function ParentHome() {
                             )}
                         </View>
 
+                        {selectedStoryEvent ? (
+                            <View style={styles.calendarActionRow}>
+                                <Pressable
+                                    style={styles.socialStoryButton}
+                                    onPress={() =>
+                                        router.push({
+                                            pathname: '/social_story',
+                                            params: {
+                                                scheduleId: selectedStoryEvent.scheduleId ?? '',
+                                                childName,
+                                                title: selectedStoryEvent.title,
+                                                script: `오늘은 ${selectedStoryEvent.title} 일정이 있어요.`,
+                                                checkedItems: JSON.stringify([
+                                                    `일정_${selectedStoryEvent.title}`,
+                                                    ...selectedStoryEvent.todos.map((todo) => `체크_${todo.text}`),
+                                                ]),
+                                            },
+                                        } as any)
+                                    }
+                                >
+                                    <Ionicons name="book-outline" size={19} color={Colors.text} />
+                                    <Text style={styles.socialStoryButtonText}>소셜 스토리 만들기</Text>
+                                </Pressable>
+
+                                {selectedStoryEvent.scheduleId ? (
+                                    <Pressable
+                                        style={styles.socialStoryButton}
+                                        onPress={() =>
+                                            router.push({
+                                                pathname: '/paraent_home/outing_record',
+                                                params: {
+                                                    scheduleId: selectedStoryEvent.scheduleId,
+                                                    childName,
+                                                },
+                                            } as any)
+                                        }
+                                    >
+                                        <Ionicons name="document-text-outline" size={19} color={Colors.text} />
+                                        <Text style={styles.socialStoryButtonText}>외출 기록 보기</Text>
+                                    </Pressable>
+                                ) : null}
+                            </View>
+                        ) : null}
+
                         <Pressable
                             style={styles.addButton}
                             onPress={() =>
                                 router.push({
                                     pathname: '/paraent_home/calendar_add',
                                     params: {
+                                        childId,
                                         year: String(calendarYear),
                                         month: String(calendarMonth),
                                         day: String(selectedCalendarDay),
@@ -878,7 +1148,7 @@ export default function ParentHome() {
                             onPress={(event) => event.stopPropagation()}
                         >
                             <Text style={styles.modalTitle}>
-                                {editTarget?.type === 'handoff' ? '인수인계 자료 수정하기' : '일정 수정하기'}
+                                {editTarget?.type === 'handoff' ? '주의사항 수정하기' : '일정 수정하기'}
                             </Text>
                             <TextInput
                                 style={[
@@ -1087,6 +1357,15 @@ const styles = StyleSheet.create({
         zIndex: 1,
     },
 
+    sectionDivider: {
+        width: '100%',
+        height: 1,
+        backgroundColor: '#E8DDC8',
+        marginTop: -12,
+        marginBottom: 28,
+        zIndex: 1,
+    },
+
     sectionTitle: {
         fontFamily: Fonts.bodyBold,
         fontSize: 20,
@@ -1105,6 +1384,15 @@ const styles = StyleSheet.create({
         paddingVertical: 18,
         marginBottom: 16,
         gap: 18,
+    },
+
+    emptyScheduleText: {
+        fontFamily: Fonts.body,
+        fontSize: 14,
+        lineHeight: 20,
+        color: Colors.textShadow,
+        textAlign: 'center',
+        paddingVertical: 38,
     },
 
     scheduleRow: {
@@ -1224,6 +1512,34 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '900',
         color: Colors.text,
+    },
+
+    socialStoryButton: {
+        alignSelf: 'flex-start',
+        minHeight: 38,
+        borderRadius: 19,
+        backgroundColor: Colors.pageBg2,
+        borderWidth: 1,
+        borderColor: Colors.highlight1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 14,
+        marginBottom: 14,
+        gap: 7,
+    },
+
+    socialStoryButtonText: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 14,
+        fontWeight: '900',
+        color: Colors.text,
+    },
+
+    calendarActionRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: 4,
     },
 
     inlineInputRow: {

@@ -2,16 +2,17 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, date
+from zoneinfo import ZoneInfo
 from beanie import PydanticObjectId
 import uuid
 import httpx
 
 from app.models.user import User
 from app.models.child import Child
-from app.models.schedule import Schedule, ScheduleStatus, ChecklistItem
-from app.middleware.auth import parent_only, companion_only, get_current_user
-from app.utils.response import success, error
 from app.models.invite import CompanionRequest, RequestStatus
+from app.models.schedule import Schedule, ScheduleStatus, ChecklistItem
+from app.middleware.auth import companion_only, get_current_user
+from app.utils.response import success, error
 from app.routers.ai import AI_SERVER_URL
 
 
@@ -19,17 +20,34 @@ router = APIRouter(prefix="/api/schedules", tags=["외출 일정"])
 
 
 # ─── 요청 스키마 ────────────────────────────────────────
+def can_access_schedule(schedule: Schedule, user: User) -> bool:
+    return (
+        (user.role == "parent" and schedule.guardian_id == str(user.id))
+        or (user.role == "companion" and schedule.companion_id == str(user.id))
+    )
+
+
+async def is_approved_companion(child_id: str, companion_id: str) -> bool:
+    companion_check = await CompanionRequest.find_one(
+        CompanionRequest.companion_id == companion_id,
+        CompanionRequest.child_id == child_id,
+        CompanionRequest.status == RequestStatus.approved
+    )
+    return companion_check is not None
+
+
 class ScheduleCreateRequest(BaseModel):
     child_id: str
     companion_id: Optional[str] = None
     title: str
     date: date
     start_time: str
-    place_type: str
-    transport_type: str
-    activities: list[str] = []
-    wait_possible: bool = False
-    crowd_possible: bool = False
+    place_type: str                     # 장소 유형 (병원, 마트, 공원 등)
+    transport_type: str                 # 이동수단 (버스, 지하철, 택시 등)
+    activities: list[str] = []          # 활동 목록 (진료, 주사 등)
+    wait_possible: bool = False         # 대기 가능성
+    crowd_possible: bool = False        # 혼잡 가능성
+    schedule_features: list[str] = []   # AI 모델 입력용 일정 특성 값
     preparations: list[str] = []
     checklist: list[str] = []
 
@@ -46,6 +64,7 @@ class ScheduleCreateRequest(BaseModel):
                 "activities": ["진료", "주사"],
                 "wait_possible": True,
                 "crowd_possible": True,
+                "schedule_features": ["일정_장소_병원방문", "일정_활동_주사또는치료있음"],
                 "preparations": ["선글라스", "이어폰"],
                 "checklist": ["10분 전 일정 알려주기", "손 잡고 이동하기"]
             }
@@ -61,6 +80,7 @@ class ScheduleUpdateRequest(BaseModel):
     activities: Optional[list[str]] = None
     wait_possible: Optional[bool] = None
     crowd_possible: Optional[bool] = None
+    schedule_features: Optional[list[str]] = None
     companion_id: Optional[str] = None
     preparations: Optional[list[str]] = None
     checklist: Optional[list[str]] = None
@@ -78,6 +98,60 @@ class JournalCreateRequest(BaseModel):
     memo: Optional[str] = None
 
 
+def build_schedule_warnings(schedule: Schedule, child: Child) -> list[str]:
+    warnings: list[str] = []
+
+    risk_score = 0
+    if schedule.wait_possible:
+        risk_score += 1
+    if schedule.crowd_possible:
+        risk_score += 1
+    if schedule.place_type in child.difficult_places:
+        risk_score += 1
+    if schedule.transport_type in child.difficult_places:
+        risk_score += 1
+    if child.caution_situations:
+        risk_score += 1
+
+    if risk_score >= 3:
+        warnings.append("오늘 일정의 전체 주의 수준은 높을 수 있습니다.")
+    else:
+        warnings.append("오늘 일정에 맞춰 아이가 편안하게 이동할 수 있도록 미리 안내해주세요.")
+
+    difficult_environment_text = " ".join(child.difficult_environments)
+    if schedule.crowd_possible or "사람 많은 곳" in child.difficult_environments:
+        warnings.append("사람이 많은 환경에서는 이동 경로와 쉴 수 있는 장소를 미리 확인해주세요.")
+    if "큰 소리" in child.difficult_environments:
+        warnings.append("큰 소리가 날 수 있는 환경에서는 미리 알려주고 안정할 수 있도록 도와주세요.")
+    if schedule.wait_possible or "대기" in child.difficult_environments or "기다리기" in child.transition_difficulties:
+        warnings.append("아이가 기다리는 상황을 어려워할 수 있으니 대기 시간을 미리 알려주세요.")
+    if schedule.place_type in child.difficult_places:
+        warnings.append(f"{schedule.place_type} 장소를 어려워할 수 있으니 도착 전 짧게 설명해주세요.")
+    if schedule.transport_type in child.difficult_places:
+        warnings.append(f"{schedule.transport_type} 이동을 어려워할 수 있으니 탑승 전 과정을 차분히 알려주세요.")
+    if any(keyword in " ".join(child.caution_situations) for keyword in ["차도", "차량", "횡단보도", "신호등"]):
+        warnings.append("차도나 횡단보도 근처에서는 손을 잡고 규칙을 짧게 반복해서 알려주세요.")
+    if any(keyword in " ".join(child.caution_situations) for keyword in ["뛰어", "떨어지"]):
+        warnings.append("갑자기 뛰거나 떨어질 수 있으니 이동 중 가까운 거리에서 함께해주세요.")
+    if child.required_actions:
+        warnings.append(f"필수 행동: {child.required_actions}")
+    if child.calming_methods:
+        warnings.append(f"진정이 필요할 때는 {child.calming_methods[0]}을 먼저 시도해주세요.")
+    if child.avoid_behaviors:
+        warnings.append(f"피해야 할 행동: {child.avoid_behaviors}")
+    if child.notice_time:
+        warnings.append(f"일정 변화나 이동은 {child.notice_time}에 미리 알려주세요.")
+    if not difficult_environment_text and not child.difficult_places and not child.caution_situations:
+        warnings.append("일정 전후로 아이의 표정과 몸짓 변화를 천천히 관찰해주세요.")
+
+    deduped: list[str] = []
+    for warning in warnings:
+        if warning and warning not in deduped:
+            deduped.append(warning)
+
+    return deduped[:5]
+
+
 # ─── 라우트 ────────────────────────────────────────────
 
 # POST /api/schedules - 일정 등록 (부모/동행인 공통)
@@ -92,19 +166,19 @@ async def create_schedule(body: ScheduleCreateRequest, user: User = Depends(get_
     if not child:
         return error("아동 프로필을 찾을 수 없습니다", 404)
 
-    # 부모면 본인 아동인지 확인
-    if user.role == "parent" and child.guardian_id != str(user.id):
-        return error("접근 권한이 없습니다", 403)
+    companion_id = body.companion_id
+    if user.role == "parent":
+        if child.guardian_id != str(user.id):
+            return error("?? ??? ????", 403)
+        if companion_id and not await is_approved_companion(body.child_id, companion_id):
+            return error("?? ??? ?? ??? ???? ????", 403)
+    elif user.role == "companion":
+        if not await is_approved_companion(body.child_id, str(user.id)):
+            return error("?? ??? ????", 403)
+        companion_id = str(user.id)
+    else:
+        return error("?? ??? ????", 403)
 
-    # 동행인이면 담당 아동인지 확인
-    if user.role == "companion":
-        companion_check = await CompanionRequest.find_one(
-            CompanionRequest.companion_id == str(user.id),
-            CompanionRequest.child_id == body.child_id,
-            CompanionRequest.status == RequestStatus.approved
-        )
-        if not companion_check:
-            return error("담당 아동이 아닙니다", 403)
 
     checklist_items = [
         ChecklistItem(item_id=str(uuid.uuid4()), content=c)
@@ -114,7 +188,7 @@ async def create_schedule(body: ScheduleCreateRequest, user: User = Depends(get_
     schedule = Schedule(
         guardian_id=child.guardian_id,
         child_id=body.child_id,
-        companion_id=body.companion_id if user.role == "parent" else str(user.id),
+        companion_id=companion_id,
         title=body.title,
         date=body.date.isoformat(),
         start_time=body.start_time,
@@ -123,6 +197,7 @@ async def create_schedule(body: ScheduleCreateRequest, user: User = Depends(get_
         activities=body.activities,
         wait_possible=body.wait_possible,
         crowd_possible=body.crowd_possible,
+        schedule_features=body.schedule_features,
         preparations=body.preparations,
         checklist=checklist_items,
     )
@@ -153,6 +228,7 @@ async def get_schedules(user: User = Depends(get_current_user)):
             "title": s.title,
             "date": s.date,
             "start_time": s.start_time,
+            "destination": s.place_type,
             "place_type": s.place_type,
             "transport_type": s.transport_type,
             "status": s.status,
@@ -165,7 +241,7 @@ async def get_schedules(user: User = Depends(get_current_user)):
 # GET /api/schedules/today - 오늘 일정 조회 (부모/동행인 공통)
 @router.get("/today")
 async def get_today_schedules(user: User = Depends(get_current_user)):
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = datetime.now(ZoneInfo("Asia/Seoul")).date().isoformat()
 
     if user.role == "parent":
         schedules = await Schedule.find(
@@ -184,6 +260,7 @@ async def get_today_schedules(user: User = Depends(get_current_user)):
             "title": s.title,
             "date": s.date,
             "start_time": s.start_time,
+            "destination": s.place_type,
             "place_type": s.place_type,
             "transport_type": s.transport_type,
             "status": s.status,
@@ -191,6 +268,34 @@ async def get_today_schedules(user: User = Depends(get_current_user)):
         }
         for s in schedules
     ])
+
+
+# GET /api/schedules/{schedule_id}/warnings - 일정/장소 맞춤형 아동 특이사항 핵심 카드 조회
+@router.get("/{schedule_id}/warnings")
+async def get_schedule_warnings(schedule_id: str, user: User = Depends(companion_only)):
+    try:
+        oid = PydanticObjectId(schedule_id)
+    except Exception:
+        return error("유효하지 않은 schedule_id입니다", 400)
+
+    schedule = await Schedule.get(oid)
+    if not schedule:
+        return error("일정을 찾을 수 없습니다", 404)
+    if schedule.companion_id != str(user.id):
+        return error("접근 권한이 없습니다", 403)
+
+    try:
+        child_oid = PydanticObjectId(schedule.child_id)
+    except Exception:
+        return error("아동 프로필을 찾을 수 없습니다", 404)
+
+    child = await Child.get(child_oid)
+    if not child:
+        return error("아동 프로필을 찾을 수 없습니다", 404)
+
+    return success({
+        "warnings": build_schedule_warnings(schedule, child)
+    })
 
 
 # GET /api/schedules/{schedule_id} - 일정 상세 조회
@@ -236,6 +341,7 @@ async def get_schedule(schedule_id: str, user: User = Depends(get_current_user))
         "activities": schedule.activities,
         "wait_possible": schedule.wait_possible,
         "crowd_possible": schedule.crowd_possible,
+        "schedule_features": schedule.schedule_features,
         "status": schedule.status,
         "child_id": schedule.child_id,
         "companion_id": schedule.companion_id,
@@ -257,7 +363,7 @@ async def get_schedule(schedule_id: str, user: User = Depends(get_current_user))
 
 # PATCH /api/schedules/{schedule_id} - 일정 수정 (부모 전용)
 @router.patch("/{schedule_id}")
-async def update_schedule(schedule_id: str, body: ScheduleUpdateRequest, user: User = Depends(parent_only)):
+async def update_schedule(schedule_id: str, body: ScheduleUpdateRequest, user: User = Depends(get_current_user)):
     try:
         oid = PydanticObjectId(schedule_id)
     except Exception:
@@ -266,10 +372,14 @@ async def update_schedule(schedule_id: str, body: ScheduleUpdateRequest, user: U
     schedule = await Schedule.get(oid)
     if not schedule:
         return error("일정을 찾을 수 없습니다", 404)
-    if schedule.guardian_id != str(user.id):
+    if not can_access_schedule(schedule, user):
         return error("접근 권한이 없습니다", 403)
 
     update_data = body.model_dump(exclude_none=True)
+
+    if "companion_id" in update_data and update_data["companion_id"]:
+        if not await is_approved_companion(schedule.child_id, update_data["companion_id"]):
+            return error("해당 아동에 대해 승인된 동행인이 아닙니다", 403)
     if "date" in update_data:
         update_data["date"] = update_data["date"].isoformat()
     if "checklist" in update_data:
@@ -285,7 +395,7 @@ async def update_schedule(schedule_id: str, body: ScheduleUpdateRequest, user: U
 
 # DELETE /api/schedules/{schedule_id} - 일정 삭제 (부모 전용)
 @router.delete("/{schedule_id}")
-async def delete_schedule(schedule_id: str, user: User = Depends(parent_only)):
+async def delete_schedule(schedule_id: str, user: User = Depends(get_current_user)):
     try:
         oid = PydanticObjectId(schedule_id)
     except Exception:
@@ -294,7 +404,7 @@ async def delete_schedule(schedule_id: str, user: User = Depends(parent_only)):
     schedule = await Schedule.get(oid)
     if not schedule:
         return error("일정을 찾을 수 없습니다", 404)
-    if schedule.guardian_id != str(user.id):
+    if not can_access_schedule(schedule, user):
         return error("접근 권한이 없습니다", 403)
 
     await schedule.delete()
@@ -303,7 +413,7 @@ async def delete_schedule(schedule_id: str, user: User = Depends(parent_only)):
 
 # PATCH /api/schedules/{schedule_id}/checklist - 체크리스트 완료 체크
 @router.patch("/{schedule_id}/checklist")
-async def update_checklist(schedule_id: str, body: ChecklistUpdateRequest, user: User = Depends(get_current_user)):
+async def update_checklist(schedule_id: str, body: ChecklistUpdateRequest, user: User = Depends(companion_only)):
     try:
         oid = PydanticObjectId(schedule_id)
     except Exception:
@@ -313,9 +423,7 @@ async def update_checklist(schedule_id: str, body: ChecklistUpdateRequest, user:
     if not schedule:
         return error("일정을 찾을 수 없습니다", 404)
 
-    if user.role == "parent" and schedule.guardian_id != str(user.id):
-        return error("접근 권한이 없습니다", 403)
-    if user.role == "companion" and schedule.companion_id != str(user.id):
+    if schedule.companion_id != str(user.id):
         return error("접근 권한이 없습니다", 403)
 
     updated = False

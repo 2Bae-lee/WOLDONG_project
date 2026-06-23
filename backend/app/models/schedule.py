@@ -29,6 +29,7 @@ class Schedule(Document):
     activities: list[str] = []          # 활동 목록 (진료, 주사 등)
     wait_possible: bool = False         # 대기 가능성
     crowd_possible: bool = False        # 혼잡 가능성
+    schedule_features: list[str] = []   # AI 모델 입력용 일정 특성 값
     preparations: list[str] = []        # 필수 준비물
     checklist: list[ChecklistItem] = [] # 체크리스트
     status: ScheduleStatus = ScheduleStatus.upcoming

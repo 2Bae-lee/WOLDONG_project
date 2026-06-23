@@ -9,6 +9,7 @@ from app.middleware.auth import parent_only
 from app.utils.response import success, error
 from app.models.child import (
     Child, GenderEnum, RelationEnum, DisabilityTypeEnum,
+    CharacterToneEnum, CharacterSpeedEnum, CharacterVoiceEnum,
     EXPLANATION_STYLES, COMMUNICATION_STYLES, CAUTION_SITUATIONS,
     DIFFICULT_ENVIRONMENTS, DIFFICULT_PLACES, TRANSITION_DIFFICULTIES,
     NOTICE_TIMES, CALMING_METHODS
@@ -41,6 +42,11 @@ class ChildCreateRequest(BaseModel):
     # 7단계
     calming_methods: list[str] = []
     avoid_behaviors: str = ""
+    # 소셜 스토리 캐릭터 음성 설정
+    character_name: str = ""
+    character_tone: Optional[CharacterToneEnum] = None
+    character_speed: Optional[CharacterSpeedEnum] = None
+    character_voice: Optional[CharacterVoiceEnum] = None
 
     class Config:
         json_schema_extra = {
@@ -80,6 +86,11 @@ class ChildUpdateRequest(BaseModel):
     notice_time: Optional[str] = None
     calming_methods: Optional[list[str]] = None
     avoid_behaviors: Optional[str] = None
+    character_image_url: Optional[dict] = None
+    character_name: Optional[str] = None
+    character_tone: Optional[CharacterToneEnum] = None
+    character_speed: Optional[CharacterSpeedEnum] = None
+    character_voice: Optional[CharacterVoiceEnum] = None
 
 
 # ─── 유효성 검사 ────────────────────────────────────────
@@ -132,6 +143,10 @@ async def create_child(body: ChildCreateRequest, user: User = Depends(parent_onl
         notice_time=body.notice_time,
         calming_methods=body.calming_methods,
         avoid_behaviors=body.avoid_behaviors,
+        character_name=body.character_name,
+        character_tone=body.character_tone,
+        character_speed=body.character_speed,
+        character_voice=body.character_voice,
     )
     await child.insert()
 
@@ -153,6 +168,11 @@ async def get_my_children(user: User = Depends(parent_only)):
             "gender": c.gender,
             "birth_date": c.birth_date,
             "disability_type": c.disability_type,
+            "character_image_url": c.character_image_url,
+            "character_name": c.character_name,
+            "character_tone": c.character_tone,
+            "character_speed": c.character_speed,
+            "character_voice": c.character_voice,
         }
         for c in children
     ])
@@ -189,6 +209,11 @@ async def get_child(child_id: str, user: User = Depends(parent_only)):
         "notice_time": child.notice_time,
         "calming_methods": child.calming_methods,
         "avoid_behaviors": child.avoid_behaviors,
+        "character_image_url": child.character_image_url,
+        "character_name": child.character_name,
+        "character_tone": child.character_tone,
+        "character_speed": child.character_speed,
+        "character_voice": child.character_voice,
         "created_at": str(child.created_at),
         "updated_at": str(child.updated_at),
     })
@@ -237,3 +262,24 @@ async def delete_child(child_id: str, user: User = Depends(parent_only)):
 
     await child.delete()
     return success(None, "아동 프로필이 삭제되었습니다")
+
+
+# PATCH /api/children/{child_id}/character - 캐릭터 이미지 저장
+@router.patch("/{child_id}/character")
+async def save_character(child_id: str, character_images: dict, user: User = Depends(parent_only)):
+    try:
+        oid = PydanticObjectId(child_id)
+    except Exception:
+        return error("유효하지 않은 child_id입니다", 400)
+
+    child = await Child.get(oid)
+    if not child:
+        return error("아동 프로필을 찾을 수 없습니다", 404)
+    if child.guardian_id != str(user.id):
+        return error("접근 권한이 없습니다", 403)
+
+    await child.set({
+        "character_image_url": character_images,
+        "updated_at": datetime.utcnow()
+    })
+    return success(None, "캐릭터 이미지가 저장되었습니다")

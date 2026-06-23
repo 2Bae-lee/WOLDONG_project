@@ -16,22 +16,25 @@ import {
     TextInput,
     View,
 } from 'react-native';
-import { Colors } from '../../constants/Colors';
 import {
-    CompanionTodaySchedule,
-    getCompanionTodaySchedules,
-    subscribeCompanionTodaySchedules,
-    toggleCompanionTodaySchedule,
-    toggleCompanionTodayTodo,
-    updateCompanionTodaySchedule,
-} from '../../constants/CompanionTodayState';
+    CompanionChild,
+    TodayScheduleSummary,
+    getCompanionChildren,
+    getCompanionProfile,
+    getTodaySchedules,
+} from '../../constants/Api';
+import { Colors } from '../../constants/Colors';
+import { CompanionTodaySchedule } from '../../constants/CompanionTodayState';
 import { Fonts } from '../../constants/Fonts';
 import { hasUnreadCompanionNotifications } from '../../constants/NotificationState';
+import { RepeatDate, parseRepeatDates } from '../../constants/Recurrence';
 
 type ActiveTab = 'today' | 'calendar';
 
 type ChildItem = {
-    id: number;
+    id: string;
+    childId?: string;
+    primaryScheduleId?: string;
     name: string;
     guardian: string;
     schedules: number;
@@ -59,24 +62,38 @@ type CalendarEvent = {
 
 const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
 
-const initialChildren: ChildItem[] = [
-    {
-        id: 1,
-        name: '김월동',
-        guardian: '김보호자',
-        schedules: 3,
-        permissions: ['오늘 일정', '공유 캘린더', '인수인계 자료'],
-        status: 'connected',
-    },
-    {
-        id: 2,
-        name: '이하준',
-        guardian: '이보호자',
-        schedules: 1,
-        permissions: ['오늘 일정', '아이 프로필'],
-        status: 'connected',
-    },
-];
+const createNumericId = (value: string) => (
+    Number.parseInt(value.slice(-8), 16) ||
+    value.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
+);
+
+const getSchedulePlace = (schedule: TodayScheduleSummary) => (
+    schedule.destination || schedule.place_type || '장소 확인'
+);
+
+const mapTodaySchedules = (
+    schedules: TodayScheduleSummary[],
+    childById: Map<string, CompanionChild>
+): CompanionTodaySchedule[] => (
+    schedules.map((schedule) => {
+        const child = childById.get(schedule.child_id);
+        const scheduleId = createNumericId(schedule.schedule_id);
+        const place = getSchedulePlace(schedule);
+        const timeText = [schedule.start_time, place].filter(Boolean).join(' · ');
+
+        return {
+            id: scheduleId,
+            scheduleId: schedule.schedule_id,
+            childName: child?.name ?? '담당 어린이',
+            title: schedule.title,
+            guardian: '연결된 보호자',
+            done: schedule.status === 'done',
+            todos: timeText
+                ? [{ id: scheduleId + 1, text: timeText, done: schedule.status === 'done' }]
+                : [],
+        };
+    })
+);
 
 export default function CompanionChildren() {
     const params = useLocalSearchParams<{
@@ -100,9 +117,12 @@ export default function CompanionChildren() {
         addedEventChildName?: string;
         addedEventGuardian?: string;
         addedEventTodos?: string;
+        addedEventDates?: string;
         tab?: string;
     }>();
-    const companionName = params.companionName || '박민지';
+    const [apiCompanionName, setApiCompanionName] = useState('');
+    const [loadError, setLoadError] = useState('');
+    const companionName = params.companionName || apiCompanionName || '동행인';
     const companionJob = params.companionJob || params.companionRelation || '담임 선생님';
     const companionIntro = params.companionIntro || '아이에게 필요한 일정을 차분하게 함께 확인해요.';
     const companionProfileImage = params.companionProfileImage || '';
@@ -111,7 +131,7 @@ export default function CompanionChildren() {
     const currentMonth = today.getMonth() + 1;
     const todayDay = today.getDate();
     const [activeTab, setActiveTab] = useState<ActiveTab>('today');
-    const [children, setChildren] = useState(initialChildren);
+    const [children, setChildren] = useState<ChildItem[]>([]);
     const [requestMessage, setRequestMessage] = useState('');
     const [calendarYear, setCalendarYear] = useState(currentYear);
     const [calendarMonth, setCalendarMonth] = useState(currentMonth);
@@ -163,9 +183,7 @@ export default function CompanionChildren() {
     const [editTodoText, setEditTodoText] = useState('');
     const [editError, setEditError] = useState('');
     const [isChildPickerOpen, setIsChildPickerOpen] = useState(false);
-    const [todayTodos, setTodayTodos] = useState<CompanionTodaySchedule[]>(() => (
-        getCompanionTodaySchedules()
-    ));
+    const [todayTodos, setTodayTodos] = useState<CompanionTodaySchedule[]>([]);
     const [editingTodayTodo, setEditingTodayTodo] = useState<CompanionTodaySchedule | null>(null);
     const [todayEditTitle, setTodayEditTitle] = useState('');
     const [todayEditTodos, setTodayEditTodos] = useState<CalendarTodo[]>([]);
@@ -177,16 +195,66 @@ export default function CompanionChildren() {
     const connectedChildren = children.filter((child) => child.status === 'connected');
     const selectedEditChild = connectedChildren.find((child) => child.name === editChildName);
 
-    useFocusEffect(
-        useCallback(() => {
-            setTodayTodos(getCompanionTodaySchedules());
-            setHasUnreadNotifications(hasUnreadCompanionNotifications());
-            const unsubscribe = subscribeCompanionTodaySchedules(() => {
-                setTodayTodos(getCompanionTodaySchedules());
+    const loadCompanionHome = useCallback(async () => {
+        try {
+            const [profileResponse, childrenResponse, todaySchedulesResponse] = await Promise.all([
+                getCompanionProfile(),
+                getCompanionChildren(),
+                getTodaySchedules(),
+            ]);
+
+            const companionProfile = profileResponse.data;
+            const assignedChildren = childrenResponse.data ?? [];
+            const todaySchedules = todaySchedulesResponse.data ?? [];
+            const scheduleCountByChildId = new Map<string, number>();
+            const primaryScheduleByChildId = new Map<string, string>();
+
+            todaySchedules.forEach((schedule) => {
+                scheduleCountByChildId.set(
+                    schedule.child_id,
+                    (scheduleCountByChildId.get(schedule.child_id) ?? 0) + 1
+                );
+                if (!primaryScheduleByChildId.has(schedule.child_id)) {
+                    primaryScheduleByChildId.set(schedule.child_id, schedule.schedule_id);
+                }
             });
 
-            return unsubscribe;
-        }, [])
+            const childById = new Map(assignedChildren.map((child) => [child.child_id, child]));
+            const nextConnectedChildren: ChildItem[] = assignedChildren.map((child) => ({
+                id: child.child_id,
+                childId: child.child_id,
+                primaryScheduleId: primaryScheduleByChildId.get(child.child_id),
+                name: child.name,
+                guardian: '연결된 보호자',
+                schedules: scheduleCountByChildId.get(child.child_id) ?? 0,
+                permissions: [
+                    child.disability_type || '아이 프로필',
+                    '오늘 일정',
+                    '공유 캘린더',
+                ],
+                status: 'connected' as const,
+            }));
+
+            setApiCompanionName(companionProfile?.name ?? '');
+            setTodayTodos(mapTodaySchedules(todaySchedules, childById));
+            setChildren((current) => [
+                ...nextConnectedChildren,
+                ...current.filter((child) => (
+                    child.status === 'pending' &&
+                    !nextConnectedChildren.some((connectedChild) => connectedChild.inviteCode === child.inviteCode)
+                )),
+            ]);
+            setLoadError('');
+        } catch (error) {
+            setLoadError(error instanceof Error ? error.message : '담당 어린이 정보를 불러오지 못했어요.');
+        }
+    }, []);
+
+    useFocusEffect(
+        useCallback(() => {
+            setHasUnreadNotifications(hasUnreadCompanionNotifications());
+            loadCompanionHome();
+        }, [loadCompanionHome])
     );
 
     useEffect(() => {
@@ -202,7 +270,7 @@ export default function CompanionChildren() {
             return [
                 ...current,
                 {
-                    id: Date.now(),
+                    id: `pending-${normalizedCode}`,
                     name: params.requestedChildName ?? `초대 코드 ${normalizedCode}`,
                     guardian: '보호자 승인 대기',
                     schedules: 0,
@@ -266,29 +334,41 @@ export default function CompanionChildren() {
             parsedTodos = [];
         }
 
+        const fallbackDate: RepeatDate = {
+            year: addedEventYear,
+            month: addedEventMonth,
+            day: addedEventDay,
+        };
+        const eventDates = parseRepeatDates(params.addedEventDates);
+        const nextEvents = (eventDates.length > 0 ? eventDates : [fallbackDate]).map((date, index) => ({
+            id: addedEventId + index,
+            year: date.year,
+            month: date.month,
+            day: date.day,
+            childName: params.addedEventChildName ?? '김월동',
+            guardian: params.addedEventGuardian ?? '김보호자',
+            title: params.addedEventTitle ?? '새 일정',
+            todos: parsedTodos.map((todo) => ({
+                ...todo,
+                id: todo.id + index * 1000,
+            })),
+        }));
+        const firstEvent = nextEvents[0];
+
+        if (!firstEvent) return;
+
         setCalendarEvents((current) => {
             if (current.some((event) => event.id === addedEventId)) return current;
 
-            return [
-                ...current,
-                {
-                    id: addedEventId,
-                    year: addedEventYear,
-                    month: addedEventMonth,
-                    day: addedEventDay,
-                    childName: params.addedEventChildName ?? '김월동',
-                    guardian: params.addedEventGuardian ?? '김보호자',
-                    title: params.addedEventTitle ?? '새 일정',
-                    todos: parsedTodos,
-                },
-            ];
+            return [...current, ...nextEvents];
         });
-        setCalendarYear(addedEventYear);
-        setCalendarMonth(addedEventMonth);
-        setSelectedDay(addedEventDay);
+        setCalendarYear(firstEvent.year);
+        setCalendarMonth(firstEvent.month);
+        setSelectedDay(firstEvent.day);
         setActiveTab('calendar');
     }, [
         params.addedEventChildName,
+        params.addedEventDates,
         params.addedEventDay,
         params.addedEventGuardian,
         params.addedEventId,
@@ -388,6 +468,8 @@ export default function CompanionChildren() {
         router.push({
             pathname: '/companion_home/child_home',
             params: {
+                childId: child.childId ?? child.id,
+                scheduleId: child.primaryScheduleId ?? '',
                 childName: child.name,
                 guardian: child.guardian,
             },
@@ -513,11 +595,28 @@ export default function CompanionChildren() {
     };
 
     const toggleTodaySchedule = (id: number) => {
-        toggleCompanionTodaySchedule(id);
+        setTodayTodos((current) => current.map((schedule) => (
+            schedule.id === id
+                ? {
+                    ...schedule,
+                    done: !schedule.done,
+                    todos: schedule.todos.map((todo) => ({ ...todo, done: !schedule.done })),
+                }
+                : schedule
+        )));
     };
 
     const toggleTodayTodo = (scheduleId: number, todoId: number) => {
-        toggleCompanionTodayTodo(scheduleId, todoId);
+        setTodayTodos((current) => current.map((schedule) => (
+            schedule.id === scheduleId
+                ? {
+                    ...schedule,
+                    todos: schedule.todos.map((todo) => (
+                        todo.id === todoId ? { ...todo, done: !todo.done } : todo
+                    )),
+                }
+                : schedule
+        )));
     };
 
     const openTodayEditor = (schedule: CompanionTodaySchedule) => {
@@ -565,7 +664,15 @@ export default function CompanionChildren() {
             return;
         }
 
-        updateCompanionTodaySchedule(editingTodayTodo.id, trimmedTitle, todayEditTodos);
+        setTodayTodos((current) => current.map((schedule) => (
+            schedule.id === editingTodayTodo.id
+                ? {
+                    ...schedule,
+                    title: trimmedTitle,
+                    todos: todayEditTodos.map((todo) => ({ ...todo })),
+                }
+                : schedule
+        )));
         closeTodayEditor();
     };
 
@@ -613,66 +720,71 @@ export default function CompanionChildren() {
                         <View style={styles.section}>
                             <Text style={styles.title}>{currentMonth}월 {todayDay}일 오늘 할 일</Text>
                             <Text style={styles.description}>담당 어린이들의 오늘 일정을 모아봤어요.</Text>
+                            {loadError ? <Text style={styles.errorText}>{loadError}</Text> : null}
 
                             <View style={styles.todoCard}>
-                                {todayTodos.map((schedule) => (
-                                    <View key={schedule.id} style={styles.todoBlock}>
-                                        <View style={styles.todoTitleRow}>
-                                            <Pressable
-                                                style={[
-                                                    styles.todayScheduleCheck,
-                                                    schedule.done && styles.todayScheduleCheckDone,
-                                                ]}
-                                                onPress={() => toggleTodaySchedule(schedule.id)}
-                                                hitSlop={8}
-                                            >
-                                                {schedule.done ? (
-                                                    <Ionicons name="checkmark" size={14} color={Colors.realwhite} />
-                                                ) : null}
-                                            </Pressable>
-                                            <Pressable
-                                                style={styles.todayScheduleTextButton}
-                                                onPress={() => openTodayEditor(schedule)}
-                                            >
-                                                <Text style={[
-                                                    styles.todoTitle,
-                                                    schedule.done && styles.todoDoneText,
-                                                ]} numberOfLines={1}>
-                                                    {schedule.title}
+                                {todayTodos.length > 0 ? (
+                                    todayTodos.map((schedule) => (
+                                        <View key={schedule.id} style={styles.todoBlock}>
+                                            <View style={styles.todoTitleRow}>
+                                                <Pressable
+                                                    style={[
+                                                        styles.todayScheduleCheck,
+                                                        schedule.done && styles.todayScheduleCheckDone,
+                                                    ]}
+                                                    onPress={() => toggleTodaySchedule(schedule.id)}
+                                                    hitSlop={8}
+                                                >
+                                                    {schedule.done ? (
+                                                        <Ionicons name="checkmark" size={14} color={Colors.realwhite} />
+                                                    ) : null}
+                                                </Pressable>
+                                                <Pressable
+                                                    style={styles.todayScheduleTextButton}
+                                                    onPress={() => openTodayEditor(schedule)}
+                                                >
+                                                    <Text style={[
+                                                        styles.todoTitle,
+                                                        schedule.done && styles.todoDoneText,
+                                                    ]} numberOfLines={1}>
+                                                        {schedule.title}
+                                                    </Text>
+                                                </Pressable>
+                                                <Text style={styles.childPill} numberOfLines={1}>
+                                                    {schedule.childName}
                                                 </Text>
-                                            </Pressable>
-                                            <Text style={styles.childPill} numberOfLines={1}>
-                                                {schedule.childName}
-                                            </Text>
+                                            </View>
+                                            <Text style={styles.todoMeta}>{schedule.childName}의 오늘 일정</Text>
+                                            <View style={styles.todoList}>
+                                                {schedule.todos.map((todo) => (
+                                                    <View key={todo.id} style={styles.todoRow}>
+                                                        <Pressable
+                                                            style={styles.todoCheckButton}
+                                                            onPress={() => toggleTodayTodo(schedule.id, todo.id)}
+                                                            hitSlop={8}
+                                                        >
+                                                            <Ionicons
+                                                                name={todo.done ? 'checkmark-circle' : 'ellipse-outline'}
+                                                                size={16}
+                                                                color={todo.done ? Colors.highlight1 : Colors.textShadow}
+                                                            />
+                                                        </Pressable>
+                                                        <Pressable
+                                                            style={styles.todoTextButton}
+                                                            onPress={() => openTodayEditor(schedule)}
+                                                        >
+                                                            <Text style={[styles.todoText, todo.done && styles.todoDoneText]}>
+                                                                {todo.text}
+                                                            </Text>
+                                                        </Pressable>
+                                                    </View>
+                                                ))}
+                                            </View>
                                         </View>
-                                        <Text style={styles.todoMeta}>{schedule.guardian} 보호자와 공유 중</Text>
-                                        <View style={styles.todoList}>
-                                            {schedule.todos.map((todo) => (
-                                                <View key={todo.id} style={styles.todoRow}>
-                                                    <Pressable
-                                                        style={styles.todoCheckButton}
-                                                        onPress={() => toggleTodayTodo(schedule.id, todo.id)}
-                                                        hitSlop={8}
-                                                    >
-                                                        <Ionicons
-                                                            name={todo.done ? 'checkmark-circle' : 'ellipse-outline'}
-                                                            size={16}
-                                                            color={todo.done ? Colors.highlight1 : Colors.textShadow}
-                                                        />
-                                                    </Pressable>
-                                                    <Pressable
-                                                        style={styles.todoTextButton}
-                                                        onPress={() => openTodayEditor(schedule)}
-                                                    >
-                                                        <Text style={[styles.todoText, todo.done && styles.todoDoneText]}>
-                                                            {todo.text}
-                                                        </Text>
-                                                    </Pressable>
-                                                </View>
-                                            ))}
-                                        </View>
-                                    </View>
-                                ))}
+                                    ))
+                                ) : (
+                                    <Text style={styles.emptyText}>오늘 수행할 일정이 없어요.</Text>
+                                )}
                             </View>
                         </View>
 
@@ -706,56 +818,62 @@ export default function CompanionChildren() {
                             ) : null}
 
                             <View style={styles.listArea}>
-                                {children.map((child) => (
-                                    <Pressable
-                                        key={child.id}
-                                        style={[
-                                            styles.childCard,
-                                            child.status === 'pending' && styles.childCardPending,
-                                        ]}
-                                        onPress={() => openChildHome(child)}
-                                    >
-                                        <View style={styles.avatarCircle}>
-                                            <Image
-                                                source={require('../../assets/images/icon_child.png')}
-                                                style={styles.avatarImage}
-                                                resizeMode="contain"
-                                            />
-                                        </View>
+                                {children.length > 0 ? (
+                                    children.map((child) => (
+                                        <Pressable
+                                            key={child.id}
+                                            style={[
+                                                styles.childCard,
+                                                child.status === 'pending' && styles.childCardPending,
+                                            ]}
+                                            onPress={() => openChildHome(child)}
+                                        >
+                                            <View style={styles.avatarCircle}>
+                                                <Image
+                                                    source={require('../../assets/images/icon_child.png')}
+                                                    style={styles.avatarImage}
+                                                    resizeMode="contain"
+                                                />
+                                            </View>
 
-                                        <View style={styles.childInfo}>
-                                            <Text style={styles.childName}>{child.name}</Text>
-                                            <Text style={styles.guardianText}>
-                                                {child.status === 'pending'
-                                                    ? '보호자 승인 요청을 기다리고 있어요'
-                                                    : `${child.guardian} 보호자와 연결됨`}
-                                            </Text>
-                                            <View style={styles.metaRow}>
-                                                <View style={styles.metaPill}>
-                                                    <Ionicons
-                                                        name={child.status === 'pending' ? 'time-outline' : 'calendar-outline'}
-                                                        size={14}
-                                                        color={Colors.text}
-                                                    />
-                                                    <Text style={styles.metaText}>
-                                                        {child.status === 'pending'
-                                                            ? '승인 대기'
-                                                            : `오늘 일정 ${child.schedules}개`}
-                                                    </Text>
+                                            <View style={styles.childInfo}>
+                                                <Text style={styles.childName}>{child.name}</Text>
+                                                <Text style={styles.guardianText}>
+                                                    {child.status === 'pending'
+                                                        ? '승인 요청을 기다리고 있어요'
+                                                        : '담당 어린이'}
+                                                </Text>
+                                                <View style={styles.metaRow}>
+                                                    <View style={styles.metaPill}>
+                                                        <Ionicons
+                                                            name={child.status === 'pending' ? 'time-outline' : 'calendar-outline'}
+                                                            size={14}
+                                                            color={Colors.text}
+                                                        />
+                                                        <Text style={styles.metaText}>
+                                                            {child.status === 'pending'
+                                                                ? '승인 대기'
+                                                                : `오늘 일정 ${child.schedules}개`}
+                                                        </Text>
+                                                    </View>
+                                                </View>
+                                                <View style={styles.permissionRow}>
+                                                    {child.permissions.slice(0, 2).map((permission) => (
+                                                        <Text key={permission} style={styles.permissionChip}>{permission}</Text>
+                                                    ))}
                                                 </View>
                                             </View>
-                                            <View style={styles.permissionRow}>
-                                                {child.permissions.slice(0, 2).map((permission) => (
-                                                    <Text key={permission} style={styles.permissionChip}>{permission}</Text>
-                                                ))}
-                                            </View>
-                                        </View>
 
-                                        {child.status === 'connected' ? (
-                                            <Ionicons name="chevron-forward" size={21} color={Colors.textShadow} />
-                                        ) : null}
-                                    </Pressable>
-                                ))}
+                                            {child.status === 'connected' ? (
+                                                <Ionicons name="chevron-forward" size={21} color={Colors.textShadow} />
+                                            ) : null}
+                                        </Pressable>
+                                    ))
+                                ) : (
+                                    <View style={styles.emptyCard}>
+                                        <Text style={styles.emptyText}>아직 연결된 담당 어린이가 없어요.</Text>
+                                    </View>
+                                )}
                             </View>
                         </View>
                     </>
@@ -833,7 +951,7 @@ export default function CompanionChildren() {
                                         <View style={styles.calendarEventTextArea}>
                                             <Text style={styles.calendarEventTitle}>{event.title}</Text>
                                             <Text style={styles.calendarEventMeta}>
-                                                {event.childName} · {event.guardian} 보호자와 공유 중
+                                                {event.childName}의 공유 일정
                                             </Text>
                                             {event.todos.length > 0 ? (
                                                 <View style={styles.calendarTodoPreview}>

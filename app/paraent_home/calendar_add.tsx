@@ -16,8 +16,28 @@ import {
 } from 'react-native';
 import BackButton from '../../components/BackButton';
 import PrimaryButton from '../../components/PrimaryButton';
+import RepeatSelector from '../../components/RepeatSelector';
+import { ApiError, createSchedule, getParentHome } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
+import {
+    RepeatDate,
+    RepeatOption,
+    getDateKey,
+    getRepeatDates,
+    toggleRepeatDate,
+} from '../../constants/Recurrence';
+import {
+    SCHEDULE_FEATURE_CROWD,
+    SCHEDULE_FEATURE_WAIT,
+    getScheduleFeatureLabels,
+    getUniqueScheduleFeatures,
+    scheduleFeatureGroups,
+    scheduleFeatureLabelMap,
+    scheduleFeatureTemplates,
+    scheduleTypeFeatureMap,
+    transportFeatureMap,
+} from '../../constants/ScheduleFeatures';
 
 const scheduleTypes = [
     { label: '병원', description: '진료, 검사, 예방접종 일정' },
@@ -36,7 +56,7 @@ const companions = [
     {
         name: '이하늘',
         relation: '활동지원사',
-        description: '외출 일정과 인수인계 자료를 함께 확인해요.',
+        description: '외출 일정과 주의사항을 함께 확인해요.',
     },
     {
         name: '최서윤',
@@ -44,6 +64,7 @@ const companions = [
         description: '치료 일정과 아이 반응 메모를 함께 확인해요.',
     },
 ];
+const transportTypes = ['버스', '지하철', '택시', '도보', '자가용'];
 const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
 
 type CalendarDay = {
@@ -55,6 +76,7 @@ type SheetTarget = 'type' | 'companion' | null;
 
 export default function CalendarAdd() {
     const params = useLocalSearchParams<{
+        childId?: string;
         year?: string;
         month?: string;
         day?: string;
@@ -69,12 +91,35 @@ export default function CalendarAdd() {
     const [selectedDay, setSelectedDay] = useState(initialDay);
     const [selectedType, setSelectedType] = useState('');
     const [selectedCompanion, setSelectedCompanion] = useState('');
+    const [selectedTransport, setSelectedTransport] = useState('');
+    const [startTime, setStartTime] = useState('10:00');
     const [scheduleTitle, setScheduleTitle] = useState('');
     const [memo, setMemo] = useState('');
     const [todos, setTodos] = useState<string[]>([]);
     const [todoText, setTodoText] = useState('');
+    const [preparations, setPreparations] = useState<string[]>([]);
+    const [preparationText, setPreparationText] = useState('');
+    const [selectedFeatureValues, setSelectedFeatureValues] = useState<string[]>([]);
+    const [excludedFeatureValues, setExcludedFeatureValues] = useState<string[]>([]);
     const [error, setError] = useState('');
+    const [saving, setSaving] = useState(false);
     const [sheetTarget, setSheetTarget] = useState<SheetTarget>(null);
+    const [repeatOption, setRepeatOption] = useState<RepeatOption>('none');
+    const [customRepeatDates, setCustomRepeatDates] = useState<RepeatDate[]>([]);
+    const selectedDate = { year: selectedYear, month: selectedMonth, day: selectedDay };
+    const repeatDates = getRepeatDates(repeatOption, selectedDate, customRepeatDates);
+    const repeatDateKeys = new Set(repeatDates.map(getDateKey));
+    const baseScheduleFeatureValues = useMemo(() => getUniqueScheduleFeatures(
+        scheduleTypeFeatureMap[selectedType] ?? [],
+        transportFeatureMap[selectedTransport] ?? [],
+    ), [selectedTransport, selectedType]);
+    const selectedScheduleFeatureValues = useMemo(() => getUniqueScheduleFeatures(
+        baseScheduleFeatureValues.filter((value) => !excludedFeatureValues.includes(value)),
+        selectedFeatureValues,
+    ), [baseScheduleFeatureValues, excludedFeatureValues, selectedFeatureValues]);
+    const selectedScheduleFeatureLabels = getScheduleFeatureLabels(selectedScheduleFeatureValues);
+    const waitPossible = selectedScheduleFeatureValues.includes(SCHEDULE_FEATURE_WAIT);
+    const crowdPossible = selectedScheduleFeatureValues.includes(SCHEDULE_FEATURE_CROWD);
     const calendarDays = useMemo(() => {
         const firstDay = new Date(selectedYear, selectedMonth - 1, 1).getDay();
         const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
@@ -120,8 +165,24 @@ export default function CalendarAdd() {
             return;
         }
 
+        const nextDate = {
+            year: selectedYear,
+            month: selectedMonth,
+            day: calendarDay.day,
+        };
+
         setSelectedDay(calendarDay.day);
+        if (repeatOption === 'custom') {
+            setCustomRepeatDates((current) => toggleRepeatDate(current, nextDate));
+        }
         clearError();
+    };
+
+    const handleRepeatChange = (option: RepeatOption) => {
+        setRepeatOption(option);
+        if (option === 'custom' && customRepeatDates.length === 0) {
+            setCustomRepeatDates([selectedDate]);
+        }
     };
 
     const selectOption = (target: Exclude<SheetTarget, null>, option: string) => {
@@ -137,6 +198,44 @@ export default function CalendarAdd() {
         setSheetTarget(target);
     };
 
+    const toggleScheduleFeature = (featureValue: string) => {
+        if (baseScheduleFeatureValues.includes(featureValue)) {
+            setSelectedFeatureValues((current) => current.filter((value) => value !== featureValue));
+            setExcludedFeatureValues((current) => (
+                current.includes(featureValue)
+                    ? current.filter((value) => value !== featureValue)
+                    : [...current, featureValue]
+            ));
+            return;
+        }
+
+        setSelectedFeatureValues((current) => (
+            current.includes(featureValue)
+                ? current.filter((value) => value !== featureValue)
+                : [...current, featureValue]
+        ));
+    };
+
+    const toggleFeatureTemplate = (featureValues: string[]) => {
+        setSelectedFeatureValues((current) => {
+            const templateValueSet = new Set(featureValues);
+            const allSelected = featureValues.every((value) => selectedScheduleFeatureValues.includes(value));
+
+            if (allSelected) {
+                setExcludedFeatureValues((excluded) => getUniqueScheduleFeatures(
+                    excluded,
+                    featureValues.filter((value) => baseScheduleFeatureValues.includes(value)),
+                ));
+                return current.filter((value) => !templateValueSet.has(value));
+            }
+
+            setExcludedFeatureValues((excluded) => (
+                excluded.filter((value) => !templateValueSet.has(value))
+            ));
+            return getUniqueScheduleFeatures(current, featureValues);
+        });
+    };
+
     const sheetOptions = sheetTarget === 'type'
         ? scheduleTypes.map((option) => ({
             value: option.label,
@@ -149,24 +248,94 @@ export default function CalendarAdd() {
             badge: option.relation,
         }));
 
-    const handleSave = () => {
-        if (!selectedType || !selectedCompanion || !scheduleTitle.trim()) {
-            setError('날짜, 일정 종류, 동행인, 일정 이름을 모두 입력해주세요.');
+    const formatApiDate = (date: RepeatDate) => {
+        const month = String(date.month).padStart(2, '0');
+        const day = String(date.day).padStart(2, '0');
+
+        return `${date.year}-${month}-${day}`;
+    };
+
+    const getChildId = async () => {
+        if (params.childId) return params.childId;
+
+        const homeResponse = await getParentHome();
+        return homeResponse.data?.children?.[0]?.child_id ?? '';
+    };
+
+    const handleSave = async () => {
+        if (saving) return;
+
+        if (!selectedType || !selectedCompanion || !selectedTransport || !scheduleTitle.trim()) {
+            setError('날짜, 일정 종류, 동행인, 이동수단, 일정 이름을 모두 입력해주세요.');
+            return;
+        }
+
+        if (!/^\d{2}:\d{2}$/.test(startTime.trim())) {
+            setError('출발 시간은 10:00처럼 HH:MM 형식으로 입력해주세요.');
+            return;
+        }
+
+        if (repeatOption === 'custom' && repeatDates.length === 0) {
+            setError('기타 반복에서는 캘린더에서 날짜를 하나 이상 선택해주세요.');
             return;
         }
 
         Keyboard.dismiss();
+        setSaving(true);
+
+        const scheduleIdFallback = String(Date.now());
+        let createdScheduleId = scheduleIdFallback;
+
+        try {
+            const childId = await getChildId();
+            if (!childId) {
+                throw new ApiError('아동 프로필을 먼저 등록해주세요.', 400);
+            }
+
+            const datesToCreate = repeatDates;
+
+            const responses = await Promise.all(datesToCreate.map((date) => createSchedule({
+                child_id: childId,
+                title: scheduleTitle.trim(),
+                date: formatApiDate(date),
+                start_time: startTime.trim(),
+                place_type: selectedType,
+                transport_type: selectedTransport,
+                activities: getUniqueScheduleFeatures(
+                    [selectedType],
+                    selectedScheduleFeatureValues
+                        .filter((value) => value.startsWith('일정_활동_'))
+                        .map((value) => scheduleFeatureLabelMap[value] ?? value),
+                ),
+                wait_possible: waitPossible,
+                crowd_possible: crowdPossible,
+                schedule_features: selectedScheduleFeatureValues,
+                preparations,
+                checklist: todos,
+            })));
+
+            createdScheduleId = responses[0]?.data?.schedule_id ?? scheduleIdFallback;
+        } catch (saveError) {
+            setError(saveError instanceof ApiError
+                ? saveError.message
+                : '일정을 저장하지 못했어요. 잠시 후 다시 시도해주세요.');
+            setSaving(false);
+            return;
+        }
+
         router.replace({
             pathname: '/paraent_home',
             params: {
                 tab: 'calendar',
-                addedEventId: String(Date.now()),
+                addedEventId: createdScheduleId,
                 addedEventYear: String(selectedYear),
                 addedEventMonth: String(selectedMonth),
                 addedEventDay: String(selectedDay),
                 addedEventTitle: scheduleTitle.trim(),
                 addedEventCompanion: selectedCompanion,
                 addedEventTodos: JSON.stringify(todos),
+                addedEventDates: JSON.stringify(repeatDates),
+                addedEventFeatures: JSON.stringify(selectedScheduleFeatureValues),
             },
         } as any);
     };
@@ -181,6 +350,18 @@ export default function CalendarAdd() {
 
     const deleteTodo = (index: number) => {
         setTodos((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    };
+
+    const addPreparation = () => {
+        const trimmedText = preparationText.trim();
+        if (!trimmedText) return;
+
+        setPreparations((current) => [...current, trimmedText]);
+        setPreparationText('');
+    };
+
+    const deletePreparation = (index: number) => {
+        setPreparations((current) => current.filter((_, itemIndex) => itemIndex !== index));
     };
 
     return (
@@ -237,13 +418,26 @@ export default function CalendarAdd() {
 
                     <View style={styles.calendarGrid}>
                         {calendarDays.map((calendarDay, index) => {
-                            const selected = calendarDay.monthOffset === 0 && calendarDay.day === selectedDay;
                             const muted = calendarDay.monthOffset !== 0;
+                            const repeated = calendarDay.monthOffset === 0 && repeatDateKeys.has(getDateKey({
+                                year: selectedYear,
+                                month: selectedMonth,
+                                day: calendarDay.day,
+                            }));
+                            const selected = calendarDay.monthOffset === 0 && (
+                                repeatOption === 'custom'
+                                    ? repeated
+                                    : calendarDay.day === selectedDay
+                            );
 
                             return (
                                 <Pressable
                                     key={`${calendarDay.monthOffset}-${calendarDay.day}-${index}`}
-                                    style={[styles.dayCell, selected && styles.dayCellSelected]}
+                                    style={[
+                                        styles.dayCell,
+                                        repeated && styles.dayCellRepeated,
+                                        selected && styles.dayCellSelected,
+                                    ]}
                                     onPress={() => selectCalendarDay(calendarDay)}
                                 >
                                     <Text style={[
@@ -258,6 +452,15 @@ export default function CalendarAdd() {
                         })}
                     </View>
                 </View>
+            </View>
+
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>반복</Text>
+                <RepeatSelector
+                    value={repeatOption}
+                    repeatDates={repeatDates}
+                    onChange={handleRepeatChange}
+                />
             </View>
 
             <View style={styles.section}>
@@ -312,6 +515,49 @@ export default function CalendarAdd() {
             </View>
 
             <View style={styles.section}>
+                <Text style={styles.sectionTitle}>출발 시간</Text>
+                <TextInput
+                    style={styles.input}
+                    placeholder="ex) 10:00"
+                    placeholderTextColor={Colors.textShadow}
+                    value={startTime}
+                    onChangeText={(text) => {
+                        setStartTime(text);
+                        clearError();
+                    }}
+                    keyboardType="numbers-and-punctuation"
+                    maxLength={5}
+                />
+            </View>
+
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>이동수단</Text>
+                <View style={styles.optionGrid}>
+                    {transportTypes.map((transport) => {
+                        const selected = selectedTransport === transport;
+
+                        return (
+                            <Pressable
+                                key={transport}
+                                style={[styles.optionButton, selected && styles.optionButtonSelected]}
+                                onPress={() => {
+                                    setSelectedTransport(transport);
+                                    clearError();
+                                }}
+                            >
+                                <Text style={[
+                                    styles.optionText,
+                                    selected && styles.optionTextSelected,
+                                ]}>
+                                    {transport}
+                                </Text>
+                            </Pressable>
+                        );
+                    })}
+                </View>
+            </View>
+
+            <View style={styles.section}>
                 <Text style={styles.sectionTitle}>메모</Text>
                 <TextInput
                     style={styles.memoInput}
@@ -322,6 +568,140 @@ export default function CalendarAdd() {
                     multiline
                     textAlignVertical="top"
                 />
+            </View>
+
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>일정 특성</Text>
+                <View style={styles.templateGrid}>
+                    {scheduleFeatureTemplates.map((template) => {
+                        const selected = template.values.every((value) => (
+                            selectedScheduleFeatureValues.includes(value)
+                        ));
+
+                        return (
+                            <Pressable
+                                key={template.title}
+                                style={[styles.templateButton, selected && styles.templateButtonSelected]}
+                                onPress={() => toggleFeatureTemplate(template.values)}
+                            >
+                                <View style={styles.templateTitleRow}>
+                                    <Ionicons
+                                        name={selected ? 'checkmark-circle' : 'albums-outline'}
+                                        size={18}
+                                        color={selected ? Colors.highlight1 : Colors.textShadow}
+                                    />
+                                    <Text style={styles.templateTitle}>{template.title}</Text>
+                                </View>
+                                <Text style={styles.templateDescription}>{template.description}</Text>
+                            </Pressable>
+                        );
+                    })}
+                </View>
+
+                <View style={styles.featurePanel}>
+                    {scheduleFeatureGroups.map((group) => (
+                        <View key={group.title} style={styles.featureGroup}>
+                            <Text style={styles.featureGroupTitle}>{group.title}</Text>
+                            <View style={styles.featureChipRow}>
+                                {group.items.map((feature) => {
+                                    const selected = selectedScheduleFeatureValues.includes(feature.value);
+
+                                    return (
+                                        <Pressable
+                                            key={feature.value}
+                                            style={[
+                                                styles.featureChip,
+                                                selected && styles.featureChipSelected,
+                                            ]}
+                                            onPress={() => toggleScheduleFeature(feature.value)}
+                                        >
+                                            <Ionicons
+                                                name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+                                                size={15}
+                                                color={selected ? Colors.highlight1 : Colors.textShadow}
+                                            />
+                                            <Text style={styles.featureChipText}>{feature.label}</Text>
+                                        </Pressable>
+                                    );
+                                })}
+                            </View>
+                        </View>
+                    ))}
+                </View>
+
+                {selectedScheduleFeatureLabels.length ? (
+                    <View style={styles.selectedFeatureBox}>
+                        {selectedScheduleFeatureLabels.slice(0, 8).map((label) => (
+                            <Text key={label} style={styles.selectedFeatureText}>{label}</Text>
+                        ))}
+                        {selectedScheduleFeatureLabels.length > 8 ? (
+                            <Text style={styles.selectedFeatureText}>
+                                + {selectedScheduleFeatureLabels.length - 8}개
+                            </Text>
+                        ) : null}
+                    </View>
+                ) : null}
+            </View>
+
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>외출 환경</Text>
+                <View style={styles.toggleRow}>
+                    <Pressable
+                        style={[styles.toggleButton, waitPossible && styles.toggleButtonSelected]}
+                        onPress={() => toggleScheduleFeature(SCHEDULE_FEATURE_WAIT)}
+                    >
+                        <Ionicons
+                            name={waitPossible ? 'checkmark-circle' : 'ellipse-outline'}
+                            size={18}
+                            color={waitPossible ? Colors.highlight1 : Colors.textShadow}
+                        />
+                        <Text style={styles.toggleText}>대기 가능성</Text>
+                    </Pressable>
+                    <Pressable
+                        style={[styles.toggleButton, crowdPossible && styles.toggleButtonSelected]}
+                        onPress={() => toggleScheduleFeature(SCHEDULE_FEATURE_CROWD)}
+                    >
+                        <Ionicons
+                            name={crowdPossible ? 'checkmark-circle' : 'ellipse-outline'}
+                            size={18}
+                            color={crowdPossible ? Colors.highlight1 : Colors.textShadow}
+                        />
+                        <Text style={styles.toggleText}>혼잡 가능성</Text>
+                    </Pressable>
+                </View>
+            </View>
+
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>필수 준비물</Text>
+                <View style={styles.todoCard}>
+                    {preparations.map((item, index) => (
+                        <View key={`${item}-${index}`} style={styles.todoRow}>
+                            <Ionicons name="checkmark-circle" size={16} color={Colors.highlight1} />
+                            <Text style={styles.todoText}>{item}</Text>
+                            <Pressable onPress={() => deletePreparation(index)} hitSlop={8}>
+                                <Ionicons name="close" size={18} color={Colors.textShadow} />
+                            </Pressable>
+                        </View>
+                    ))}
+
+                    <View style={[
+                        styles.todoInputRow,
+                        preparations.length > 0 && styles.todoInputRowDivider,
+                    ]}>
+                        <TextInput
+                            style={styles.todoInput}
+                            placeholder="ex) 이어폰, 선글라스"
+                            placeholderTextColor={Colors.textShadow}
+                            value={preparationText}
+                            onChangeText={setPreparationText}
+                            returnKeyType="done"
+                            onSubmitEditing={addPreparation}
+                        />
+                        <Pressable style={styles.todoAddButton} onPress={addPreparation}>
+                            <Ionicons name="add" size={18} color={Colors.text} />
+                        </Pressable>
+                    </View>
+                </View>
             </View>
 
             <View style={styles.section}>
@@ -337,7 +717,10 @@ export default function CalendarAdd() {
                         </View>
                     ))}
 
-                    <View style={styles.todoInputRow}>
+                    <View style={[
+                        styles.todoInputRow,
+                        todos.length > 0 && styles.todoInputRowDivider,
+                    ]}>
                         <TextInput
                             style={styles.todoInput}
                             placeholder="ex) 병원 접수하기"
@@ -357,7 +740,11 @@ export default function CalendarAdd() {
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
             <View style={styles.buttonArea}>
-                <PrimaryButton label="일정 저장하기" width="100%" onPress={handleSave} />
+                <PrimaryButton
+                    label={saving ? '저장 중...' : '일정 저장하기'}
+                    width="100%"
+                    onPress={handleSave}
+                />
             </View>
 
             <Modal
@@ -595,6 +982,11 @@ const styles = StyleSheet.create({
         borderRadius: 12,
     },
 
+    dayCellRepeated: {
+        backgroundColor: '#FFF4CF',
+        borderRadius: 12,
+    },
+
     dayText: {
         fontFamily: Fonts.bodyBold,
         fontSize: 15,
@@ -689,6 +1081,154 @@ const styles = StyleSheet.create({
     },
 
     optionTextSelected: {
+        color: Colors.text,
+    },
+
+    templateGrid: {
+        gap: 10,
+        marginBottom: 12,
+    },
+
+    templateButton: {
+        width: '100%',
+        minHeight: 70,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+    },
+
+    templateButtonSelected: {
+        borderColor: Colors.highlight1,
+        backgroundColor: '#FFF4CF',
+    },
+
+    templateTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 7,
+        marginBottom: 5,
+    },
+
+    templateTitle: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 15,
+        fontWeight: '900',
+        color: Colors.text,
+    },
+
+    templateDescription: {
+        fontFamily: Fonts.body,
+        fontSize: 13,
+        lineHeight: 18,
+        color: Colors.textShadow,
+    },
+
+    featurePanel: {
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        padding: 12,
+        gap: 13,
+    },
+
+    featureGroup: {
+        gap: 8,
+    },
+
+    featureGroupTitle: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 13,
+        fontWeight: '900',
+        color: Colors.textShadow,
+    },
+
+    featureChipRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+
+    featureChip: {
+        minHeight: 36,
+        borderRadius: 18,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: Colors.pageBg,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 11,
+        gap: 5,
+    },
+
+    featureChipSelected: {
+        borderColor: Colors.highlight1,
+        backgroundColor: '#FFF8DF',
+    },
+
+    featureChipLocked: {
+        opacity: 0.9,
+    },
+
+    featureChipText: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 13,
+        fontWeight: '900',
+        color: Colors.text,
+    },
+
+    selectedFeatureBox: {
+        marginTop: 10,
+        borderRadius: 14,
+        backgroundColor: '#FFF8DF',
+        padding: 10,
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 6,
+    },
+
+    selectedFeatureText: {
+        borderRadius: 12,
+        backgroundColor: Colors.pageBg,
+        paddingHorizontal: 9,
+        paddingVertical: 5,
+        fontFamily: Fonts.body,
+        fontSize: 12,
+        color: Colors.text,
+        overflow: 'hidden',
+    },
+
+    toggleRow: {
+        flexDirection: 'row',
+        gap: 10,
+    },
+
+    toggleButton: {
+        flex: 1,
+        minHeight: 48,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 10,
+        gap: 6,
+    },
+
+    toggleButtonSelected: {
+        borderColor: Colors.highlight1,
+        backgroundColor: '#FFF4CF',
+    },
+
+    toggleText: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 14,
+        fontWeight: '900',
         color: Colors.text,
     },
 
@@ -791,6 +1331,9 @@ const styles = StyleSheet.create({
     todoInputRow: {
         flexDirection: 'row',
         alignItems: 'center',
+    },
+
+    todoInputRowDivider: {
         borderTopWidth: 1,
         borderTopColor: '#E8DDC8',
         paddingTop: 10,

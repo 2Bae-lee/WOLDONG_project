@@ -9,6 +9,7 @@ from app.routers.notification import router as notification_router
 from app.routers.home import router as home_router
 from app.routers.companion import router as companion_router 
 from app.routers.schedule import router as schedule_router
+from app.routers.ai import router as ai_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -52,4 +53,9 @@ app.include_router(invite_router)
 app.include_router(notification_router)
 app.include_router(home_router)
 app.include_router(companion_router) 
-app.include_router(schedule_router)
+app.include_router(schedule_router) 
+app.include_router(ai_router)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8003, reload=True)

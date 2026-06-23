@@ -32,6 +32,12 @@ type EditTarget =
 
 const initialSections: ProfileSection[] = [
     {
+        id: 'info',
+        title: '공유 정보',
+        items: ['지적장애'],
+        options: ['지적장애', '자폐스펙트럼'],
+    },
+    {
         id: 'guidance',
         title: '설명 방식',
         items: ['짧고 쉬운 문장', '그림/사진 활용', '선택지 질문'],
@@ -130,6 +136,7 @@ const parseSections = (value?: string) => {
 
 export default function ParentChildProfile() {
     const params = useLocalSearchParams<{
+        childId?: string;
         childName?: string;
         profileImage?: string;
         sections?: string;
@@ -232,6 +239,7 @@ export default function ParentChildProfile() {
             pathname: '/childprofile/makecharacter',
             params: {
                 name: childName,
+                childId: params.childId ?? '',
                 profileImage: profileImage ?? '',
             },
         } as any);

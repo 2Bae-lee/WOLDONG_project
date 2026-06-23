@@ -2,6 +2,7 @@ from beanie import Document
 from pydantic import Field
 from datetime import datetime, timedelta
 from enum import Enum
+from typing import List, Optional
 
 
 class RequestStatus(str, Enum):
@@ -30,6 +31,8 @@ class CompanionRequest(Document):
     child_id: str
     guardian_id: str
     status: RequestStatus = RequestStatus.pending
+    relation: Optional[str] = None
+    permissions: List[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     class Settings:

@@ -2,16 +2,27 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Image, StyleSheet, Text, TextInput, View } from 'react-native';
 import SmallButton from '../../../components/SmallButton';
+import { sendSignupCode } from '../../../constants/Api';
 import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
 
 export default function CompanionSignupEmail() {
+    const [name, setName] = useState('');
     const [email, setEmail] = useState('');
+    const [nameError, setNameError] = useState('');
     const [emailError, setEmailError] = useState('');
+    const [isSending, setIsSending] = useState(false);
   
 
-    const handleNext = () => {
+    const handleNext = async () => {
+      if (isSending) return;
+
+      const trimmedName = name.trim();
       const trimmedEmail = email.trim();
+      if (trimmedName === '') {
+        setNameError('이름을 입력해 주세요.');
+        return;
+      }
       if (trimmedEmail === '') {
         setEmailError('이메일을 입력해 주세요.');
         return;
@@ -23,8 +34,26 @@ export default function CompanionSignupEmail() {
         return ;
       }
 
+      setNameError('');
       setEmailError('');
-      router.push('/signup/companion/authenticate' as any);
+      setIsSending(true);
+
+      try {
+        await sendSignupCode(trimmedEmail);
+      } catch (error) {
+        setEmailError(error instanceof Error ? error.message : '인증번호 발송에 실패했어요.');
+        setIsSending(false);
+        return;
+      }
+
+      setIsSending(false);
+      router.push({
+        pathname: '/signup/companion/authenticate',
+        params: {
+          name: trimmedName,
+          email: trimmedEmail,
+        },
+      } as any);
     }
 
   return (
@@ -49,6 +78,25 @@ export default function CompanionSignupEmail() {
         <TextInput
             style={[
                     styles.input,
+                    nameError ? styles.inputError : null,
+            ]}
+            placeholder="이름"
+            placeholderTextColor={Colors.textShadow}
+            value={name}
+            onChangeText={(text) => {
+                setName(text);
+                if (nameError) {
+                    setNameError('');
+                }
+            }}
+        />
+        {nameError ? (
+             <Text style={styles.errorText}>{nameError}</Text>
+        ) : null}
+
+        <TextInput
+            style={[
+                    styles.input,
                     emailError ? styles.inputError : null,
             ]}
             placeholder="ex) woldong@gmail.com"
@@ -68,7 +116,7 @@ export default function CompanionSignupEmail() {
         ) : null}
 
         <SmallButton
-          label="계속"
+          label={isSending ? '발송 중' : '계속'}
           onPress={handleNext}
         />
       </View>

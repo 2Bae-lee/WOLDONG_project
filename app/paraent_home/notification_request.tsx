@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../components/BackButton';
 import PrimaryButton from '../../components/PrimaryButton';
+import { approveInviteRequest, markNotificationRead } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 import {
@@ -16,19 +17,27 @@ const permissionOptions = [
     '아이 프로필',
     '오늘 일정',
     '공유 캘린더',
-    '인수인계 자료',
+    '주의사항',
 ];
 
 export default function NotificationRequest() {
+    const params = useLocalSearchParams<{
+        requestId?: string;
+        notificationId?: string;
+        companionName?: string;
+        childId?: string;
+    }>();
     const companionRequest = getCompanionRequestNotification();
-    const companionName = companionRequest.companionName;
+    const companionName = params.companionName || companionRequest.companionName;
     const childName = companionRequest.childName;
     const [selectedRelation, setSelectedRelation] = useState('담임 선생님');
     const [selectedPermissions, setSelectedPermissions] = useState([
         '아이 프로필',
         '오늘 일정',
-        '인수인계 자료',
+        '주의사항',
     ]);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [errorText, setErrorText] = useState('');
 
     const togglePermission = (permission: string) => {
         setSelectedPermissions((current) => (
@@ -38,18 +47,63 @@ export default function NotificationRequest() {
         ));
     };
 
-    const approveCompanion = () => {
-        approveCompanionRequestNotification(companionName);
+    const markCurrentNotificationRead = async () => {
+        if (!params.notificationId) return;
 
-        router.replace({
-            pathname: '/paraent_home/companions',
-            params: {
-                acceptedName: companionName,
-                acceptedRelation: selectedRelation,
-                acceptedPhone: '010-1234-5678',
-                acceptedPermissions: selectedPermissions.join(','),
-            },
-        } as any);
+        try {
+            await markNotificationRead(params.notificationId);
+        } catch {
+            // 이미 읽음 처리되었거나 목데이터 흐름이어도 승인/거절은 계속 진행합니다.
+        }
+    };
+
+    const approveCompanion = async () => {
+        if (isSubmitting) return;
+
+        setIsSubmitting(true);
+        setErrorText('');
+
+        try {
+            if (params.requestId) {
+                await approveInviteRequest(params.requestId, true);
+            }
+            await markCurrentNotificationRead();
+            approveCompanionRequestNotification(companionName);
+
+            router.replace({
+                pathname: '/paraent_home/companions',
+                params: {
+                    acceptedName: companionName,
+                    acceptedRelation: selectedRelation,
+                    acceptedPhone: '010-1234-5678',
+                    acceptedPermissions: selectedPermissions.join(','),
+                },
+            } as any);
+        } catch (error) {
+            setErrorText(error instanceof Error ? error.message : '동행인 승인에 실패했어요.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const rejectCompanion = async () => {
+        if (isSubmitting) return;
+
+        setIsSubmitting(true);
+        setErrorText('');
+
+        try {
+            if (params.requestId) {
+                await approveInviteRequest(params.requestId, false);
+            }
+            await markCurrentNotificationRead();
+            approveCompanionRequestNotification(companionName);
+            router.replace('/paraent_home/notifications' as any);
+        } catch (error) {
+            setErrorText(error instanceof Error ? error.message : '동행인 요청 거절에 실패했어요.');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -141,11 +195,16 @@ export default function NotificationRequest() {
                         })}
                     </View>
                 </View>
+
+                {errorText ? <Text style={styles.errorText}>{errorText}</Text> : null}
             </ScrollView>
 
             <View style={styles.buttonArea}>
+                <Pressable style={styles.rejectButton} onPress={rejectCompanion}>
+                    <Text style={styles.rejectButtonText}>거절하기</Text>
+                </Pressable>
                 <PrimaryButton
-                    label="승인하기"
+                    label={isSubmitting ? '처리 중' : '승인하기'}
                     width="100%"
                     onPress={approveCompanion}
                 />
@@ -342,7 +401,36 @@ const styles = StyleSheet.create({
         color: Colors.text,
     },
 
+    errorText: {
+        marginTop: -8,
+        marginBottom: 14,
+        fontFamily: Fonts.body,
+        fontSize: 13,
+        lineHeight: 19,
+        color: Colors.highlight3,
+        textAlign: 'center',
+    },
+
     buttonArea: {
         width: '100%',
+        gap: 10,
+    },
+
+    rejectButton: {
+        width: '100%',
+        height: 48,
+        borderRadius: 24,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    rejectButtonText: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 16,
+        fontWeight: '900',
+        color: Colors.textShadow,
     },
 });

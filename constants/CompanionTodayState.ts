@@ -6,6 +6,7 @@ export type CompanionTodo = {
 
 export type CompanionTodaySchedule = {
     id: number;
+    scheduleId?: string;
     childName: string;
     title: string;
     guardian: string;

@@ -231,7 +231,7 @@ export default function CompanionHomeCalendarCreate() {
                     addedEventDay: String(firstDate.day),
                     addedEventTitle: title,
                     addedEventChildName: selectedChild.name,
-                    addedEventGuardian: '연결된 보호자',
+                    addedEventGuardian: '보호자',
                     addedEventTodos: JSON.stringify(todos),
                     addedEventDates: JSON.stringify(repeatDates),
                 },

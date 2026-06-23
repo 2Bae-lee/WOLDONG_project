@@ -24,14 +24,12 @@ export default function CompanionProfile() {
         companionId?: string;
         name?: string;
         relation?: string;
-        phone?: string;
         status?: string;
         permissions?: string;
     }>();
 
     const name = params.name || '동행인';
     const relation = params.relation || '동행인';
-    const phone = params.phone || '010-1234-5678';
     const status = params.status || '아이 정보를 함께 확인할 수 있어요.';
     const [permissions, setPermissions] = useState(() => parsePermissions(params.permissions));
     const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
@@ -64,15 +62,18 @@ export default function CompanionProfile() {
         setErrorText('');
 
         try {
-            if (params.childId && params.companionId && !params.companionId.startsWith('mock-')) {
-                await deleteLinkedCompanion(params.childId, params.companionId);
+            if (!params.childId || !params.companionId) {
+                throw new Error('철회할 동행인 정보를 확인할 수 없어요.');
             }
+
+            await deleteLinkedCompanion(params.childId, params.companionId);
 
             router.replace({
                 pathname: '/paraent_home/companions',
                 params: {
                     childId: params.childId ?? '',
                     removedCompanionId: params.companionId ?? '',
+                    refreshAt: String(Date.now()),
                 },
             } as any);
         } catch (error) {
@@ -118,10 +119,6 @@ export default function CompanionProfile() {
                 <Text style={styles.relationBadge}>{relation}</Text>
 
                 <View style={styles.infoBox}>
-                    <View style={styles.infoRow}>
-                        <Ionicons name="call-outline" size={17} color={Colors.textShadow} />
-                        <Text style={styles.infoText}>{phone}</Text>
-                    </View>
                     <View style={styles.infoRow}>
                         <Ionicons name="checkmark-circle" size={17} color={Colors.highlight1} />
                         <Text style={styles.infoText}>{status}</Text>

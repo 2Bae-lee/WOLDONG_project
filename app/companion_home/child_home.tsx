@@ -10,16 +10,12 @@ import {
     getChildNotifications,
     getSchedules,
     getScheduleWarnings,
+    getTodaySchedules,
     markNotificationRead,
+    updateScheduleChecklist,
 } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
-import {
-    CompanionTodaySchedule,
-    getCompanionTodaySchedulesForChild,
-    subscribeCompanionTodaySchedules,
-    toggleCompanionTodaySchedule,
-    toggleCompanionTodayTodo,
-} from '../../constants/CompanionTodayState';
+import { formatRelativeTime } from '../../constants/DateTime';
 import { Fonts } from '../../constants/Fonts';
 import { RepeatDate, parseRepeatDates } from '../../constants/Recurrence';
 
@@ -29,6 +25,7 @@ const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
 
 type ScheduleTodo = {
     id: number;
+    itemId?: string;
     text: string;
     done: boolean;
 };
@@ -40,6 +37,7 @@ type CalendarEvent = {
     month: number;
     day: number;
     title: string;
+    done: boolean;
     guardian: string;
     todos: ScheduleTodo[];
 };
@@ -70,11 +68,24 @@ const mapScheduleToCalendarEvent = (
 
     const eventId = createNumericId(schedule.schedule_id);
     const place = getSchedulePlace(schedule);
-    const todoTexts = [
+    const checklistTodos = schedule.checklist?.map((item, index) => ({
+        id: createNumericId(item.item_id || `${schedule.schedule_id}-${index}`),
+        itemId: item.item_id,
+        text: item.content,
+        done: item.is_checked,
+    })) ?? [];
+    const fallbackTodoTexts = [
         schedule.start_time ? `${schedule.start_time} 출발` : '',
         place,
         schedule.transport_type ? `${schedule.transport_type} 이동` : '',
     ].filter(Boolean);
+    const todos = checklistTodos.length > 0
+        ? checklistTodos
+        : fallbackTodoTexts.map((text, index) => ({
+            id: eventId + index + 1,
+            text,
+            done: schedule.status === 'done',
+        }));
 
     return {
         id: eventId,
@@ -83,12 +94,9 @@ const mapScheduleToCalendarEvent = (
         month,
         day,
         title: schedule.title,
+        done: schedule.status === 'done',
         guardian,
-        todos: todoTexts.map((text, index) => ({
-            id: eventId + index + 1,
-            text,
-            done: schedule.status === 'done',
-        })),
+        todos,
     };
 };
 
@@ -97,65 +105,7 @@ const createInitialEvents = (
     currentMonth: number,
     todayDay: number,
     guardian: string
-): CalendarEvent[] => [
-    {
-        id: 1,
-        year: currentYear,
-        month: currentMonth,
-        day: todayDay,
-        title: '병원 진료',
-        guardian,
-        todos: [
-            { id: 11, text: '병원 접수하기', done: false },
-            { id: 12, text: '진료 전 짧게 설명하기', done: true },
-            { id: 13, text: '진료 후 조용한 곳에서 쉬기', done: false },
-        ],
-    },
-    {
-        id: 2,
-        year: currentYear,
-        month: currentMonth,
-        day: todayDay,
-        title: '귀가 준비',
-        guardian,
-        todos: [
-            { id: 21, text: '가방 챙기기', done: false },
-            { id: 22, text: '집에 간다고 미리 알려주기', done: false },
-        ],
-    },
-    {
-        id: 3,
-        year: currentYear,
-        month: currentMonth,
-        day: Math.min(todayDay + 3, new Date(currentYear, currentMonth, 0).getDate()),
-        title: '언어 치료',
-        guardian,
-        todos: [
-            { id: 31, text: '치료 카드 챙기기', done: false },
-        ],
-    },
-];
-
-const handoffs = [
-    '병원 대기 시간이 길면 아이가 힘들어할 수 있어요.',
-    '큰 소리가 나는 공간에서는 잠깐 밖에서 쉬면 좋아요.',
-    '선택지를 두 개 정도로 짧게 제시해주세요.',
-];
-
-const formatTime = (value: string) => {
-    const created = new Date(value).getTime();
-    if (Number.isNaN(created)) return '방금 전';
-
-    const diffMinutes = Math.max(0, Math.floor((Date.now() - created) / 60000));
-    if (diffMinutes < 1) return '방금 전';
-    if (diffMinutes < 60) return `${diffMinutes}분 전`;
-
-    const diffHours = Math.floor(diffMinutes / 60);
-    if (diffHours < 24) return `${diffHours}시간 전`;
-
-    const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays}일 전`;
-};
+): CalendarEvent[] => [];
 
 const getNotificationTitle = (type: string) => {
     if (type === 'request_approved') return '승인 완료';
@@ -181,6 +131,7 @@ export default function CompanionChildHome() {
         scheduleId?: string;
         childName?: string;
         guardian?: string;
+        characterImages?: string;
         tab?: string;
         addedEventId?: string;
         addedEventYear?: string;
@@ -193,8 +144,8 @@ export default function CompanionChildHome() {
     }>();
     const childId = params.childId || '';
     const scheduleId = params.scheduleId || '';
-    const childName = params.childName || '김월동';
-    const guardian = params.guardian || '김보호자';
+    const childName = params.childName || '아이';
+    const guardian = params.guardian || '보호자';
     const today = useMemo(() => new Date(), []);
     const currentYear = today.getFullYear();
     const currentMonth = today.getMonth() + 1;
@@ -206,9 +157,7 @@ export default function CompanionChildHome() {
     const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(() => (
         createInitialEvents(currentYear, currentMonth, todayDay, guardian)
     ));
-    const [todayEvents, setTodayEvents] = useState<CompanionTodaySchedule[]>(() => (
-        getCompanionTodaySchedulesForChild(childName)
-    ));
+    const [todayEvents, setTodayEvents] = useState<CalendarEvent[]>([]);
     const [childNotifications, setChildNotifications] = useState<ChildNotification[]>([]);
     const [notificationError, setNotificationError] = useState('');
     const [scheduleWarnings, setScheduleWarnings] = useState<string[]>([]);
@@ -250,10 +199,11 @@ export default function CompanionChildHome() {
         event.day === selectedDay
     ));
     const storySource = activeTab === 'calendar' ? selectedEvents[0] : todayEvents[0];
+    const storyScheduleId = storySource?.scheduleId ?? scheduleId;
     const storyScript = storySource
         ? `오늘은 ${storySource.title} 일정이 있어요.`
         : `${childName}의 외출 이야기를 준비해요.`;
-    const visibleHandoffs = scheduleWarnings.length > 0 ? scheduleWarnings : handoffs;
+    const visibleHandoffs = scheduleWarnings;
     const storyCheckedItems = storySource
         ? [
             `일정_${storySource.title}`,
@@ -264,10 +214,6 @@ export default function CompanionChildHome() {
 
     useFocusEffect(
         useCallback(() => {
-            setTodayEvents(getCompanionTodaySchedulesForChild(childName));
-            const unsubscribe = subscribeCompanionTodaySchedules(() => {
-                setTodayEvents(getCompanionTodaySchedulesForChild(childName));
-            });
             let active = true;
 
             const loadChildNotifications = async () => {
@@ -319,6 +265,28 @@ export default function CompanionChildHome() {
                 }
             };
 
+            const loadTodaySchedules = async () => {
+                if (!childId) {
+                    setTodayEvents([]);
+                    return;
+                }
+
+                try {
+                    const response = await getTodaySchedules();
+                    if (!active) return;
+
+                    const nextEvents = (response.data ?? [])
+                        .filter((schedule) => schedule.child_id === childId)
+                        .map((schedule) => mapScheduleToCalendarEvent(schedule, guardian))
+                        .filter((event): event is CalendarEvent => event !== null);
+
+                    setTodayEvents(nextEvents);
+                } catch {
+                    if (!active) return;
+                    setTodayEvents([]);
+                }
+            };
+
             const loadCalendarSchedules = async () => {
                 if (!childId) {
                     if (active) {
@@ -345,22 +313,35 @@ export default function CompanionChildHome() {
 
             loadChildNotifications();
             loadScheduleWarnings();
+            loadTodaySchedules();
             loadCalendarSchedules();
 
             return () => {
                 active = false;
-                unsubscribe();
             };
         }, [childId, childName, currentMonth, currentYear, guardian, scheduleId, todayDay])
     );
 
-    const toggleTodayTodo = (scheduleId: number, todoId: number) => {
-        toggleCompanionTodayTodo(scheduleId, todoId);
+    const toggleTodayTodo = async (scheduleId: string | undefined, todo: ScheduleTodo) => {
+        if (!scheduleId || !todo.itemId) return;
+
+        try {
+            await updateScheduleChecklist(scheduleId, todo.itemId, !todo.done);
+            setTodayEvents((current) => current.map((event) => (
+                event.scheduleId === scheduleId
+                    ? {
+                        ...event,
+                        todos: event.todos.map((item) => (
+                            item.id === todo.id ? { ...item, done: !item.done } : item
+                        )),
+                    }
+                    : event
+            )));
+        } catch {
+            // API에서 실패하면 서버 상태와 다르게 보이지 않도록 그대로 둡니다.
+        }
     };
 
-    const toggleTodaySchedule = (scheduleId: number) => {
-        toggleCompanionTodaySchedule(scheduleId);
-    };
 
     useEffect(() => {
         if (params.tab === 'calendar') {
@@ -410,6 +391,7 @@ export default function CompanionChildHome() {
             month: date.month,
             day: date.day,
             title: eventTitle,
+            done: false,
             guardian: eventGuardian,
             todos: parsedTodos.map((todo) => ({
                 ...todo,
@@ -547,7 +529,7 @@ export default function CompanionChildHome() {
                                                 {getNotificationTitle(notification.type)}
                                             </Text>
                                             <Text style={styles.notificationTime}>
-                                                {formatTime(notification.created_at)}
+                                                {formatRelativeTime(notification.created_at)}
                                             </Text>
                                         </View>
                                         <Text style={styles.notificationMessage}>{notification.message}</Text>
@@ -567,59 +549,64 @@ export default function CompanionChildHome() {
                         <View style={styles.section}>
                             <Text style={styles.sectionTitle}>{currentMonth}월 {todayDay}일 오늘의 일정</Text>
                             <View style={styles.scheduleCard}>
-                                {todayEvents.map((schedule) => (
-                                    <View key={schedule.id} style={styles.scheduleBlock}>
-                                        <View style={styles.scheduleTitleRow}>
-                                            <Pressable
-                                                style={[
-                                                    styles.scheduleCheckBox,
-                                                    schedule.done && styles.scheduleCheckBoxDone,
-                                                ]}
-                                                onPress={() => toggleTodaySchedule(schedule.id)}
-                                                hitSlop={8}
-                                            >
-                                                {schedule.done ? (
-                                                    <Ionicons name="checkmark" size={14} color={Colors.realwhite} />
-                                                ) : null}
-                                            </Pressable>
-                                            <Text
-                                                style={[
-                                                    styles.scheduleTitle,
-                                                    schedule.done && styles.todoDoneText,
-                                                ]}
-                                                numberOfLines={1}
-                                            >
-                                                {schedule.title}
-                                            </Text>
-                                            <View style={styles.guardianPill}>
-                                                <Text style={styles.guardianPillText}>{schedule.guardian}</Text>
+                                {todayEvents.length > 0 ? todayEvents.map((schedule) => {
+                                    const scheduleDone = schedule.todos.length > 0 && schedule.todos.every((todo) => todo.done);
+
+                                    return (
+                                        <View key={schedule.id} style={styles.scheduleBlock}>
+                                            <View style={styles.scheduleTitleRow}>
+                                                <View
+                                                    style={[
+                                                        styles.scheduleCheckBox,
+                                                        scheduleDone && styles.scheduleCheckBoxDone,
+                                                    ]}
+                                                >
+                                                    {scheduleDone ? (
+                                                        <Ionicons name="checkmark" size={14} color={Colors.realwhite} />
+                                                    ) : null}
+                                                </View>
+                                                <Text
+                                                    style={[
+                                                        styles.scheduleTitle,
+                                                        scheduleDone && styles.todoDoneText,
+                                                    ]}
+                                                    numberOfLines={1}
+                                                >
+                                                    {schedule.title}
+                                                </Text>
+                                                <View style={styles.guardianPill}>
+                                                    <Text style={styles.guardianPillText}>{schedule.guardian}</Text>
+                                                </View>
+                                            </View>
+                                            <View style={styles.todoList}>
+                                                {schedule.todos.map((todo) => (
+                                                    <Pressable
+                                                        key={todo.id}
+                                                        style={styles.todoRow}
+                                                        onPress={() => toggleTodayTodo(schedule.scheduleId, todo)}
+                                                        disabled={!todo.itemId}
+                                                    >
+                                                        <View style={styles.todoCheckHitArea}>
+                                                            <Ionicons
+                                                                name={todo.done ? 'checkmark-circle' : 'ellipse-outline'}
+                                                                size={17}
+                                                                color={todo.done ? Colors.highlight1 : Colors.textShadow}
+                                                            />
+                                                        </View>
+                                                        <Text style={[
+                                                            styles.todoText,
+                                                            todo.done && styles.todoDoneText,
+                                                        ]}>
+                                                            {todo.text}
+                                                        </Text>
+                                                    </Pressable>
+                                                ))}
                                             </View>
                                         </View>
-                                        <View style={styles.todoList}>
-                                            {schedule.todos.map((todo) => (
-                                                <Pressable
-                                                    key={todo.id}
-                                                    style={styles.todoRow}
-                                                    onPress={() => toggleTodayTodo(schedule.id, todo.id)}
-                                                >
-                                                    <View style={styles.todoCheckHitArea}>
-                                                        <Ionicons
-                                                            name={todo.done ? 'checkmark-circle' : 'ellipse-outline'}
-                                                            size={17}
-                                                            color={todo.done ? Colors.highlight1 : Colors.textShadow}
-                                                        />
-                                                    </View>
-                                                    <Text style={[
-                                                        styles.todoText,
-                                                        todo.done && styles.todoDoneText,
-                                                    ]}>
-                                                        {todo.text}
-                                                    </Text>
-                                                </Pressable>
-                                            ))}
-                                        </View>
-                                    </View>
-                                ))}
+                                    );
+                                }) : (
+                                    <Text style={styles.emptyStateText}>오늘 예정된 일정이 없어요.</Text>
+                                )}
                             </View>
                         </View>
 
@@ -631,12 +618,14 @@ export default function CompanionChildHome() {
                                 <Text style={styles.warningStatusText}>{warningsError}</Text>
                             ) : null}
                             <View style={styles.handoffCard}>
-                                {visibleHandoffs.map((handoff) => (
+                                {visibleHandoffs.length > 0 ? visibleHandoffs.map((handoff) => (
                                     <View key={handoff} style={styles.handoffRow}>
                                         <Ionicons name="checkmark" size={18} color={Colors.highlight1} />
                                         <Text style={styles.handoffText}>{handoff}</Text>
                                     </View>
-                                ))}
+                                )) : (
+                                    <Text style={styles.emptyStateText}>등록된 주의사항이 없어요.</Text>
+                                )}
                             </View>
                         </View>
                     </>
@@ -763,9 +752,11 @@ export default function CompanionChildHome() {
                             pathname: '/social_story',
                             params: {
                                 childName,
+                                childId,
                                 title: storySource?.title ?? '',
                                 script: storyScript,
-                                scheduleId,
+                                scheduleId: storyScheduleId,
+                                characterImages: params.characterImages ?? '',
                                 checkedItems: JSON.stringify(storyCheckedItems),
                             },
                         } as any)
@@ -1028,6 +1019,15 @@ const styles = StyleSheet.create({
         backgroundColor: '#F7F4E8',
         padding: 16,
         gap: 20,
+    },
+
+    emptyStateText: {
+        fontFamily: Fonts.body,
+        fontSize: 14,
+        lineHeight: 20,
+        color: Colors.textShadow,
+        textAlign: 'center',
+        paddingVertical: 24,
     },
 
     scheduleBlock: {

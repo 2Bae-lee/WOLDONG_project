@@ -15,7 +15,7 @@ import SmallButton from '../../../components/SmallButton';
 import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
 
-export default function ParentSignupName() {
+export default function CompanionSignupName() {
     const [name, setName] = useState('');
     const [nameError, setNameError] = useState('');
 
@@ -29,7 +29,7 @@ export default function ParentSignupName() {
 
         setNameError('');
         router.push({
-            pathname: '/signup/parent/email',
+            pathname: '/signup/companion/email',
             params: {
                 name: trimmedName,
             },
@@ -55,9 +55,9 @@ export default function ParentSignupName() {
                     </View>
 
                     <View style={styles.content}>
-                        <Text style={styles.screenTitle}>보호자 이름 입력</Text>
+                        <Text style={styles.screenTitle}>동행인 이름 입력</Text>
                         <Text style={styles.description}>
-                            회원가입에 사용할 보호자 이름을 입력해 주세요
+                            회원가입에 사용할 동행인 이름을 입력해 주세요
                         </Text>
 
                         <TextInput

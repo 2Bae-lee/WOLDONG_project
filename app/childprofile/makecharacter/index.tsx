@@ -15,8 +15,8 @@ import {
 import BackButton from '../../../components/BackButton';
 import PrimaryButton from '../../../components/PrimaryButton';
 import RequiredMark from '../../../components/RequiredMark';
-import { generateCharacterImage } from '../../../constants/Api';
-import { saveGeneratedCharacterImage } from '../../../constants/CharacterImageStore';
+import { generateCharacterFrames } from '../../../constants/Api';
+import { saveGeneratedCharacterImages } from '../../../constants/CharacterImageStore';
 import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
 
@@ -35,6 +35,20 @@ export default function MakeCharacterStory() {
     const [storyError, setStoryError] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
 
+    const goToCustomize = (trimmedStory: string, characterImageKey = '') => {
+        router.push({
+            pathname: '/childprofile/makecharacter/customize',
+            params: {
+                name: childName,
+                profileImage,
+                profileSections: params.profileSections ?? '',
+                childId: params.childId ?? '',
+                characterImageKey,
+                story: trimmedStory,
+            },
+        } as any);
+    };
+
     const handleNext = async () => {
         if (isGenerating) return;
 
@@ -49,22 +63,15 @@ export default function MakeCharacterStory() {
         setIsGenerating(true);
 
         try {
-            const characterImageUri = await generateCharacterImage(trimmedStory);
-            const characterImageKey = saveGeneratedCharacterImage(characterImageUri);
+            const response = await generateCharacterFrames(trimmedStory);
+            if (!response.data?.idle) {
+                throw new Error('캐릭터 이미지를 확인하지 못했어요.');
+            }
 
-            router.push({
-                pathname: '/childprofile/makecharacter/customize',
-                params: {
-                    name: childName,
-                    profileImage,
-                    profileSections: params.profileSections ?? '',
-                    childId: params.childId ?? '',
-                    characterImageKey,
-                    story: trimmedStory,
-                },
-            } as any);
-        } catch (error) {
-            setStoryError(error instanceof Error ? error.message : '캐릭터 생성에 실패했어요.');
+            const characterImageKey = saveGeneratedCharacterImages(response.data);
+            goToCustomize(trimmedStory, characterImageKey);
+        } catch {
+            goToCustomize(trimmedStory);
         } finally {
             setIsGenerating(false);
         }

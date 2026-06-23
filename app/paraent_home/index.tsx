@@ -3,6 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+    Alert,
     Image,
     Keyboard,
     KeyboardAvoidingView,
@@ -17,6 +18,7 @@ import {
     View,
 } from 'react-native';
 import {
+    CharacterImages,
     TodayScheduleSummary,
     deleteSchedule,
     getInviteRequests,
@@ -25,11 +27,11 @@ import {
     getSchedule,
     getSchedules,
     getTodaySchedules,
+    logout,
     updateSchedule,
 } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
-import { hasUnreadParentNotifications } from '../../constants/NotificationState';
 import { RepeatDate, parseRepeatDates } from '../../constants/Recurrence';
 
 type ScheduleItem = {
@@ -78,38 +80,7 @@ type EditTarget =
     | { type: 'calendar'; item: CalendarEvent }
     | null;
 
-const initialSchedules: ScheduleItem[] = [
-    {
-        id: 1,
-        text: '병원 진료',
-        done: false,
-        companion: '박민지',
-        todos: [
-            { id: 11, text: '병원 갈 준비', done: false },
-            { id: 12, text: '병원으로 이동', done: true },
-            { id: 13, text: '진료 보기', done: true },
-        ],
-    },
-    {
-        id: 2,
-        text: '치료실 방문',
-        done: true,
-        companion: '최서윤',
-        todos: [
-            { id: 21, text: '치료 도구 챙기기', done: true },
-            { id: 22, text: '치료 후 쉬는 시간 갖기', done: true },
-        ],
-    },
-];
-
-const initialHandoffs: HandoffItem[] = [
-    { id: 1, text: '병원에 가기 전 아이가 긴장할 수 있어요.' },
-    { id: 2, text: '진료실에 들어가기 전 짧게 예고해주세요.' },
-    { id: 3, text: '대기 시간이 길면 조용한 곳에서 쉬면 좋아요.' },
-];
-
 const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
-const companionOptions = ['박민지', '이하늘', '최서윤'];
 
 function getTodayTitle() {
     const today = new Date();
@@ -145,7 +116,7 @@ const mapTodaySchedule = (schedule: TodayScheduleSummary): ScheduleItem => {
         scheduleId: schedule.schedule_id,
         text: schedule.title,
         done: schedule.status === 'done',
-        companion: '동행인 미정',
+        companion: schedule.companion_name ?? '',
         todos: mapScheduleTodos(schedule, id),
     };
 };
@@ -163,7 +134,7 @@ const mapCalendarEvent = (schedule: TodayScheduleSummary): CalendarEvent | null 
         month,
         day,
         title: schedule.title,
-        companion: '동행인 미정',
+        companion: schedule.companion_name ?? '',
         todos: mapScheduleTodos(schedule, id),
     };
 };
@@ -183,6 +154,7 @@ export default function ParentHome() {
         addedScheduleTitle?: string;
         addedScheduleCompanion?: string;
         addedScheduleTodos?: string;
+        updatedChildId?: string;
         updatedChildName?: string;
         updatedProfileImage?: string;
         updatedProfileSections?: string;
@@ -227,59 +199,25 @@ export default function ParentHome() {
     const scrollViewRef = useRef<ScrollView>(null);
     const [activeTab, setActiveTab] = useState<ActiveTab>('today');
     const [childId, setChildId] = useState('');
-    const [childName, setChildName] = useState('김월동');
+    const [childName, setChildName] = useState('아이');
+    const [childCharacterImages, setChildCharacterImages] = useState<CharacterImages | null>(null);
     const [childProfileImage, setChildProfileImage] = useState('');
     const [childProfileSections, setChildProfileSections] = useState('');
     const [selectedCalendarDay, setSelectedCalendarDay] = useState(todayDay);
-    const [schedules, setSchedules] = useState(initialSchedules);
-    const [handoffs, setHandoffs] = useState(initialHandoffs);
-    const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([
-        {
-            id: 1,
-            year: currentYear,
-            month: currentMonth,
-            day: todayDay,
-            title: '병원 진료',
-            companion: '박민지',
-            todos: [
-                { id: 101, text: '진료 접수하기', done: false },
-                { id: 102, text: '진료 후 쉬는 시간 갖기', done: false },
-            ],
-        },
-        {
-            id: 2,
-            year: currentYear,
-            month: currentMonth,
-            day: todayDay,
-            title: '진료 후 쉬는 시간',
-            companion: '이하늘',
-            todos: [
-                { id: 201, text: '조용한 장소 찾기', done: true },
-            ],
-        },
-        {
-            id: 3,
-            year: currentYear,
-            month: currentMonth,
-            day: Math.min(todayDay + 3, new Date(currentYear, currentMonth, 0).getDate()),
-            title: '언어 치료',
-            companion: '최서윤',
-            todos: [
-                { id: 301, text: '치료 카드 챙기기', done: false },
-            ],
-        },
-    ]);
+    const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
+    const [handoffs, setHandoffs] = useState<HandoffItem[]>([]);
+    const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
     const [isScheduleInputOpen, setIsScheduleInputOpen] = useState(false);
     const [isHandoffInputOpen, setIsHandoffInputOpen] = useState(false);
     const [scheduleText, setScheduleText] = useState('');
     const [handoffText, setHandoffText] = useState('');
     const [editTarget, setEditTarget] = useState<EditTarget>(null);
     const [editText, setEditText] = useState('');
-    const [editCompanion, setEditCompanion] = useState(companionOptions[0]);
+    const [editCompanion, setEditCompanion] = useState('');
     const [editTodos, setEditTodos] = useState<ScheduleTodo[]>([]);
     const [editTodoText, setEditTodoText] = useState('');
     const [hasUnreadNotifications, setHasUnreadNotifications] = useState(() => (
-        hasUnreadParentNotifications()
+        false
     ));
     const selectedCalendarEvents = calendarEvents.filter((event) => (
         event.year === calendarYear &&
@@ -290,7 +228,7 @@ export default function ParentHome() {
 
     useFocusEffect(
         useCallback(() => {
-            setHasUnreadNotifications(hasUnreadParentNotifications());
+            setHasUnreadNotifications(false);
 
             let active = true;
 
@@ -310,9 +248,7 @@ export default function ParentHome() {
 
                     setHasUnreadNotifications(hasUnreadApiNotifications || hasPendingRequests);
                 } catch {
-                    if (active) {
-                        setHasUnreadNotifications(hasUnreadParentNotifications());
-                    }
+                    if (active) setHasUnreadNotifications(false);
                 }
             };
 
@@ -344,6 +280,10 @@ export default function ParentHome() {
                 if (firstChild?.name) {
                     setChildName(firstChild.name);
                 }
+                setChildCharacterImages(firstChild?.character_image_url ?? null);
+                if (firstChild?.character_image_url?.idle) {
+                    setChildProfileImage(firstChild.character_image_url.idle);
+                }
 
                 const apiSchedules = todaySchedulesResponse.data?.length
                     ? todaySchedulesResponse.data
@@ -355,7 +295,10 @@ export default function ParentHome() {
                     event !== null
                 )));
             } catch {
-                // 목 로그인이나 로컬 서버 미실행 상태에서는 기존 목데이터 홈을 유지합니다.
+                if (cancelled) return;
+                setSchedules([]);
+                setCalendarEvents([]);
+                setHandoffs([]);
             }
         };
 
@@ -373,6 +316,10 @@ export default function ParentHome() {
 
         if (params.updatedChildName) {
             setChildName(params.updatedChildName);
+        }
+
+        if (params.updatedChildId) {
+            setChildId(params.updatedChildId);
         }
 
         if (typeof params.updatedProfileImage === 'string') {
@@ -512,6 +459,7 @@ export default function ParentHome() {
         params.addedScheduleTitle,
         params.addedScheduleTodos,
         params.tab,
+        params.updatedChildId,
         params.updatedChildName,
         params.updatedProfileImage,
         params.updatedProfileSections,
@@ -547,9 +495,7 @@ export default function ParentHome() {
         if (target?.scheduleId) {
             void updateSchedule(target.scheduleId, {
                 status: target.done ? 'upcoming' : 'done',
-            }).catch(() => {
-                // 로컬 목데이터 일정은 기존 화면 상태만 갱신합니다.
-            });
+            }).catch(() => undefined);
         }
 
         setSchedules((current) => current.map((item) => (
@@ -558,19 +504,6 @@ export default function ParentHome() {
     };
 
     const addSchedule = () => {
-        const trimmedText = scheduleText.trim();
-        if (!trimmedText) return;
-
-        setSchedules((current) => [
-            ...current,
-            {
-                id: Date.now(),
-                text: trimmedText,
-                done: false,
-                companion: companionOptions[0],
-                todos: [],
-            },
-        ]);
         setScheduleText('');
         setIsScheduleInputOpen(false);
         Keyboard.dismiss();
@@ -605,13 +538,6 @@ export default function ParentHome() {
     };
 
     const addHandoff = () => {
-        const trimmedText = handoffText.trim();
-        if (!trimmedText) return;
-
-        setHandoffs((current) => [
-            ...current,
-            { id: Date.now(), text: trimmedText },
-        ]);
         setHandoffText('');
         setIsHandoffInputOpen(false);
         Keyboard.dismiss();
@@ -638,7 +564,7 @@ export default function ParentHome() {
     const closeEditor = () => {
         setEditTarget(null);
         setEditText('');
-        setEditCompanion(companionOptions[0]);
+        setEditCompanion('');
         setEditTodos([]);
         setEditTodoText('');
         Keyboard.dismiss();
@@ -679,7 +605,7 @@ export default function ParentHome() {
                     checklist: editTodos.map((todo) => todo.text),
                 });
             } catch {
-                // 로컬 목데이터 일정은 기존 화면 상태만 갱신합니다.
+                return;
             }
         }
 
@@ -724,7 +650,7 @@ export default function ParentHome() {
             try {
                 await deleteSchedule(editTarget.item.scheduleId);
             } catch {
-                // 로컬 목데이터 일정은 기존 화면 상태만 갱신합니다.
+                return;
             }
         }
 
@@ -737,6 +663,27 @@ export default function ParentHome() {
         }
 
         closeEditor();
+    };
+
+    const confirmLogout = () => {
+        Alert.alert(
+            '로그아웃',
+            '현재 계정에서 로그아웃할까요?',
+            [
+                { text: '취소', style: 'cancel' },
+                {
+                    text: '로그아웃',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await logout();
+                        } finally {
+                            router.replace('/onboarding/one' as any);
+                        }
+                    },
+                },
+            ]
+        );
     };
 
     return (
@@ -785,6 +732,9 @@ export default function ParentHome() {
                             }
                         >
                             <Ionicons name="person-add-outline" size={23} color={Colors.text} />
+                        </Pressable>
+                        <Pressable style={styles.iconButton} onPress={confirmLogout}>
+                            <Ionicons name="log-out-outline" size={23} color={Colors.text} />
                         </Pressable>
                         <Pressable
                             style={styles.profileButton}
@@ -846,12 +796,14 @@ export default function ParentHome() {
                                                 ]} numberOfLines={1}>
                                                     {item.text}
                                                 </Text>
-                                                <View style={styles.scheduleMetaPill}>
-                                                    <Ionicons name="person-outline" size={13} color={Colors.textShadow} />
-                                                    <Text style={styles.scheduleMetaText} numberOfLines={1}>
-                                                        {item.companion}와 함께
-                                                    </Text>
-                                                </View>
+                                                {item.companion ? (
+                                                    <View style={styles.scheduleMetaPill}>
+                                                        <Ionicons name="person-outline" size={13} color={Colors.textShadow} />
+                                                        <Text style={styles.scheduleMetaText} numberOfLines={1}>
+                                                            {item.companion}와 함께
+                                                        </Text>
+                                                    </View>
+                                                ) : null}
                                             </View>
                                             {item.todos.length > 0 ? (
                                                 <View style={styles.scheduleTodoPreview}>
@@ -912,7 +864,7 @@ export default function ParentHome() {
                             </Pressable>
 
                             <View style={styles.handoffCard}>
-                                {handoffs.map((item) => (
+                                {handoffs.length > 0 ? handoffs.map((item) => (
                                     <Pressable
                                         key={item.id}
                                         style={styles.handoffRow}
@@ -923,40 +875,10 @@ export default function ParentHome() {
                                         </View>
                                         <Text style={styles.handoffText}>{item.text}</Text>
                                     </Pressable>
-                                ))}
+                                )) : (
+                                    <Text style={styles.emptyScheduleText}>등록된 주의사항이 없어요.</Text>
+                                )}
                             </View>
-
-                            {isHandoffInputOpen ? (
-                                <View style={styles.handoffInputBox}>
-                                    <TextInput
-                                        style={styles.handoffInput}
-                                        placeholder="공유할 내용을 입력해주세요"
-                                        placeholderTextColor={Colors.textShadow}
-                                        value={handoffText}
-                                        onChangeText={setHandoffText}
-                                        autoFocus
-                                        multiline
-                                        textAlignVertical="top"
-                                    />
-                                    <Pressable style={styles.saveHandoffButton} onPress={addHandoff}>
-                                        <Text style={styles.saveHandoffText}>저장</Text>
-                                    </Pressable>
-                                </View>
-                            ) : (
-                                <Pressable
-                                    style={styles.addButton}
-                                    onPress={() => {
-                                        setIsScheduleInputOpen(false);
-                                        setScheduleText('');
-                                        setIsHandoffInputOpen(true);
-                                    }}
-                                >
-                                    <View style={styles.addIconCircle}>
-                                        <Ionicons name="add" size={18} color={Colors.realwhite} />
-                                    </View>
-                                    <Text style={styles.addButtonText}>자료 추가하기</Text>
-                                </Pressable>
-                            )}
                         </View>
                     </>
                 ) : (
@@ -1074,6 +996,10 @@ export default function ParentHome() {
                                             pathname: '/social_story',
                                             params: {
                                                 scheduleId: selectedStoryEvent.scheduleId ?? '',
+                                                childId,
+                                                characterImages: childCharacterImages
+                                                    ? JSON.stringify(childCharacterImages)
+                                                    : '',
                                                 childName,
                                                 title: selectedStoryEvent.title,
                                                 script: `오늘은 ${selectedStoryEvent.title} 일정이 있어요.`,
@@ -1207,27 +1133,12 @@ export default function ParentHome() {
 
                             {editTarget?.type === 'schedule' || editTarget?.type === 'calendar' ? (
                                 <>
-                                    <Text style={styles.modalSubTitle}>함께 가는 동행인</Text>
-                                    <View style={styles.modalChipRow}>
-                                        {companionOptions.map((companion) => {
-                                            const selected = editCompanion === companion;
-
-                                            return (
-                                                <Pressable
-                                                    key={companion}
-                                                    style={[styles.modalChip, selected && styles.modalChipSelected]}
-                                                    onPress={() => setEditCompanion(companion)}
-                                                >
-                                                    <Text style={[
-                                                        styles.modalChipText,
-                                                        selected && styles.modalChipTextSelected,
-                                                    ]}>
-                                                        {companion}
-                                                    </Text>
-                                                </Pressable>
-                                            );
-                                        })}
-                                    </View>
+                                    {editCompanion ? (
+                                        <>
+                                            <Text style={styles.modalSubTitle}>함께 가는 동행인</Text>
+                                            <Text style={styles.modalReadOnlyText}>{editCompanion}</Text>
+                                        </>
+                                    ) : null}
 
                                     <Text style={styles.modalSubTitle}>세부 Todo</Text>
                                     <View style={styles.todoEditorCard}>
@@ -1994,37 +1905,18 @@ const styles = StyleSheet.create({
         marginBottom: 10,
     },
 
-    modalChipRow: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 8,
-        marginBottom: 16,
-    },
-
-    modalChip: {
-        minHeight: 36,
-        borderRadius: 18,
+    modalReadOnlyText: {
+        width: '100%',
+        borderRadius: 14,
         borderWidth: 1,
         borderColor: '#E8DDC8',
         backgroundColor: '#F7F4E8',
-        alignItems: 'center',
-        justifyContent: 'center',
         paddingHorizontal: 12,
-    },
-
-    modalChipSelected: {
-        borderColor: Colors.highlight1,
-        backgroundColor: Colors.highlight1,
-    },
-
-    modalChipText: {
+        paddingVertical: 11,
+        marginBottom: 16,
         fontFamily: Fonts.bodyBold,
-        fontSize: 13,
+        fontSize: 14,
         fontWeight: '900',
-        color: Colors.text,
-    },
-
-    modalChipTextSelected: {
         color: Colors.text,
     },
 

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Image,
     Keyboard,
@@ -18,9 +18,11 @@ import BackButton from '../components/BackButton';
 import PrimaryButton from '../components/PrimaryButton';
 import {
     ApiError,
+    CharacterImages,
     SocialStoryResponse,
     generateScheduleSocialStory,
     generateSocialStoryTts,
+    getChildProfile,
     toApiAssetUrl,
 } from '../constants/Api';
 import { Colors } from '../constants/Colors';
@@ -39,22 +41,141 @@ const parseCheckedItems = (value?: string) => {
     }
 };
 
+const parseCharacterImages = (value?: string): CharacterImages | null => {
+    if (!value) return null;
+
+    try {
+        const parsed = JSON.parse(value) as Partial<CharacterImages>;
+        if (!parsed || typeof parsed.idle !== 'string' || !parsed.idle) return null;
+
+        return {
+            idle: parsed.idle,
+            blink: typeof parsed.blink === 'string' ? parsed.blink : undefined,
+            mouth_open: typeof parsed.mouth_open === 'string' ? parsed.mouth_open : undefined,
+            mouth_wide: typeof parsed.mouth_wide === 'string' ? parsed.mouth_wide : undefined,
+            smile: typeof parsed.smile === 'string' ? parsed.smile : undefined,
+        };
+    } catch {
+        return null;
+    }
+};
+
+const normalizeCharacterImages = (images?: CharacterImages | null): CharacterImages | null => {
+    if (!images?.idle) return null;
+
+    return {
+        idle: toApiAssetUrl(images.idle),
+        blink: images.blink ? toApiAssetUrl(images.blink) : undefined,
+        mouth_open: images.mouth_open ? toApiAssetUrl(images.mouth_open) : undefined,
+        mouth_wide: images.mouth_wide ? toApiAssetUrl(images.mouth_wide) : undefined,
+        smile: images.smile ? toApiAssetUrl(images.smile) : undefined,
+    };
+};
+
+const estimateSpeechDuration = (text: string) => {
+    const compactLength = text.replace(/\s/g, '').length;
+
+    return Math.min(18000, Math.max(4200, compactLength * 170));
+};
+
 export default function SocialStoryScreen() {
     const params = useLocalSearchParams<{
         scheduleId?: string;
         title?: string;
         childName?: string;
+        childId?: string;
+        characterImages?: string;
         script?: string;
         checkedItems?: string;
     }>();
     const checkedItems = useMemo(() => parseCheckedItems(params.checkedItems), [params.checkedItems]);
+    const initialCharacterImages = useMemo(
+        () => parseCharacterImages(params.characterImages),
+        [params.characterImages]
+    );
     const [script, setScript] = useState(
         params.script || (params.title ? `오늘은 ${params.title} 일정이 있어요.` : '오늘은 병원에 가요.')
     );
     const [result, setResult] = useState<SocialStoryResponse | null>(null);
+    const [profileCharacterImages, setProfileCharacterImages] = useState<CharacterImages | null>(initialCharacterImages);
+    const [speakingFrameIndex, setSpeakingFrameIndex] = useState(0);
+    const [isSpeaking, setIsSpeaking] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const audioUrl = toApiAssetUrl(result?.audio_url);
+    const speakingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const speakingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const characterImages = normalizeCharacterImages(result?.character_images ?? profileCharacterImages);
+    const speakingFrames = useMemo(() => {
+        if (!characterImages) return [];
+
+        return [
+            characterImages.idle,
+            characterImages.mouth_open || characterImages.smile || characterImages.idle,
+            characterImages.mouth_wide || characterImages.mouth_open || characterImages.smile || characterImages.idle,
+            characterImages.mouth_open || characterImages.smile || characterImages.idle,
+        ];
+    }, [characterImages]);
+    const currentCharacterFrame = speakingFrames[speakingFrameIndex] || characterImages?.idle || '';
+
+    useEffect(() => {
+        let active = true;
+
+        const loadCharacterImages = async () => {
+            if (initialCharacterImages || !params.childId) return;
+
+            try {
+                const response = await getChildProfile(params.childId);
+                if (!active) return;
+
+                setProfileCharacterImages(response.data?.character_image_url ?? null);
+            } catch {
+                if (active) {
+                    setProfileCharacterImages(null);
+                }
+            }
+        };
+
+        loadCharacterImages();
+
+        return () => {
+            active = false;
+        };
+    }, [initialCharacterImages, params.childId]);
+
+    useEffect(() => () => {
+        if (speakingIntervalRef.current) clearInterval(speakingIntervalRef.current);
+        if (speakingTimeoutRef.current) clearTimeout(speakingTimeoutRef.current);
+    }, []);
+
+    const stopSpeakingAnimation = () => {
+        if (speakingIntervalRef.current) {
+            clearInterval(speakingIntervalRef.current);
+            speakingIntervalRef.current = null;
+        }
+        if (speakingTimeoutRef.current) {
+            clearTimeout(speakingTimeoutRef.current);
+            speakingTimeoutRef.current = null;
+        }
+        setSpeakingFrameIndex(0);
+        setIsSpeaking(false);
+    };
+
+    const startSpeakingAnimation = () => {
+        if (speakingFrames.length === 0) return;
+
+        stopSpeakingAnimation();
+        setIsSpeaking(true);
+        setSpeakingFrameIndex(0);
+
+        speakingIntervalRef.current = setInterval(() => {
+            setSpeakingFrameIndex((current) => (current + 1) % speakingFrames.length);
+        }, 180);
+
+        speakingTimeoutRef.current = setTimeout(() => {
+            stopSpeakingAnimation();
+        }, estimateSpeechDuration(result?.converted_script || script));
+    };
 
     const generateStory = async () => {
         const trimmedScript = script.trim();
@@ -83,7 +204,9 @@ export default function SocialStoryScreen() {
             setResult(null);
             setError(storyError instanceof ApiError
                 ? storyError.message
-                : '소셜 스토리를 만들지 못했어요. 잠시 후 다시 시도해주세요.');
+                : storyError instanceof Error
+                    ? `소셜 스토리를 만들지 못했어요. ${storyError.message}`
+                    : '소셜 스토리를 만들지 못했어요. 잠시 후 다시 시도해주세요.');
         } finally {
             setLoading(false);
         }
@@ -94,6 +217,7 @@ export default function SocialStoryScreen() {
 
         const canOpen = await Linking.canOpenURL(audioUrl);
         if (canOpen) {
+            startSpeakingAnimation();
             await Linking.openURL(audioUrl);
             return;
         }
@@ -166,6 +290,29 @@ export default function SocialStoryScreen() {
 
                 {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
+                <View style={styles.characterStage}>
+                    <View style={styles.characterHalo}>
+                        {currentCharacterFrame ? (
+                            <Image
+                                source={{ uri: currentCharacterFrame }}
+                                style={styles.characterImage}
+                                resizeMode="contain"
+                            />
+                        ) : (
+                            <Image
+                                source={require('../assets/images/mock_character.png')}
+                                style={styles.characterImage}
+                                resizeMode="contain"
+                            />
+                        )}
+                    </View>
+                    <View style={styles.speechBubble}>
+                        <Text style={styles.speechBubbleText} numberOfLines={2}>
+                            {isSpeaking ? '이야기를 들려주는 중이에요.' : '준비되면 이야기를 들려줄게요.'}
+                        </Text>
+                    </View>
+                </View>
+
                 <PrimaryButton
                     label={loading ? '만드는 중...' : '소셜 스토리 만들기'}
                     width="100%"
@@ -201,7 +348,9 @@ export default function SocialStoryScreen() {
                         {audioUrl ? (
                             <Pressable style={styles.audioButton} onPress={openAudio}>
                                 <Ionicons name="volume-high-outline" size={20} color={Colors.text} />
-                                <Text style={styles.audioButtonText}>음성으로 듣기</Text>
+                                <Text style={styles.audioButtonText}>
+                                    {isSpeaking ? '음성 재생 중...' : '음성으로 듣기'}
+                                </Text>
                             </Pressable>
                         ) : null}
                     </View>
@@ -327,6 +476,53 @@ const styles = StyleSheet.create({
         lineHeight: 20,
         color: Colors.highlight3,
         marginBottom: 14,
+    },
+
+    characterStage: {
+        width: '100%',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+
+    characterHalo: {
+        width: '100%',
+        maxWidth: 280,
+        height: 260,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#FFF8DF',
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        overflow: 'hidden',
+    },
+
+    characterImage: {
+        width: 230,
+        height: 230,
+    },
+
+    speechBubble: {
+        maxWidth: 260,
+        minHeight: 40,
+        borderRadius: 20,
+        backgroundColor: Colors.realwhite,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        paddingHorizontal: 14,
+        paddingVertical: 9,
+        marginTop: -14,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    speechBubbleText: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 13,
+        fontWeight: '900',
+        lineHeight: 18,
+        color: Colors.text,
+        textAlign: 'center',
     },
 
     resultCard: {

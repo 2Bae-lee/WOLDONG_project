@@ -65,8 +65,8 @@ export default function CompanionCalendarEdit() {
     const year = params.year || '';
     const month = params.month || '';
     const day = params.day || '';
-    const childName = params.childName || '김월동';
-    const guardian = params.guardian || '김보호자';
+    const childName = params.childName || '아이';
+    const guardian = params.guardian || '보호자';
     const [title, setTitle] = useState(params.title || '');
     const [todos, setTodos] = useState<EditTodo[]>(() => parseTodos(params.todos));
     const [todoText, setTodoText] = useState('');

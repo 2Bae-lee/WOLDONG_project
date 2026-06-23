@@ -40,7 +40,7 @@ export default function SignupRole() {
         toDisabilityType(params.typeofdisability)
     ));
     const [typeofdisabilityError, setTypeOfDisabiltyError] = useState('');
-      const childName = params.name ?? '김월동';
+      const childName = params.name ?? '아이';
       const profileImage = params.profileImage ?? '';
       
     const handleNext = () => {

@@ -1,23 +1,18 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Image, Share, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../../components/BackButton';
-import PrimaryButton from '../../../components/PrimaryButton';
 import { generateInviteCode, getParentHome } from '../../../constants/Api';
 import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
-
-const mockInviteCode = ['R', 'O', 'W', '8'];
-const mockChildName = '김월동';
-const mockInviteUrl = 'https://woldong.app/invite/ROW8';
 
 export default function MakeInviteCode() {
     const params = useLocalSearchParams<{
         childId?: string;
         childName?: string;
     }>();
-    const [inviteCode, setInviteCode] = useState(mockInviteCode.join(''));
-    const [childName, setChildName] = useState(params.childName || mockChildName);
+    const [inviteCode, setInviteCode] = useState('');
+    const [childName, setChildName] = useState(params.childName || '');
     const [expiresAt, setExpiresAt] = useState('');
     const [statusText, setStatusText] = useState('');
     const codeLetters = useMemo(() => inviteCode.split(''), [inviteCode]);
@@ -47,12 +42,13 @@ export default function MakeInviteCode() {
                 const response = await generateInviteCode(nextChildId);
                 if (!active) return;
 
-                setInviteCode(response.data?.code ?? mockInviteCode.join(''));
+                setInviteCode(response.data?.code ?? '');
                 setExpiresAt(response.data?.expires_at ?? '');
                 if (nextChildName) setChildName(nextChildName);
-            } catch {
+            } catch (error) {
                 if (active) {
-                    setStatusText('목데이터 초대 코드를 보여주고 있어요.');
+                    setInviteCode('');
+                    setStatusText(error instanceof Error ? error.message : '초대 코드를 만들지 못했어요.');
                 }
             }
         };
@@ -118,7 +114,9 @@ export default function MakeInviteCode() {
             </View>
 
             <View style={styles.buttonArea}>
-                <PrimaryButton label="공유하기" width="100%" onPress={shareInviteCode} />
+                <Pressable style={styles.shareButton} onPress={shareInviteCode}>
+                    <Text style={styles.shareButtonText}>공유하기</Text>
+                </Pressable>
             </View>
         </View>
     );
@@ -243,5 +241,23 @@ const styles = StyleSheet.create({
 
     buttonArea: {
         width: '100%',
+    },
+
+    shareButton: {
+        width: '100%',
+        height: 58,
+        borderRadius: 29,
+        backgroundColor: Colors.highlight1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    shareButtonText: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 18,
+        fontWeight: '900',
+        color: Colors.text,
+        textAlign: 'center',
+        includeFontPadding: false,
     },
 });

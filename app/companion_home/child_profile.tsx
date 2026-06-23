@@ -34,7 +34,7 @@ const profileSections = [
 
 export default function CompanionChildProfile() {
     const params = useLocalSearchParams<{ childName?: string }>();
-    const childName = params.childName || '김월동';
+    const childName = params.childName || '아이';
 
     return (
         <ScrollView

@@ -1,5 +1,6 @@
 export type CompanionTodo = {
     id: number;
+    itemId?: string;
     text: string;
     done: boolean;
 };
@@ -21,31 +22,7 @@ const cloneSchedules = (schedules: CompanionTodaySchedule[]) => (
     }))
 );
 
-let todaySchedules: CompanionTodaySchedule[] = [
-    {
-        id: 1,
-        childName: '김월동',
-        title: '병원 진료',
-        guardian: '김보호자',
-        done: false,
-        todos: [
-            { id: 11, text: '병원 접수하기', done: false },
-            { id: 12, text: '진료 전 짧게 설명하기', done: true },
-            { id: 13, text: '진료 후 조용한 곳에서 쉬기', done: false },
-        ],
-    },
-    {
-        id: 2,
-        childName: '이하준',
-        title: '귀가 준비',
-        guardian: '이보호자',
-        done: false,
-        todos: [
-            { id: 21, text: '가방 챙기기', done: false },
-            { id: 22, text: '집에 간다고 미리 알려주기', done: false },
-        ],
-    },
-];
+let todaySchedules: CompanionTodaySchedule[] = [];
 
 const listeners = new Set<() => void>();
 

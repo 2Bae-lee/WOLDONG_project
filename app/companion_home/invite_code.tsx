@@ -2,16 +2,17 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useRef, useState } from 'react';
 import {
     Image,
+    Keyboard,
     KeyboardAvoidingView,
     Platform,
     Pressable,
     StyleSheet,
     Text,
     TextInput,
+    TouchableWithoutFeedback,
     View,
 } from 'react-native';
-import BackButton from '../../components/BackButton';
-import PrimaryButton from '../../components/PrimaryButton';
+import SmallButton from '../../components/SmallButton';
 import { verifyInviteCode } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
@@ -25,7 +26,7 @@ export default function CompanionInviteCode() {
         companionIntro?: string;
         companionProfileImage?: string;
     }>();
-    const companionName = params.companionName || '박민지';
+    const companionName = params.companionName || '동행인';
     const [code, setCode] = useState(['', '', '', '']);
     const [error, setError] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -95,136 +96,129 @@ export default function CompanionInviteCode() {
             style={styles.container}
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-            <View style={styles.logoArea}>
-                <View style={styles.logoRow}>
-                    <BackButton />
-                    <Text style={styles.logoTitle}>월동</Text>
-                    <Image
-                        source={require('../../assets/images/canola_flower_small.png')}
-                        style={styles.logoFlower}
-                        resizeMode="contain"
-                    />
-                </View>
-            </View>
+            <Pressable style={styles.backButton} onPress={() => router.back()}>
+                <Text style={styles.backButtonText}>‹</Text>
+            </Pressable>
 
-            <View style={styles.content}>
-                <View style={styles.centerLogoRow}>
-                    <Text style={styles.centerLogo}>월동</Text>
-                    <Image
-                        source={require('../../assets/images/canola_flower_small.png')}
-                        style={styles.centerFlower}
-                        resizeMode="contain"
-                    />
-                </View>
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+                <View style={styles.inner}>
+                    <View style={styles.logoArea}>
+                        <View style={styles.logoWrap}>
+                            <Text style={styles.logoText}>월동</Text>
+                            <Image
+                                source={require('../../assets/images/canola_flower_small.png')}
+                                style={styles.logoFlower}
+                                resizeMode="contain"
+                            />
+                        </View>
+                    </View>
 
-                <Text style={styles.title}>초대 코드를 입력해주세요</Text>
-                <Text style={styles.description}>
-                    보호자가 공유한 코드를 입력하면{'\n'}담당 어린이 승인 요청이 전송돼요.
-                </Text>
+                    <View style={styles.content}>
+                        <Text style={styles.title}>초대 코드를 입력해주세요</Text>
+                        <Text style={styles.description}>
+                            보호자가 공유한 4자리 코드를 입력하면{'\n'}담당 어린이 승인 요청이 전송돼요.
+                        </Text>
 
-                <View style={styles.codeRow}>
-                    {code.map((digit, index) => (
-                        <TextInput
-                            key={index}
-                            ref={(ref) => {
-                                inputRefs.current[index] = ref;
-                            }}
-                            style={[styles.codeInput, error ? styles.codeInputError : null]}
-                            value={digit}
-                            onChangeText={(text) => handleChange(text, index)}
-                            onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, index)}
-                            keyboardType="number-pad"
-                            maxLength={1}
-                            textAlign="center"
-                            returnKeyType={index === CODE_LENGTH - 1 ? 'done' : 'next'}
-                            onSubmitEditing={submitCode}
+                        <View style={styles.codeRow}>
+                            {code.map((digit, index) => (
+                                <TextInput
+                                    key={index}
+                                    ref={(ref) => {
+                                        inputRefs.current[index] = ref;
+                                    }}
+                                    style={[
+                                        styles.codeInput,
+                                        error ? styles.codeInputError : null,
+                                    ]}
+                                    value={digit}
+                                    onChangeText={(text) => handleChange(text, index)}
+                                    onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, index)}
+                                    keyboardType="number-pad"
+                                    maxLength={1}
+                                    textAlign="center"
+                                    returnKeyType={index === CODE_LENGTH - 1 ? 'done' : 'next'}
+                                    onSubmitEditing={submitCode}
+                                />
+                            ))}
+                        </View>
+
+                        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+                        <SmallButton
+                            label={isSubmitting ? '요청 중' : '요청 보내기'}
+                            onPress={submitCode}
                         />
-                    ))}
+                    </View>
+
+                    <View style={styles.noticeArea}>
+                        <Text style={styles.noticeText}>
+                            보호자 승인 후 담당 어린이의 일정과{'\n'}주의사항을 확인할 수 있어요.
+                        </Text>
+                    </View>
                 </View>
-
-                {error ? <Text style={styles.errorText}>{error}</Text> : null}
-            </View>
-
-            <View style={styles.buttonArea}>
-                <PrimaryButton label={isSubmitting ? '요청 중...' : '요청 보내기'} width="100%" onPress={submitCode} />
-            </View>
+            </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
     );
 }
 
 const styles = StyleSheet.create({
     container: {
-        flex: 1,
         width: '100%',
+        flex: 1,
         backgroundColor: Colors.pageBg,
-        paddingTop: 10,
         paddingHorizontal: 32,
-        paddingBottom: 54,
+    },
+
+    inner: {
+        flex: 1,
     },
 
     logoArea: {
-        alignItems: 'flex-start',
-        marginLeft: -20,
-    },
-
-    logoRow: {
-        flexDirection: 'row',
         alignItems: 'center',
+        marginTop: 70,
     },
 
-    logoTitle: {
+    logoWrap: {
+        position: 'relative',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    logoText: {
         fontFamily: Fonts.title,
-        fontSize: 32,
+        fontSize: 60,
         color: Colors.text,
+        includeFontPadding: false,
     },
 
     logoFlower: {
-        width: 24,
-        height: 24,
-        marginLeft: -4,
-        marginTop: -20,
+        position: 'absolute',
+        top: -20,
+        right: -18,
+        width: 34,
+        height: 34,
         transform: [{ rotate: '-18deg' }],
     },
 
     content: {
-        flex: 1,
+        width: '100%',
+        marginTop: 130,
         alignItems: 'center',
-        justifyContent: 'center',
-        paddingBottom: 42,
-    },
-
-    centerLogoRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 28,
-    },
-
-    centerLogo: {
-        fontFamily: Fonts.title,
-        fontSize: 64,
-        color: Colors.black,
-    },
-
-    centerFlower: {
-        width: 32,
-        height: 32,
-        marginLeft: -8,
-        marginTop: -38,
-        transform: [{ rotate: '-18deg' }],
     },
 
     title: {
         fontFamily: Fonts.bodyBold,
         fontSize: 19,
-        fontWeight: '900',
+        fontWeight: '800',
         color: Colors.text,
         marginBottom: 10,
+        marginTop: -70,
     },
 
     description: {
-        fontFamily: Fonts.body,
-        fontSize: 14,
-        lineHeight: 22,
+        fontFamily: Fonts.bodyMedium,
+        fontSize: 15,
+        lineHeight: 23,
         textAlign: 'center',
         color: Colors.text,
         marginBottom: 34,
@@ -233,16 +227,16 @@ const styles = StyleSheet.create({
     codeRow: {
         flexDirection: 'row',
         gap: 8,
-        marginBottom: 14,
+        marginBottom: 18,
     },
 
     codeInput: {
-        width: 66,
-        height: 76,
-        borderRadius: 10,
-        backgroundColor: Colors.realwhite,
+        width: 58,
+        height: 64,
+        borderRadius: 8,
+        backgroundColor: Colors.white,
         fontFamily: Fonts.title,
-        fontSize: 72,
+        fontSize: 62,
         color: Colors.black,
         includeFontPadding: false,
     },
@@ -256,9 +250,37 @@ const styles = StyleSheet.create({
         fontFamily: Fonts.body,
         fontSize: 13,
         color: Colors.highlight3,
+        marginBottom: 12,
     },
 
-    buttonArea: {
-        width: '100%',
+    noticeArea: {
+        marginTop: 92,
+        alignItems: 'center',
+    },
+
+    noticeText: {
+        fontSize: 12,
+        lineHeight: 20,
+        color: Colors.textShadow,
+        textAlign: 'center',
+    },
+
+    backButton: {
+        position: 'absolute',
+        top: 30,
+        left: 20,
+        width: 40,
+        height: 40,
+        borderRadius: 22,
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 10,
+    },
+
+    backButtonText: {
+        fontSize: 40,
+        lineHeight: 40,
+        color: Colors.textShadow,
+        fontFamily: Fonts.body,
     },
 });

@@ -1,6 +1,16 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Image, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+    Image,
+    Keyboard,
+    KeyboardAvoidingView,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableWithoutFeedback,
+    View,
+} from 'react-native';
 import SmallButton from '../../../components/SmallButton';
 import { signupParent } from '../../../constants/Api';
 import { Colors } from '../../../constants/Colors';
@@ -92,52 +102,61 @@ export default function ParentSignupPhoneNumber() {
     
 
     return (
-        <View style={styles.container}>
-        <View style={styles.logoArea}>
-            <View style={styles.logoRow}>
-            <Text style={styles.logoTitle}>월동</Text>
-            <Image
-                source={require('../../../assets/images/canola_flower_small.png')}
-                style={styles.logoFlower}
-                resizeMode="contain"
-            />
+        <KeyboardAvoidingView
+            style={styles.container}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <View style={styles.inner}>
+            <View style={styles.logoArea}>
+                <View style={styles.logoRow}>
+                <Text style={styles.logoTitle}>월동</Text>
+                <Image
+                    source={require('../../../assets/images/canola_flower_small.png')}
+                    style={styles.logoFlower}
+                    resizeMode="contain"
+                />
+                </View>
             </View>
-        </View>
 
-        <View style={styles.content}>
-            <Text style={styles.screenTitle}>전화번호 입력</Text>
-            <Text style={styles.description}>
-            원활한 서비스 이용을 위해 전화번호를 입력해 주세요
+            <View style={styles.content}>
+                <Text style={styles.screenTitle}>전화번호 입력</Text>
+                <Text style={styles.description}>
+                원활한 서비스 이용을 위해 전화번호를 입력해 주세요
+                </Text>
+
+                <TextInput
+                style={[
+                    styles.input,
+                    phoneError ? styles.inputError : null,
+                ]}
+                placeholder="010-0000-0000"
+                placeholderTextColor={Colors.textShadow}
+                keyboardType="phone-pad"
+                value={phoneNumber}
+                maxLength={13}
+                onChangeText={handlePhoneChange}
+                returnKeyType="done"
+                onSubmitEditing={handleNext}
+                />
+
+                {phoneError ? (
+                <Text style={styles.errorText}>{phoneError}</Text>
+                ) : null}
+
+                <SmallButton
+                label={isSubmitting ? '가입 중' : '계속'}
+                onPress={handleNext}
+                />
+            </View>
+
+            <Text style={styles.policyText}>
+                계속을 클릭하면 당사의 <Text style={styles.policyBoldText}>서비스 이용 약관</Text> 및 <Text style={styles.policyBoldText}>개인정보 처리방침</Text>에{'\n'}
+                동의하는 것으로 간주됩니다.
             </Text>
-
-            <TextInput
-            style={[
-                styles.input,
-                phoneError ? styles.inputError : null,
-            ]}
-            placeholder="010-0000-0000"
-            placeholderTextColor={Colors.textShadow}
-            keyboardType="phone-pad"
-            value={phoneNumber}
-            maxLength={13}
-            onChangeText={handlePhoneChange}
-            />
-
-            {phoneError ? (
-            <Text style={styles.errorText}>{phoneError}</Text>
-            ) : null}
-
-            <SmallButton
-            label={isSubmitting ? '가입 중' : '계속'}
-            onPress={handleNext}
-            />
         </View>
-
-        <Text style={styles.policyText}>
-            계속을 클릭하면 당사의 <Text style={styles.policyBoldText}>서비스 이용 약관</Text> 및 <Text style={styles.policyBoldText}>개인정보 처리방침</Text>에{'\n'}
-            동의하는 것으로 간주됩니다.
-        </Text>
-        </View>
+        </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
     );
     }
 
@@ -145,6 +164,10 @@ export default function ParentSignupPhoneNumber() {
     container: {
         flex: 1,
         backgroundColor: Colors.pageBg,
+    },
+
+    inner: {
+        flex: 1,
         alignItems: 'center',
         paddingTop: 80,
         paddingBottom: 54,

@@ -3,6 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+    Alert,
     Image,
     Keyboard,
     KeyboardAvoidingView,
@@ -17,12 +18,15 @@ import {
     View,
 } from 'react-native';
 import {
+    CharacterImages,
     CompanionChild,
     TodayScheduleSummary,
     getCompanionChildren,
     getCompanionProfile,
     getSchedules,
     getTodaySchedules,
+    logout,
+    updateScheduleChecklist,
 } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { CompanionTodaySchedule } from '../../constants/CompanionTodayState';
@@ -42,10 +46,12 @@ type ChildItem = {
     permissions: string[];
     status: 'connected' | 'pending';
     inviteCode?: string;
+    characterImages?: CharacterImages | null;
 };
 
 type CalendarTodo = {
     id: number;
+    itemId?: string;
     text: string;
     done: boolean;
 };
@@ -89,15 +95,25 @@ const mapTodaySchedules = (
         const scheduleId = createNumericId(schedule.schedule_id);
         const place = getSchedulePlace(schedule);
         const timeText = [schedule.start_time, place].filter(Boolean).join(' · ');
+        const checklistTodos = schedule.checklist?.map((item, index) => ({
+            id: createNumericId(item.item_id || `${schedule.schedule_id}-${index}`),
+            itemId: item.item_id,
+            text: item.content,
+            done: item.is_checked,
+        })) ?? [];
 
         return {
             id: scheduleId,
             scheduleId: schedule.schedule_id,
             childName: child?.name ?? '담당 어린이',
             title: schedule.title,
-            guardian: '연결된 보호자',
-            done: schedule.status === 'done',
-            todos: timeText
+            guardian: '보호자',
+            done: checklistTodos.length > 0
+                ? checklistTodos.every((todo) => todo.done)
+                : schedule.status === 'done',
+            todos: checklistTodos.length > 0
+                ? checklistTodos
+                : timeText
                 ? [{ id: scheduleId + 1, text: timeText, done: schedule.status === 'done' }]
                 : [],
         };
@@ -116,6 +132,12 @@ const mapCalendarSchedules = (
         const eventId = createNumericId(schedule.schedule_id);
         const child = childById.get(schedule.child_id);
         const place = getSchedulePlace(schedule);
+        const checklistTodos = schedule.checklist?.map((item, index) => ({
+            id: createNumericId(item.item_id || `${schedule.schedule_id}-${index}`),
+            itemId: item.item_id,
+            text: item.content,
+            done: item.is_checked,
+        })) ?? [];
         const todoTexts = [
             schedule.start_time ? `${schedule.start_time} 출발` : '',
             place,
@@ -130,12 +152,14 @@ const mapCalendarSchedules = (
             day,
             childName: child?.name ?? '담당 어린이',
             title: schedule.title,
-            guardian: '연결된 보호자',
-            todos: todoTexts.map((text, index) => ({
-                id: eventId + index + 1,
-                text,
-                done: schedule.status === 'done',
-            })),
+            guardian: '보호자',
+            todos: checklistTodos.length > 0
+                ? checklistTodos
+                : todoTexts.map((text, index) => ({
+                    id: eventId + index + 1,
+                    text,
+                    done: schedule.status === 'done',
+                })),
         };
 
         return event;
@@ -168,11 +192,14 @@ export default function CompanionChildren() {
         tab?: string;
     }>();
     const [apiCompanionName, setApiCompanionName] = useState('');
+    const [apiCompanionJob, setApiCompanionJob] = useState('');
+    const [apiCompanionIntro, setApiCompanionIntro] = useState('');
+    const [apiCompanionProfileImage, setApiCompanionProfileImage] = useState('');
     const [loadError, setLoadError] = useState('');
     const companionName = params.companionName || apiCompanionName || '동행인';
-    const companionJob = params.companionJob || params.companionRelation || '담임 선생님';
-    const companionIntro = params.companionIntro || '아이에게 필요한 일정을 차분하게 함께 확인해요.';
-    const companionProfileImage = params.companionProfileImage || '';
+    const companionJob = params.companionJob || params.companionRelation || apiCompanionJob || '담임 선생님';
+    const companionIntro = params.companionIntro || apiCompanionIntro || '아이에게 필요한 일정을 차분하게 함께 확인해요.';
+    const companionProfileImage = params.companionProfileImage || apiCompanionProfileImage || '';
     const today = useMemo(() => new Date(), []);
     const currentYear = today.getFullYear();
     const currentMonth = today.getMonth() + 1;
@@ -183,45 +210,7 @@ export default function CompanionChildren() {
     const [calendarYear, setCalendarYear] = useState(currentYear);
     const [calendarMonth, setCalendarMonth] = useState(currentMonth);
     const [selectedDay, setSelectedDay] = useState(todayDay);
-    const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([
-        {
-            id: 1,
-            year: currentYear,
-            month: currentMonth,
-            day: todayDay,
-            childName: '김월동',
-            title: '병원 진료',
-            guardian: '김보호자',
-            todos: [
-                { id: 101, text: '병원 접수하기', done: false },
-                { id: 102, text: '진료 후 조용한 곳에서 쉬기', done: true },
-            ],
-        },
-        {
-            id: 2,
-            year: currentYear,
-            month: currentMonth,
-            day: Math.min(todayDay + 3, new Date(currentYear, currentMonth, 0).getDate()),
-            childName: '김월동',
-            title: '언어 치료',
-            guardian: '김보호자',
-            todos: [
-                { id: 201, text: '치료 카드 챙기기', done: false },
-            ],
-        },
-        {
-            id: 3,
-            year: currentYear,
-            month: currentMonth,
-            day: todayDay,
-            childName: '이하준',
-            title: '하원 동행',
-            guardian: '이보호자',
-            todos: [
-                { id: 301, text: '하원 준비물 확인하기', done: false },
-            ],
-        },
-    ]);
+    const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
     const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
     const [isCalendarEditorOpen, setIsCalendarEditorOpen] = useState(false);
     const [editTitle, setEditTitle] = useState('');
@@ -244,17 +233,27 @@ export default function CompanionChildren() {
 
     const loadCompanionHome = useCallback(async () => {
         try {
-            const [profileResponse, childrenResponse, todaySchedulesResponse, allSchedulesResponse] = await Promise.all([
+            const [profileResult, childrenResult, todaySchedulesResult, allSchedulesResult] = await Promise.allSettled([
                 getCompanionProfile(),
                 getCompanionChildren(),
                 getTodaySchedules(),
                 getSchedules(),
             ]);
 
+            if (profileResult.status === 'rejected') throw profileResult.reason;
+            if (childrenResult.status === 'rejected') throw childrenResult.reason;
+
+            const todayDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(todayDay).padStart(2, '0')}`;
+            const profileResponse = profileResult.value;
+            const childrenResponse = childrenResult.value;
             const companionProfile = profileResponse.data;
             const assignedChildren = childrenResponse.data ?? [];
-            const todaySchedules = todaySchedulesResponse.data ?? [];
-            const allSchedules = allSchedulesResponse.data ?? [];
+            const allSchedules = allSchedulesResult.status === 'fulfilled'
+                ? allSchedulesResult.value.data ?? []
+                : [];
+            const todaySchedules = todaySchedulesResult.status === 'fulfilled'
+                ? todaySchedulesResult.value.data ?? []
+                : allSchedules.filter((schedule) => schedule.date === todayDate);
             const scheduleCountByChildId = new Map<string, number>();
             const primaryScheduleByChildId = new Map<string, string>();
 
@@ -274,7 +273,7 @@ export default function CompanionChildren() {
                 childId: child.child_id,
                 primaryScheduleId: primaryScheduleByChildId.get(child.child_id),
                 name: child.name,
-                guardian: '연결된 보호자',
+                guardian: '보호자',
                 schedules: scheduleCountByChildId.get(child.child_id) ?? 0,
                 permissions: [
                     child.disability_type || '아이 프로필',
@@ -282,9 +281,13 @@ export default function CompanionChildren() {
                     '공유 캘린더',
                 ],
                 status: 'connected' as const,
+                characterImages: child.character_image_url ?? null,
             }));
 
             setApiCompanionName(companionProfile?.name ?? '');
+            setApiCompanionJob(companionProfile?.job || companionProfile?.relation || '');
+            setApiCompanionIntro(companionProfile?.intro ?? '');
+            setApiCompanionProfileImage(companionProfile?.profile_image_url ?? '');
             setTodayTodos(mapTodaySchedules(todaySchedules, childById));
             setCalendarEvents(mapCalendarSchedules(allSchedules, childById));
             setChildren((current) => [
@@ -294,11 +297,15 @@ export default function CompanionChildren() {
                     !nextConnectedChildren.some((connectedChild) => connectedChild.inviteCode === child.inviteCode)
                 )),
             ]);
-            setLoadError('');
+            setLoadError(
+                todaySchedulesResult.status === 'rejected' && allSchedulesResult.status === 'rejected'
+                    ? '일정 정보를 불러오지 못했어요.'
+                    : ''
+            );
         } catch (error) {
             setLoadError(error instanceof Error ? error.message : '담당 어린이 정보를 불러오지 못했어요.');
         }
-    }, []);
+    }, [currentMonth, currentYear, todayDay]);
 
     useFocusEffect(
         useCallback(() => {
@@ -395,8 +402,8 @@ export default function CompanionChildren() {
             year: date.year,
             month: date.month,
             day: date.day,
-            childName: params.addedEventChildName ?? '김월동',
-            guardian: params.addedEventGuardian ?? '김보호자',
+            childName: params.addedEventChildName ?? '아이',
+            guardian: params.addedEventGuardian ?? '보호자',
             title: params.addedEventTitle ?? '새 일정',
             todos: parsedTodos.map((todo) => ({
                 ...todo,
@@ -546,6 +553,27 @@ export default function CompanionChildren() {
         } as any);
     };
 
+    const confirmLogout = () => {
+        Alert.alert(
+            '로그아웃',
+            '현재 계정에서 로그아웃할까요?',
+            [
+                { text: '취소', style: 'cancel' },
+                {
+                    text: '로그아웃',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await logout();
+                        } finally {
+                            router.replace('/onboarding/one' as any);
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
     const openChildHome = (child: ChildItem) => {
         if (child.status === 'pending') return;
 
@@ -556,6 +584,7 @@ export default function CompanionChildren() {
                 scheduleId: child.primaryScheduleId ?? '',
                 childName: child.name,
                 guardian: child.guardian,
+                characterImages: child.characterImages ? JSON.stringify(child.characterImages) : '',
             },
         } as any);
     };
@@ -687,29 +716,29 @@ export default function CompanionChildren() {
         closeCalendarEditor();
     };
 
-    const toggleTodaySchedule = (id: number) => {
-        setTodayTodos((current) => current.map((schedule) => (
-            schedule.id === id
-                ? {
-                    ...schedule,
-                    done: !schedule.done,
-                    todos: schedule.todos.map((todo) => ({ ...todo, done: !schedule.done })),
-                }
-                : schedule
-        )));
-    };
+    const toggleTodayTodo = async (scheduleId: string | undefined, todoId: number) => {
+        const targetSchedule = todayTodos.find((schedule) => schedule.scheduleId === scheduleId);
+        const targetTodo = targetSchedule?.todos.find((todo) => todo.id === todoId);
+        if (!scheduleId || !targetTodo?.itemId) return;
 
-    const toggleTodayTodo = (scheduleId: number, todoId: number) => {
-        setTodayTodos((current) => current.map((schedule) => (
-            schedule.id === scheduleId
-                ? {
-                    ...schedule,
-                    todos: schedule.todos.map((todo) => (
-                        todo.id === todoId ? { ...todo, done: !todo.done } : todo
-                    )),
-                }
-                : schedule
-        )));
+        try {
+            await updateScheduleChecklist(scheduleId, targetTodo.itemId, !targetTodo.done);
+            setTodayTodos((current) => current.map((schedule) => (
+                schedule.scheduleId === scheduleId
+                    ? {
+                        ...schedule,
+                        done: schedule.todos.length > 0 && schedule.todos.every((todo) => (
+                            todo.id === todoId ? !todo.done : todo.done
+                        )),
+                        todos: schedule.todos.map((todo) => (
+                            todo.id === todoId ? { ...todo, done: !todo.done } : todo
+                        )),
+                    }
+                    : schedule
+            )));
+        } catch {
+            // 서버 업데이트 실패 시 화면 상태도 그대로 둡니다.
+        }
     };
 
     const openTodayEditor = (schedule: CompanionTodaySchedule) => {
@@ -794,6 +823,9 @@ export default function CompanionChildren() {
                             <Ionicons name="notifications-outline" size={24} color={Colors.text} />
                             {hasUnreadNotifications ? <View style={styles.notificationDot} /> : null}
                         </Pressable>
+                        <Pressable style={styles.iconButton} onPress={confirmLogout}>
+                            <Ionicons name="log-out-outline" size={23} color={Colors.text} />
+                        </Pressable>
                         <Pressable style={styles.headerProfileButton} onPress={openProfileSetup}>
                             <Image
                                 source={
@@ -820,29 +852,24 @@ export default function CompanionChildren() {
                                     todayTodos.map((schedule) => (
                                         <View key={schedule.id} style={styles.todoBlock}>
                                             <View style={styles.todoTitleRow}>
-                                                <Pressable
+                                                <View
                                                     style={[
                                                         styles.todayScheduleCheck,
                                                         schedule.done && styles.todayScheduleCheckDone,
                                                     ]}
-                                                    onPress={() => toggleTodaySchedule(schedule.id)}
-                                                    hitSlop={8}
                                                 >
                                                     {schedule.done ? (
                                                         <Ionicons name="checkmark" size={14} color={Colors.realwhite} />
                                                     ) : null}
-                                                </Pressable>
-                                                <Pressable
-                                                    style={styles.todayScheduleTextButton}
-                                                    onPress={() => openTodayEditor(schedule)}
-                                                >
+                                                </View>
+                                                <View style={styles.todayScheduleTextButton}>
                                                     <Text style={[
                                                         styles.todoTitle,
                                                         schedule.done && styles.todoDoneText,
                                                     ]} numberOfLines={1}>
                                                         {schedule.title}
                                                     </Text>
-                                                </Pressable>
+                                                </View>
                                                 <Text style={styles.childPill} numberOfLines={1}>
                                                     {schedule.childName}
                                                 </Text>
@@ -853,7 +880,8 @@ export default function CompanionChildren() {
                                                     <View key={todo.id} style={styles.todoRow}>
                                                         <Pressable
                                                             style={styles.todoCheckButton}
-                                                            onPress={() => toggleTodayTodo(schedule.id, todo.id)}
+                                                            onPress={() => toggleTodayTodo(schedule.scheduleId, todo.id)}
+                                                            disabled={!todo.itemId}
                                                             hitSlop={8}
                                                         >
                                                             <Ionicons
@@ -862,14 +890,11 @@ export default function CompanionChildren() {
                                                                 color={todo.done ? Colors.highlight1 : Colors.textShadow}
                                                             />
                                                         </Pressable>
-                                                        <Pressable
-                                                            style={styles.todoTextButton}
-                                                            onPress={() => openTodayEditor(schedule)}
-                                                        >
+                                                        <View style={styles.todoTextButton}>
                                                             <Text style={[styles.todoText, todo.done && styles.todoDoneText]}>
                                                                 {todo.text}
                                                             </Text>
-                                                        </Pressable>
+                                                        </View>
                                                     </View>
                                                 ))}
                                             </View>

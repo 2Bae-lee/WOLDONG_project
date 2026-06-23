@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../components/BackButton';
 import {
@@ -17,59 +18,24 @@ type Companion = {
     childId: string;
     name: string;
     relation: string;
-    phone: string;
     status: string;
     permissions: string[];
 };
-
-const companions: Companion[] = [
-    {
-        id: 'mock-1',
-        companionId: 'mock-companion-1',
-        childId: '',
-        name: '박민지',
-        relation: '담임 선생님',
-        phone: '010-1234-5678',
-        status: '아이 프로필 공유 완료',
-        permissions: ['아이 프로필', '오늘 일정', '주의사항'],
-    },
-    {
-        id: 'mock-2',
-        companionId: 'mock-companion-2',
-        childId: '',
-        name: '이하늘',
-        relation: '활동지원사',
-        phone: '010-2345-6789',
-        status: '오늘 일정 확인 가능',
-        permissions: ['오늘 일정', '공유 캘린더', '주의사항'],
-    },
-    {
-        id: 'mock-3',
-        companionId: 'mock-companion-3',
-        childId: '',
-        name: '최서윤',
-        relation: '치료사',
-        phone: '010-3456-7890',
-        status: '주의사항 공유 완료',
-        permissions: ['아이 프로필', '공유 캘린더'],
-    },
-];
 
 export default function Companions() {
     const params = useLocalSearchParams<{
         childId?: string;
         childName?: string;
-        acceptedName?: string;
         acceptedRelation?: string;
-        acceptedPhone?: string;
         acceptedPermissions?: string;
         removedCompanionId?: string;
+        refreshAt?: string;
     }>();
     const [childId, setChildId] = useState(params.childId ?? '');
-    const [visibleCompanions, setVisibleCompanions] = useState<Companion[]>(companions);
+    const [visibleCompanions, setVisibleCompanions] = useState<Companion[]>([]);
     const [statusText, setStatusText] = useState('');
 
-    useEffect(() => {
+    useFocusEffect(useCallback(() => {
         let active = true;
 
         const mapLinkedCompanion = (companion: LinkedCompanion, targetChildId: string): Companion => ({
@@ -78,10 +44,9 @@ export default function Companions() {
             childId: targetChildId,
             name: companion.companion_name,
             relation: companion.relation || '동행인',
-            phone: '연락처는 회원가입 정보에서 확인돼요',
             permissions: companion.permissions?.length
                 ? companion.permissions
-                : ['아이 프로필', '오늘 일정', '공유 캘린더', '주의사항'],
+                : [],
             status: '아이 정보를 함께 확인할 수 있어요.',
         });
 
@@ -92,23 +57,7 @@ export default function Companions() {
                 nextItems = nextItems.filter((companion) => companion.companionId !== params.removedCompanionId);
             }
 
-            if (!params.acceptedName) return nextItems;
-
-            const acceptedCompanion: Companion = {
-                id: `accepted-${params.acceptedName}`,
-                companionId: params.removedCompanionId || `accepted-${params.acceptedName}`,
-                childId,
-                name: params.acceptedName,
-                relation: params.acceptedRelation || '동행인',
-                phone: params.acceptedPhone || '010-1234-5678',
-                permissions: params.acceptedPermissions
-                    ? params.acceptedPermissions.split(',').filter(Boolean)
-                    : ['아이 프로필'],
-                status: '부모님이 승인한 동행인',
-            };
-
-            const withoutDuplicate = nextItems.filter((companion) => companion.name !== acceptedCompanion.name);
-            return [acceptedCompanion, ...withoutDuplicate];
+            return nextItems;
         };
 
         const loadCompanions = async () => {
@@ -122,7 +71,10 @@ export default function Companions() {
                     if (active) setChildId(nextChildId);
                 }
 
-                if (!nextChildId) return;
+                if (!nextChildId) {
+                    setVisibleCompanions([]);
+                    return;
+                }
 
                 const response = await getLinkedCompanions(nextChildId);
                 if (!active) return;
@@ -132,11 +84,8 @@ export default function Companions() {
                 ))));
             } catch {
                 if (!active) return;
-                setStatusText('목데이터로 동행인 목록을 보여주고 있어요.');
-                setVisibleCompanions(applyLocalParams(companions.map((companion) => ({
-                    ...companion,
-                    childId,
-                }))));
+                setStatusText('동행인 목록을 불러오지 못했어요.');
+                setVisibleCompanions([]);
             }
         };
 
@@ -147,12 +96,11 @@ export default function Companions() {
         };
     }, [
         childId,
-        params.acceptedName,
         params.acceptedPermissions,
-        params.acceptedPhone,
         params.acceptedRelation,
         params.removedCompanionId,
-    ]);
+        params.refreshAt,
+    ]));
 
     const openCompanionProfile = (companion: Companion) => {
         router.push({
@@ -162,7 +110,6 @@ export default function Companions() {
                 companionId: companion.companionId,
                 name: companion.name,
                 relation: companion.relation,
-                phone: companion.phone,
                 status: companion.status,
                 permissions: companion.permissions.join(','),
             },
@@ -215,11 +162,6 @@ export default function Companions() {
                             </View>
 
                             <View style={styles.infoRow}>
-                                <Ionicons name="call-outline" size={15} color={Colors.textShadow} />
-                                <Text style={styles.infoText}>{companion.phone}</Text>
-                            </View>
-
-                            <View style={styles.infoRow}>
                                 <Ionicons name="checkmark-circle" size={15} color={Colors.highlight1} />
                                 <Text style={styles.infoText}>{companion.status}</Text>
                             </View>
@@ -236,7 +178,7 @@ export default function Companions() {
                         pathname: '/paraent_home/invite/make_code',
                         params: {
                             childId,
-                            childName: params.childName ?? '김월동',
+                            childName: params.childName ?? '아이',
                         },
                     } as any)
                 }

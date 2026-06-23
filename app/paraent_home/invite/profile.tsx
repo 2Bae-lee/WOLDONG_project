@@ -29,10 +29,8 @@ export default function CompanionProfile() {
                         style={styles.profileImage}
                         resizeMode="contain"
                     />
-                    <Text style={styles.name}>박민지</Text>
-                    <Text style={styles.relation}>담임 선생님</Text>
-                    <Text style={styles.info}>010-1234-5678</Text>
-                    <Text style={styles.info}>아이 프로필, 오늘 일정, 주의사항 접근 가능</Text>
+                    <Text style={styles.name}>동행인</Text>
+                    <Text style={styles.relation}>프로필 정보를 불러오는 중이에요.</Text>
                 </View>
 
                 <Text style={styles.taskText}>일정 정리하기</Text>

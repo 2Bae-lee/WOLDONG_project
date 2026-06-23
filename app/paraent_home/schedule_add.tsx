@@ -36,23 +36,7 @@ const scheduleTypes = [
     { label: '기타', description: '직접 정리해야 하는 일정' },
 ];
 
-const companions = [
-    {
-        name: '박민지',
-        relation: '담임 선생님',
-        description: '아이 프로필과 학교 관련 일정을 함께 확인해요.',
-    },
-    {
-        name: '이하늘',
-        relation: '활동지원사',
-        description: '외출 일정과 주의사항을 함께 확인해요.',
-    },
-    {
-        name: '최서윤',
-        relation: '치료사',
-        description: '치료 일정과 아이 반응 메모를 함께 확인해요.',
-    },
-];
+const companions: Array<{ name: string; relation: string; description: string }> = [];
 
 type SheetTarget = 'type' | 'companion' | null;
 

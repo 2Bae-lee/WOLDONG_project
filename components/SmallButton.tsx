@@ -27,5 +27,8 @@ const styles = StyleSheet.create({
     fontFamily: 'Sumana_700Bold',
     fontSize: 17,
     color: Colors.text,
+    includeFontPadding: false,
+    textAlign: 'center',
+    textAlignVertical: 'center',
   },
 });

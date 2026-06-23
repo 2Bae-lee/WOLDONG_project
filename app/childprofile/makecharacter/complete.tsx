@@ -3,8 +3,11 @@ import { useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../../components/BackButton';
 import PrimaryButton from '../../../components/PrimaryButton';
-import { CharacterSpeed, updateChildProfile } from '../../../constants/Api';
-import { getGeneratedCharacterImage } from '../../../constants/CharacterImageStore';
+import { CharacterSpeed, saveChildCharacterImages, updateChildProfile } from '../../../constants/Api';
+import {
+    getGeneratedCharacterImage,
+    getGeneratedCharacterImages,
+} from '../../../constants/CharacterImageStore';
 import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
 
@@ -30,6 +33,7 @@ export default function MakeCharacterComplete() {
     const childName = params.name || '아이';
     const characterName = params.characterName || '캐릭터';
     const characterImageUri = getGeneratedCharacterImage(params.characterImageKey);
+    const characterImages = getGeneratedCharacterImages(params.characterImageKey);
     const [isSaving, setIsSaving] = useState(false);
     const [saveError, setSaveError] = useState('');
 
@@ -51,6 +55,9 @@ export default function MakeCharacterComplete() {
                     character_speed: speedMap[params.speed ?? '중간'] ?? 'normal',
                     character_voice: params.gender ?? 'female',
                 });
+                if (characterImages) {
+                    await saveChildCharacterImages(params.childId, characterImages);
+                }
             }
 
             router.replace({

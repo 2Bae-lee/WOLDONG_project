@@ -38,9 +38,8 @@ export default function AcceptInvite() {
                         style={styles.profileImage}
                         resizeMode="contain"
                     />
-                    <Text style={styles.profileName}>박민지</Text>
-                    <Text style={styles.profileMeta}>담임 선생님</Text>
-                    <Text style={styles.profileInfo}>010-1234-5678</Text>
+                    <Text style={styles.profileName}>동행인</Text>
+                    <Text style={styles.profileMeta}>프로필 정보를 불러오는 중이에요.</Text>
                 </View>
             </View>
 

@@ -1,10 +1,20 @@
-import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
+import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 const API_PORT = 8003;
+const API_TIMEOUT_MS = 15000;
 
-function getApiBaseUrl() {
+const getHostFromUri = (uri?: string | null) => {
+    if (!uri) return '';
+
+    const withoutProtocol = uri.replace(/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//, '');
+    const hostWithPort = withoutProtocol.split('/')[0]?.split('?')[0] ?? '';
+
+    return hostWithPort.split(':')[0] ?? '';
+};
+
+const getApiBaseUrl = () => {
     if (process.env.EXPO_PUBLIC_API_BASE_URL) {
         return process.env.EXPO_PUBLIC_API_BASE_URL;
     }
@@ -13,11 +23,27 @@ function getApiBaseUrl() {
         return `http://127.0.0.1:${API_PORT}`;
     }
 
-    const hostUri = Constants.expoConfig?.hostUri;
-    const host = hostUri?.split(':')[0];
+    const manifest2HostUri = (Constants.manifest2 as any)?.extra?.expoClient?.hostUri;
+    const expoGoDebuggerHost = (Constants.expoGoConfig as any)?.debuggerHost;
+    const host = [
+        Constants.expoConfig?.hostUri,
+        manifest2HostUri,
+        expoGoDebuggerHost,
+        Constants.experienceUrl,
+        Constants.linkingUri,
+    ]
+        .map(getHostFromUri)
+        .find(Boolean);
 
-    return host ? `http://${host}:${API_PORT}` : `http://127.0.0.1:${API_PORT}`;
-}
+    if (!host) {
+        return Platform.OS === 'android' ? `http://10.0.2.2:${API_PORT}` : `http://127.0.0.1:${API_PORT}`;
+    }
+    if (host === 'localhost' || host === '127.0.0.1') {
+        return Platform.OS === 'android' ? `http://10.0.2.2:${API_PORT}` : `http://127.0.0.1:${API_PORT}`;
+    }
+
+    return `http://${host}:${API_PORT}`;
+};
 
 export const API_BASE_URL = getApiBaseUrl();
 const AUTH_TOKEN_KEY = 'woldong.authToken';
@@ -32,9 +58,27 @@ type ApiSuccess<T> = {
 type ApiFailure = {
     success: false;
     message: string;
+    detail?: string;
 };
 
 export type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
+
+const getApiErrorMessage = (body: unknown, fallback: string) => {
+    if (!body || typeof body !== 'object') return fallback;
+
+    if ('message' in body && body.message) return String(body.message);
+    if ('detail' in body && body.detail) return String(body.detail);
+
+    return fallback;
+};
+
+const getHttpStatusMessage = (status: number) => {
+    if (status === 502 || status === 503 || status === 504) {
+        return `터널 또는 백엔드 연결이 불안정해요. 잠시 후 다시 시도해주세요. (${status})`;
+    }
+
+    return `서버 요청에 실패했어요. (${status})`;
+};
 
 export type AuthUser = {
     id: string;
@@ -48,20 +92,20 @@ type AuthData = {
     user: AuthUser;
 };
 
+type CheckEmailResponse = {
+    available: boolean;
+};
+
 export type CharacterTone = 'kind' | 'strict';
 export type CharacterSpeed = 'slow' | 'normal' | 'fast';
 export type CharacterVoice = 'female' | 'male';
 
-const MOCK_PARENT_LOGIN = {
-    email: 'woldong',
-    password: 'wd1!',
-    token: 'mock-parent-token',
-    user: {
-        id: 'mock-parent',
-        name: '월동 보호자',
-        email: 'woldong',
-        role: 'parent',
-    } satisfies AuthUser,
+export type CharacterImages = {
+    idle: string;
+    blink?: string;
+    mouth_open?: string;
+    mouth_wide?: string;
+    smile?: string;
 };
 
 export type ChildProfilePayload = {
@@ -84,6 +128,7 @@ export type ChildProfilePayload = {
     character_tone?: CharacterTone;
     character_speed?: CharacterSpeed;
     character_voice?: CharacterVoice;
+    character_image_url?: CharacterImages;
 };
 
 export type ChildProfileUpdatePayload = Partial<ChildProfilePayload>;
@@ -104,6 +149,7 @@ export type ParentHomeChild = {
     character_tone?: CharacterTone | null;
     character_speed?: CharacterSpeed | null;
     character_voice?: CharacterVoice | null;
+    character_image_url?: CharacterImages | null;
 };
 
 export type ChildProfileDetail = ChildProfilePayload & {
@@ -122,6 +168,11 @@ export type TodayScheduleSummary = {
     transport_type?: string;
     status: 'upcoming' | 'ongoing' | 'done' | string;
     child_id: string;
+    child_name?: string | null;
+    companion_id?: string | null;
+    companion_name?: string | null;
+    checklist?: ScheduleChecklistItem[];
+    schedule_features?: string[];
 };
 
 export type SchedulePayload = {
@@ -221,6 +272,7 @@ export type SocialStoryResponse = {
     original_script: string;
     converted_script: string;
     audio_url?: string;
+    character_images?: CharacterImages;
     story_category?: string;
     story_difficulty?: string;
     predicted_warnings?: string[];
@@ -234,7 +286,20 @@ export type ParentHomeResponse = {
 
 export type CompanionProfile = AuthUser & {
     phone?: string;
-    created_at: string;
+    relation?: string | null;
+    job?: string | null;
+    intro?: string | null;
+    profile_image_url?: string | null;
+    created_at?: string;
+};
+
+export type CompanionProfileUpdatePayload = {
+    name?: string;
+    phone?: string;
+    relation?: string;
+    job?: string;
+    intro?: string;
+    profile_image_url?: string;
 };
 
 export type CompanionChild = {
@@ -243,6 +308,11 @@ export type CompanionChild = {
     gender: string;
     birth_date: string;
     disability_type: string;
+    character_image_url?: CharacterImages | null;
+    character_name?: string | null;
+    character_tone?: CharacterTone | null;
+    character_speed?: CharacterSpeed | null;
+    character_voice?: CharacterVoice | null;
 };
 
 export type ParentNotification = {
@@ -383,18 +453,38 @@ export const restoreAuthToken = async () => {
     return token;
 };
 
+const fetchApi = async (url: string, options: RequestInit = {}) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+
+    try {
+        return await fetch(url, {
+            ...options,
+            signal: controller.signal,
+            headers: {
+                'Content-Type': 'application/json',
+                'bypass-tunnel-reminder': 'true',
+                ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+                ...options.headers,
+            },
+        });
+    } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+            throw new ApiError(`서버 응답이 지연되고 있어요. 터널이 살아있는지 확인해주세요. (${url})`, 0);
+        }
+
+        throw new ApiError(`서버에 연결하지 못했어요. (${url})`, 0);
+    } finally {
+        clearTimeout(timeoutId);
+    }
+};
+
 export const apiRequest = async <T>(
     path: string,
     options: RequestInit = {}
 ): Promise<ApiSuccess<T>> => {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-            ...options.headers,
-        },
-    });
+    const url = `${API_BASE_URL}${path}`;
+    const response = await fetchApi(url, options);
 
     const responseText = await response.text();
     let body: ApiResponse<T> | null = null;
@@ -402,11 +492,15 @@ export const apiRequest = async <T>(
     try {
         body = responseText ? JSON.parse(responseText) as ApiResponse<T> : null;
     } catch {
+        if (!response.ok) {
+            throw new ApiError(getHttpStatusMessage(response.status), response.status);
+        }
+
         throw new ApiError('서버 응답을 확인할 수 없어요.', response.status);
     }
 
     if (!response.ok || !body?.success) {
-        throw new ApiError(body?.message ?? '서버 요청에 실패했어요.', response.status);
+        throw new ApiError(getApiErrorMessage(body, '서버 요청에 실패했어요.'), response.status);
     }
 
     return body;
@@ -416,14 +510,8 @@ const apiRawJsonRequest = async <T>(
     path: string,
     options: RequestInit = {}
 ): Promise<T> => {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-            ...options.headers,
-        },
-    });
+    const url = `${API_BASE_URL}${path}`;
+    const response = await fetchApi(url, options);
 
     const responseText = await response.text();
     let body: (ApiResponse<T> | T) | null = null;
@@ -431,20 +519,20 @@ const apiRawJsonRequest = async <T>(
     try {
         body = responseText ? JSON.parse(responseText) as ApiResponse<T> | T : null;
     } catch {
+        if (!response.ok) {
+            throw new ApiError(getHttpStatusMessage(response.status), response.status);
+        }
+
         throw new ApiError('서버 응답을 확인할 수 없어요.', response.status);
     }
 
     if (!response.ok) {
-        const message = body && typeof body === 'object' && 'message' in body
-            ? String(body.message)
-            : '서버 요청에 실패했어요.';
-
-        throw new ApiError(message, response.status);
+        throw new ApiError(getApiErrorMessage(body, '서버 요청에 실패했어요.'), response.status);
     }
 
     if (body && typeof body === 'object' && 'success' in body) {
         if (!body.success) {
-            throw new ApiError(body.message ?? '서버 요청에 실패했어요.', response.status);
+            throw new ApiError(getApiErrorMessage(body, '서버 요청에 실패했어요.'), response.status);
         }
 
         return body.data as T;
@@ -466,6 +554,13 @@ export const toApiAssetUrl = (path?: string) => {
 
 export const sendSignupCode = (email: string) => (
     apiRequest<null>('/api/auth/send-code', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+    })
+);
+
+export const checkEmailAvailable = (email: string) => (
+    apiRequest<CheckEmailResponse>('/api/auth/check-email', {
         method: 'POST',
         body: JSON.stringify({ email }),
     })
@@ -498,9 +593,10 @@ export const checkStoredSession = async () => {
     } catch (error) {
         if (error instanceof ApiError && error.status === 401) {
             await clearAuthSession();
+            return null;
         }
 
-        return null;
+        return authUser;
     }
 };
 
@@ -550,34 +646,15 @@ export const login = async (body: {
     email: string;
     password: string;
 }) => {
-    const isMockParent =
-        body.email === MOCK_PARENT_LOGIN.email &&
-        body.password === MOCK_PARENT_LOGIN.password;
+    const response = await apiRequest<AuthData>('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify(body),
+    });
 
-    if (!isMockParent) {
-        const response = await apiRequest<AuthData>('/api/auth/login', {
-            method: 'POST',
-            body: JSON.stringify(body),
-        });
-
-        if (response.data?.token && response.data.user) {
-            await setAuthSession(response.data.token, response.data.user);
-        }
-
-        return response;
+    if (response.data?.token && response.data.user) {
+        await setAuthSession(response.data.token, response.data.user);
     }
 
-    const responseData: AuthData = {
-        token: MOCK_PARENT_LOGIN.token,
-        user: MOCK_PARENT_LOGIN.user,
-    };
-    const response: ApiSuccess<AuthData> = {
-        success: true,
-        message: '목 데이터로 로그인했어요.',
-        data: responseData,
-    };
-
-    await setAuthSession(responseData.token, responseData.user);
     return response;
 };
 
@@ -619,6 +696,13 @@ export const updateChildProfile = (childId: string, body: ChildProfileUpdatePayl
     })
 );
 
+export const saveChildCharacterImages = (childId: string, images: CharacterImages) => (
+    apiRequest<null>(`/api/children/${encodeURIComponent(childId)}/character`, {
+        method: 'PATCH',
+        body: JSON.stringify(images),
+    })
+);
+
 export const getParentHome = () => (
     apiRequest<ParentHomeResponse>('/api/home')
 );
@@ -629,6 +713,13 @@ export const getTodaySchedules = () => (
 
 export const getCompanionProfile = () => (
     apiRequest<CompanionProfile>('/api/companion/me')
+);
+
+export const updateCompanionProfile = (body: CompanionProfileUpdatePayload) => (
+    apiRequest<CompanionProfile>('/api/companion/me', {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+    })
 );
 
 export const getCompanionChildren = () => (
@@ -767,30 +858,9 @@ export const generateScheduleSocialStory = (
     );
 };
 
-export const generateCharacterImage = async (traits: string) => {
-    const response = await fetch(`${API_BASE_URL}/api/ai/generate-character`, {
+export const generateCharacterFrames = (traits: string) => (
+    apiRequest<CharacterImages>('/api/ai/generate-character-frames', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Accept: 'image/png',
-            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-        },
         body: JSON.stringify({ traits }),
-    });
-
-    if (!response.ok) {
-        const responseText = await response.text();
-        let message = '캐릭터 생성에 실패했어요.';
-
-        try {
-            const body = responseText ? JSON.parse(responseText) as ApiFailure : null;
-            message = body?.message ?? message;
-        } catch {
-            message = responseText || message;
-        }
-
-        throw new ApiError(message, response.status);
-    }
-
-    return blobToDataUri(await response.blob());
-};
+    })
+);

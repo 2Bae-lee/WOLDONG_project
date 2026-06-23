@@ -28,8 +28,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   text: {
-    fontFamily: 'Sumana_700Bold',
-    fontSize: 20,
+    fontSize: 18,
+    fontWeight: '900',
     color: Colors.text,
+    textAlign: 'center',
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
 });

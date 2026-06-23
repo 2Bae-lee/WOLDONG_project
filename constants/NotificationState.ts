@@ -2,8 +2,8 @@ const approvedCompanionRequests = new Set<string>();
 let parentNotificationsRead = false;
 let companionNotificationsRead = false;
 let companionRequestNotification = {
-    companionName: '박민지',
-    childName: '김월동',
+    companionName: '',
+    childName: '',
 };
 
 export const registerCompanionRequestNotification = (
@@ -25,13 +25,13 @@ export const isCompanionRequestNotificationApproved = (name: string) => (
     approvedCompanionRequests.has(name)
 );
 
-export const hasUnreadParentNotifications = () => !parentNotificationsRead;
+export const hasUnreadParentNotifications = () => false;
 
 export const markParentNotificationsRead = () => {
     parentNotificationsRead = true;
 };
 
-export const hasUnreadCompanionNotifications = () => !companionNotificationsRead;
+export const hasUnreadCompanionNotifications = () => false;
 
 export const markCompanionNotificationsRead = () => {
     companionNotificationsRead = true;

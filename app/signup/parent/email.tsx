@@ -1,8 +1,18 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Image, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+    Image,
+    Keyboard,
+    KeyboardAvoidingView,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableWithoutFeedback,
+    View,
+} from 'react-native';
 import SmallButton from '../../../components/SmallButton';
-import { sendSignupCode } from '../../../constants/Api';
+import { checkEmailAvailable, sendSignupCode } from '../../../constants/Api';
 import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
 
@@ -34,9 +44,16 @@ export default function ParentSignupEmail() {
       setIsSending(true);
 
       try {
+        const checkResponse = await checkEmailAvailable(trimmedEmail);
+        if (!checkResponse.data?.available) {
+          setEmailError(checkResponse.message || '이미 사용 중인 이메일입니다.');
+          setIsSending(false);
+          return;
+        }
+
         await sendSignupCode(trimmedEmail);
       } catch (error) {
-        setEmailError(error instanceof Error ? error.message : '인증번호 발송에 실패했어요.');
+        setEmailError(error instanceof Error ? error.message : '이메일 확인에 실패했어요.');
         setIsSending(false);
         return;
       }
@@ -52,62 +69,75 @@ export default function ParentSignupEmail() {
     }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.logoArea}>
-        <View style={styles.logoRow}>
-          <Text style={styles.logoTitle}>월동</Text>
-          <Image
-            source={require('../../../assets/images/canola_flower_small.png')}
-            style={styles.logoFlower}
-            resizeMode="contain"
-          />
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <View style={styles.inner}>
+          <View style={styles.logoArea}>
+            <View style={styles.logoRow}>
+              <Text style={styles.logoTitle}>월동</Text>
+              <Image
+                source={require('../../../assets/images/canola_flower_small.png')}
+                style={styles.logoFlower}
+                resizeMode="contain"
+              />
+            </View>
+          </View>
+
+          <View style={styles.content}>
+            <Text style={styles.screenTitle}>계정 만들기</Text>
+            <Text style={styles.description}>
+              이 앱에 가입하려면 이메일을 입력하세요
+            </Text>
+
+            <TextInput
+                style={[
+                        styles.input,
+                        emailError ? styles.inputError : null,
+                ]}
+                placeholder="ex) woldong@gmail.com"
+                placeholderTextColor={Colors.textShadow}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={email}
+                onChangeText={(text) => {
+                    setEmail(text);
+                    if (emailError) {
+                        setEmailError('');
+                    }
+                }}
+                returnKeyType="done"
+                onSubmitEditing={handleNext}
+            />
+            {emailError ? (
+                <Text style={styles.errorText}>{emailError}</Text>
+            ) : null}
+
+            <SmallButton
+              label={isSending ? '전송 중' : '계속'}
+              onPress={handleNext}
+            />
+          </View>
+
+          <Text style={styles.policyText}>
+            계속을 클릭하면 당사의 <Text style={styles.policyBoldText}>서비스 이용 약관</Text> 및 <Text style={styles.policyBoldText}>개인정보 처리방침</Text>에{'\n'}
+            동의하는 것으로 간주됩니다.
+          </Text>
         </View>
-      </View>
-
-      <View style={styles.content}>
-        <Text style={styles.screenTitle}>계정 만들기</Text>
-        <Text style={styles.description}>
-          이 앱에 가입하려면 이메일을 입력하세요
-        </Text>
-
-        <TextInput
-            style={[
-                    styles.input,
-                    emailError ? styles.inputError : null,
-            ]}
-            placeholder="ex) woldong@gmail.com"
-            placeholderTextColor={Colors.textShadow}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            value={email}
-            onChangeText={(text) => {
-                setEmail(text);
-                if (emailError) {
-                    setEmailError('');
-                }
-            }}
-        />
-        {emailError ? (
-             <Text style={styles.errorText}>{emailError}</Text>
-        ) : null}
-
-        <SmallButton
-          label={isSending ? '전송 중' : '계속'}
-          onPress={handleNext}
-        />
-      </View>
-
-      <Text style={styles.policyText}>
-        계속을 클릭하면 당사의 <Text style={styles.policyBoldText}>서비스 이용 약관</Text> 및 <Text style={styles.policyBoldText}>개인정보 처리방침</Text>에{'\n'}
-        동의하는 것으로 간주됩니다.
-      </Text>
-    </View>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 }
 const styles = StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: Colors.pageBg,
+    },
+
+    inner: {
+      flex: 1,
       alignItems: 'center',
       paddingTop: 80,
       paddingBottom: 54,

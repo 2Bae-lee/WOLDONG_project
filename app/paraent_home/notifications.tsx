@@ -12,12 +12,8 @@ import {
     markNotificationRead,
 } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
+import { formatRelativeTime } from '../../constants/DateTime';
 import { Fonts } from '../../constants/Fonts';
-import {
-    getCompanionRequestNotification,
-    isCompanionRequestNotificationApproved,
-    markParentNotificationsRead,
-} from '../../constants/NotificationState';
 
 type NotificationItem = {
     id: string;
@@ -30,49 +26,6 @@ type NotificationItem = {
     childId?: string;
     notificationId?: string;
     requestId?: string;
-};
-
-const notifications: NotificationItem[] = [
-    {
-        id: 'mock-companion-request',
-        title: '동행인 승인 요청',
-        message: '박민지님이 김월동 어린이의 동행인 권한을 요청했어요.',
-        time: '방금 전',
-        type: 'companion_request',
-        unread: true,
-        companionName: '박민지',
-    },
-    {
-        id: 'mock-schedule',
-        title: '오늘 일정 확인',
-        message: '병원 일정이 아직 남아 있어요.',
-        time: '20분 전',
-        type: 'schedule',
-        unread: false,
-    },
-    {
-        id: 'mock-handoff',
-        title: '주의사항',
-        message: '아이에게 전달할 자료를 다시 확인해주세요.',
-        time: '1시간 전',
-        type: 'handoff',
-        unread: false,
-    },
-];
-
-const formatTime = (value: string) => {
-    const created = new Date(value).getTime();
-    if (Number.isNaN(created)) return '방금 전';
-
-    const diffMinutes = Math.max(0, Math.floor((Date.now() - created) / 60000));
-    if (diffMinutes < 1) return '방금 전';
-    if (diffMinutes < 60) return `${diffMinutes}분 전`;
-
-    const diffHours = Math.floor(diffMinutes / 60);
-    if (diffHours < 24) return `${diffHours}시간 전`;
-
-    const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays}일 전`;
 };
 
 const getNotificationTitle = (type: string) => {
@@ -89,7 +42,7 @@ const mapNotification = (notification: ParentNotification): NotificationItem => 
     notificationId: notification.notification_id,
     title: getNotificationTitle(notification.type),
     message: notification.message,
-    time: formatTime(notification.created_at),
+    time: formatRelativeTime(notification.created_at),
     type: notification.type,
     unread: !notification.is_read,
     companionName: notification.sender_name,
@@ -101,7 +54,7 @@ const mapInviteRequest = (request: InviteRequest): NotificationItem => ({
     requestId: request.request_id,
     title: '동행인 승인 요청',
     message: `${request.companion_name}님이 아동 연결을 요청했어요.`,
-    time: formatTime(request.created_at),
+    time: formatRelativeTime(request.created_at),
     type: 'companion_request',
     unread: true,
     companionName: request.companion_name,
@@ -109,14 +62,12 @@ const mapInviteRequest = (request: InviteRequest): NotificationItem => ({
 });
 
 export default function Notifications() {
-    const [visibleNotifications, setVisibleNotifications] = useState<NotificationItem[]>(notifications);
+    const [visibleNotifications, setVisibleNotifications] = useState<NotificationItem[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [loadError, setLoadError] = useState('');
 
     useFocusEffect(
         useCallback(() => {
-            markParentNotificationsRead();
-
             let active = true;
 
             const loadNotifications = async () => {
@@ -165,22 +116,7 @@ export default function Notifications() {
                 } catch (error) {
                     if (!active) return;
 
-                    const companionRequest = getCompanionRequestNotification();
-                    const currentNotifications = notifications.map((notification) => (
-                        notification.type === 'companion_request'
-                            ? {
-                                ...notification,
-                                message: `${companionRequest.companionName}님이 ${companionRequest.childName} 어린이의 동행인 권한을 요청했어요.`,
-                                companionName: companionRequest.companionName,
-                            }
-                            : notification
-                    )).filter((notification) => {
-                        if (notification.type !== 'companion_request') return true;
-
-                        return !isCompanionRequestNotificationApproved(notification.companionName ?? '');
-                    });
-
-                    setVisibleNotifications(currentNotifications);
+                    setVisibleNotifications([]);
                     setLoadError(error instanceof Error ? error.message : '알림을 불러오지 못했어요.');
                 } finally {
                     if (active) setIsLoading(false);
@@ -245,7 +181,7 @@ export default function Notifications() {
                     <Text style={styles.statusText}>알림을 불러오는 중이에요.</Text>
                 ) : null}
                 {loadError ? (
-                    <Text style={styles.statusText}>목데이터로 알림을 보여주고 있어요.</Text>
+                    <Text style={styles.statusText}>{loadError}</Text>
                 ) : null}
                 {visibleNotifications.map((notification) => (
                     <Pressable

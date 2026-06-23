@@ -54,8 +54,8 @@ export default function CompanionCalendarAdd() {
     }>();
     const today = useMemo(() => new Date(), []);
     const childId = params.childId || '';
-    const childName = params.childName || '김월동';
-    const guardian = params.guardian || '김보호자';
+    const childName = params.childName || '아이';
+    const guardian = params.guardian || '보호자';
     const initialYear = Number(params.year) || today.getFullYear();
     const initialMonth = Number(params.month) || today.getMonth() + 1;
     const initialDay = Number(params.day) || today.getDate();

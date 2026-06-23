@@ -2,12 +2,14 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useRef, useState } from 'react';
 import {
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import SmallButton from '../../../components/SmallButton';
@@ -106,7 +108,12 @@ export default function CompanionSignupCodeScreen() {
     }
   };
   const handleGoBack = () => {
-    router.replace('/signup/companion/email' as any);
+    router.replace({
+      pathname: '/signup/companion/email',
+      params: {
+        name: params.name ?? '',
+      },
+    } as any);
   };
 
   return (
@@ -118,67 +125,71 @@ export default function CompanionSignupCodeScreen() {
   <Text style={styles.backButtonText}>‹</Text>
 </Pressable>
 
-<View style={styles.logoArea}>
-  <View style={styles.logoWrap}>
-    <Text style={styles.logoText}>월동</Text>
-    <Image
-      source={require('../../../assets/images/canola_flower_small.png')}
-      style={styles.logoFlower}
-      resizeMode="contain"
-    />
-  </View>
-</View>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <View style={styles.inner}>
+          <View style={styles.logoArea}>
+            <View style={styles.logoWrap}>
+              <Text style={styles.logoText}>월동</Text>
+              <Image
+                source={require('../../../assets/images/canola_flower_small.png')}
+                style={styles.logoFlower}
+                resizeMode="contain"
+              />
+            </View>
+          </View>
 
-      <View style={styles.content}>
-        <Text style={styles.title}>인증번호를 입력해주세요</Text>
-        <Text style={styles.description}>
-          원활한 서비스 이용을 위해 이메일 인증을 해주세요
-        </Text>
+          <View style={styles.content}>
+            <Text style={styles.title}>인증번호를 입력해주세요</Text>
+            <Text style={styles.description}>
+              원활한 서비스 이용을 위해 이메일 인증을 해주세요
+            </Text>
 
-        <View style={styles.codeRow}>
-          {code.map((digit, index) => (
-            <TextInput
-              key={index}
-              ref={(ref) => {
-                inputRefs.current[index] = ref;
-              }}
-              style={[
-                styles.codeInput,
-                error ? styles.codeInputError : null,
-              ]}
-              value={digit}
-              onChangeText={(text) => handleChange(text, index)}
-              onKeyPress={({ nativeEvent }) =>
-                handleKeyPress(nativeEvent.key, index)
-              }
-              keyboardType="number-pad"
-              maxLength={1}
-              textAlign="center"
-              returnKeyType="done"
-            />
-          ))}
-        </View>
-
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-        <Pressable onPress={handleResend} style={styles.resendButton}>
-          <Text style={styles.resendText}>{isResending ? '재전송 중' : '재전송'}</Text>
-        </Pressable>
-
-        <SmallButton
-                  label={isVerifying ? '확인 중' : '계속'}
-                  onPress={handleSubmit}
+            <View style={styles.codeRow}>
+              {code.map((digit, index) => (
+                <TextInput
+                  key={index}
+                  ref={(ref) => {
+                    inputRefs.current[index] = ref;
+                  }}
+                  style={[
+                    styles.codeInput,
+                    error ? styles.codeInputError : null,
+                  ]}
+                  value={digit}
+                  onChangeText={(text) => handleChange(text, index)}
+                  onKeyPress={({ nativeEvent }) =>
+                    handleKeyPress(nativeEvent.key, index)
+                  }
+                  keyboardType="number-pad"
+                  maxLength={1}
+                  textAlign="center"
+                  returnKeyType="done"
                 />
-        </View>
+              ))}
+            </View>
 
-      <View style={styles.noticeArea}>
-        <Text style={styles.noticeText}>
-          계속을 클릭하면 당사의{' '}
-          <Text style={styles.noticeBold}>서비스 이용 약관</Text> 및{' '}
-          <Text style={styles.noticeBold}>개인정보 처리방침</Text>에
-          {'\n'}동의하는 것으로 간주됩니다.
-        </Text>
-      </View>
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+            <Pressable onPress={handleResend} style={styles.resendButton}>
+              <Text style={styles.resendText}>{isResending ? '전송 중' : '재전송'}</Text>
+            </Pressable>
+
+            <SmallButton
+              label={isVerifying ? '확인 중' : '계속'}
+              onPress={handleSubmit}
+            />
+          </View>
+
+          <View style={styles.noticeArea}>
+            <Text style={styles.noticeText}>
+              계속을 클릭하면 당사의{' '}
+              <Text style={styles.noticeBold}>서비스 이용 약관</Text> 및{' '}
+              <Text style={styles.noticeBold}>개인정보 처리방침</Text>에
+              {'\n'}동의하는 것으로 간주됩니다.
+            </Text>
+          </View>
+        </View>
+      </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
 }
@@ -189,6 +200,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.pageBg,
     paddingHorizontal: 32,
+  },
+
+  inner: {
+    flex: 1,
   },
 
   logoArea: {
@@ -239,16 +254,16 @@ const styles = StyleSheet.create({
 
   codeRow: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 8,
     marginBottom: 18,
   },
 
   codeInput: {
-    width: 64,
-    height: 73,
+    width: 46,
+    height: 58,
     borderRadius: 8,
     backgroundColor: Colors.white,
-    fontSize: 80,
+    fontSize: 58,
     fontFamily: Fonts.title
   },
 

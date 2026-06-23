@@ -83,7 +83,7 @@ export default function CalendarAdd() {
     const [childId, setChildId] = useState(params.childId ?? '');
     const [linkedCompanions, setLinkedCompanions] = useState<LinkedCompanion[]>([]);
     const [selectedTransport, setSelectedTransport] = useState('');
-    const [startTime, setStartTime] = useState('10:00');
+    const [startTime, setStartTime] = useState('00:00');
     const [scheduleTitle, setScheduleTitle] = useState('');
     const [memo, setMemo] = useState('');
     const [todos, setTodos] = useState<string[]>([]);
@@ -303,6 +303,35 @@ export default function CalendarAdd() {
         return `${date.year}-${month}-${day}`;
     };
 
+    const formatStartTimeInput = (value: string) => {
+        const digits = value.replace(/\D/g, '').slice(0, 4);
+        if (digits.length <= 2) return digits;
+
+        return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+    };
+
+    const normalizeStartTime = (value: string) => {
+        const digits = value.replace(/\D/g, '');
+        if (!digits) return '00:00';
+
+        const paddedDigits = digits.padStart(4, '0').slice(-4);
+        return `${paddedDigits.slice(0, 2)}:${paddedDigits.slice(2)}`;
+    };
+
+    const isValidStartTime = (value: string) => {
+        const [hourText, minuteText] = value.split(':');
+        const hour = Number(hourText);
+        const minute = Number(minuteText);
+
+        return (
+            /^\d{2}:\d{2}$/.test(value) &&
+            hour >= 0 &&
+            hour <= 23 &&
+            minute >= 0 &&
+            minute <= 59
+        );
+    };
+
     const getChildId = async () => {
         if (childId) return childId;
         if (params.childId) return params.childId;
@@ -326,8 +355,10 @@ export default function CalendarAdd() {
             return;
         }
 
-        if (!/^\d{2}:\d{2}$/.test(startTime.trim())) {
-            setError('출발 시간은 10:00처럼 HH:MM 형식으로 입력해주세요.');
+        const normalizedStartTime = normalizeStartTime(startTime);
+
+        if (!isValidStartTime(normalizedStartTime)) {
+            setError('출발 시간은 00:00부터 23:59 사이로 입력해주세요.');
             return;
         }
 
@@ -337,6 +368,7 @@ export default function CalendarAdd() {
         }
 
         Keyboard.dismiss();
+        setStartTime(normalizedStartTime);
         setSaving(true);
 
         const scheduleIdFallback = String(Date.now());
@@ -355,7 +387,7 @@ export default function CalendarAdd() {
                 companion_id: selectedCompanion,
                 title: scheduleTitle.trim(),
                 date: formatApiDate(date),
-                start_time: startTime.trim(),
+                start_time: normalizedStartTime,
                 place_type: selectedType,
                 transport_type: selectedTransport,
                 activities: getUniqueScheduleFeatures(
@@ -578,14 +610,20 @@ export default function CalendarAdd() {
                 <Text style={styles.sectionTitle}>출발 시간</Text>
                 <TextInput
                     style={styles.input}
-                    placeholder="ex) 10:00"
+                    placeholder="00:00"
                     placeholderTextColor={Colors.textShadow}
                     value={startTime}
                     onChangeText={(text) => {
-                        setStartTime(text);
+                        setStartTime(formatStartTimeInput(text));
                         clearError();
                     }}
-                    keyboardType="numbers-and-punctuation"
+                    onFocus={() => {
+                        if (startTime === '00:00') {
+                            setStartTime('');
+                        }
+                    }}
+                    onBlur={() => setStartTime((current) => normalizeStartTime(current))}
+                    keyboardType="number-pad"
                     maxLength={5}
                 />
             </View>

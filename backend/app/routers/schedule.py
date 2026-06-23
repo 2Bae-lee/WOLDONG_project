@@ -13,7 +13,7 @@ from app.models.invite import CompanionRequest, RequestStatus
 from app.models.schedule import Schedule, ScheduleStatus, ChecklistItem
 from app.middleware.auth import companion_only, get_current_user
 from app.utils.response import success, error
-from app.routers.ai import AI_SERVER_URL
+from app.routers.ai import AI_SERVER_URL, parse_ai_response
 
 
 router = APIRouter(prefix="/api/schedules", tags=["외출 일정"])
@@ -257,6 +257,7 @@ async def get_schedules(user: User = Depends(get_current_user)):
             "child_name": child_name,
             "companion_id": s.companion_id,
             "companion_name": companion_name,
+            "schedule_features": s.schedule_features,
             "checklist": [
                 {
                     "item_id": c.item_id,
@@ -286,8 +287,30 @@ async def get_today_schedules(user: User = Depends(get_current_user)):
             Schedule.date == today
         ).to_list()
 
-    return success([
-        {
+    result = []
+    for s in schedules:
+        child_name = None
+        try:
+            child_oid = PydanticObjectId(s.child_id)
+            child = await Child.get(child_oid)
+            if child:
+                child_name = child.name
+        except Exception:
+            pass
+
+        companion_name = None
+        if s.companion_id:
+            try:
+                req = await CompanionRequest.find_one(
+                    CompanionRequest.companion_id == s.companion_id,
+                    CompanionRequest.child_id == s.child_id
+                )
+                if req:
+                    companion_name = req.companion_name
+            except Exception:
+                pass
+
+        result.append({
             "schedule_id": str(s.id),
             "title": s.title,
             "date": s.date,
@@ -296,9 +319,21 @@ async def get_today_schedules(user: User = Depends(get_current_user)):
             "transport_type": s.transport_type,
             "status": s.status,
             "child_id": s.child_id,
-        }
-        for s in schedules
-    ])
+            "child_name": child_name,
+            "companion_id": s.companion_id,
+            "companion_name": companion_name,
+            "schedule_features": s.schedule_features,
+            "checklist": [
+                {
+                    "item_id": c.item_id,
+                    "content": c.content,
+                    "is_checked": c.is_checked
+                }
+                for c in s.checklist
+            ],
+        })
+
+    return success(result)
 
 
 # GET /api/schedules/{schedule_id}/warnings - 일정/장소 맞춤형 아동 특이사항 핵심 카드 조회
@@ -364,6 +399,9 @@ async def get_schedule_warnings(schedule_id: str, user: User = Depends(get_curre
         checked_items.append("일정_환경_대기시간있음")
     if schedule.crowd_possible:
         checked_items.append("일정_환경_사람많음")
+    for feature in schedule.schedule_features:
+        if feature not in checked_items:
+            checked_items.append(feature)
 
     env_map = {
         "큰 소리": "아동_환경_큰 소리",
@@ -413,7 +451,11 @@ async def get_schedule_warnings(schedule_id: str, user: User = Depends(get_curre
                 },
                 timeout=30.0
             )
-        return success(response.json(), "주의사항 예측 완료")
+        data, ai_error = parse_ai_response(response)
+        if ai_error:
+            return ai_error
+
+        return success(data, "주의사항 예측 완료")
     except httpx.ConnectError:
         return error("AI 서버에 연결할 수 없습니다", 503)
     except Exception as e:

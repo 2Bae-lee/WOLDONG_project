@@ -12,6 +12,43 @@ router = APIRouter(prefix="/api/ai", tags=["AI 연동"])
 AI_SERVER_URL = "https://sheath-crushed-sixteen.ngrok-free.dev"
 
 
+def normalize_ai_asset_urls(value):
+    if isinstance(value, dict):
+        return {
+            key: normalize_ai_asset_urls(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [normalize_ai_asset_urls(item) for item in value]
+    if isinstance(value, str) and value.startswith("/static/"):
+        return f"{AI_SERVER_URL.rstrip('/')}{value}"
+
+    return value
+
+
+def get_ai_error_message(response: httpx.Response) -> str:
+    try:
+        data = response.json()
+        if isinstance(data, dict):
+            detail = data.get("detail") or data.get("message")
+            if detail:
+                return str(detail)
+    except ValueError:
+        pass
+
+    return "AI 서버 요청에 실패했습니다"
+
+
+def parse_ai_response(response: httpx.Response):
+    if response.is_error:
+        return None, error(get_ai_error_message(response), response.status_code)
+
+    try:
+        return normalize_ai_asset_urls(response.json()), None
+    except ValueError:
+        return None, error("AI 서버 응답을 확인할 수 없습니다", 502)
+
+
 # ─── 요청 스키마 ────────────────────────────────────────
 class PredictWarningRequest(BaseModel):
     checked_items: list[str]
@@ -73,7 +110,11 @@ async def predict_warning(body: PredictWarningRequest, user: User = Depends(get_
                 },
                 timeout=30.0
             )
-        return success(response.json(), "주의사항 예측 완료")
+        data, ai_error = parse_ai_response(response)
+        if ai_error:
+            return ai_error
+
+        return success(data, "주의사항 예측 완료")
     except httpx.ConnectError:
         return error("AI 서버에 연결할 수 없습니다", 503)
     except Exception as e:
@@ -90,7 +131,11 @@ async def generate_character_frames(body: GenerateCharacterRequest, user: User =
                 json={"traits": body.traits},
                 timeout=60.0
             )
-        return success(response.json(), "캐릭터 프레임 생성 완료")
+        data, ai_error = parse_ai_response(response)
+        if ai_error:
+            return ai_error
+
+        return success(data, "캐릭터 프레임 생성 완료")
     except httpx.ConnectError:
         return error("AI 서버에 연결할 수 없습니다", 503)
     except Exception as e:
@@ -114,7 +159,11 @@ async def social_story_tts(body: SocialStoryTTSRequest, user: User = Depends(get
                 },
                 timeout=60.0
             )
-        return success(response.json(), "소셜 스토리 생성 완료")
+        data, ai_error = parse_ai_response(response)
+        if ai_error:
+            return ai_error
+
+        return success(data, "소셜 스토리 생성 완료")
     except httpx.ConnectError:
         return error("AI 서버에 연결할 수 없습니다", 503)
     except Exception as e:
@@ -199,6 +248,9 @@ async def get_social_story(
         checked_items.append("일정_환경_대기시간있음")
     if schedule.crowd_possible:
         checked_items.append("일정_환경_사람많음")
+    for feature in schedule.schedule_features:
+        if feature not in checked_items:
+            checked_items.append(feature)
 
     if child:
         env_map = {
@@ -253,7 +305,11 @@ async def get_social_story(
                 },
                 timeout=60.0
             )
-        return success(response.json(), "소셜 스토리 생성 완료")
+        data, ai_error = parse_ai_response(response)
+        if ai_error:
+            return ai_error
+
+        return success(data, "소셜 스토리 생성 완료")
     except httpx.ConnectError:
         return error("AI 서버에 연결할 수 없습니다", 503)
     except Exception as e:

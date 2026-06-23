@@ -14,7 +14,7 @@ const permissionOptions = [
     '아이 프로필',
     '오늘 일정',
     '공유 캘린더',
-    '인수인계 자료',
+    '주의사항',
 ];
 
 export default function CompanionProfile() {

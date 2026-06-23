@@ -19,6 +19,7 @@ import {
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 import { hasUnreadParentNotifications } from '../../constants/NotificationState';
+import { RepeatDate, parseRepeatDates } from '../../constants/Recurrence';
 
 type ScheduleItem = {
     id: number;
@@ -108,6 +109,7 @@ export default function ParentHome() {
         addedEventTitle?: string;
         addedEventCompanion?: string;
         addedEventTodos?: string;
+        addedEventDates?: string;
         addedScheduleId?: string;
         addedScheduleTitle?: string;
         addedScheduleCompanion?: string;
@@ -270,6 +272,8 @@ export default function ParentHome() {
             return;
         }
 
+        const eventTitle = params.addedEventTitle;
+        const eventCompanion = params.addedEventCompanion;
         const eventId = Number(params.addedEventId);
         let parsedTodos: ScheduleTodo[] = [];
 
@@ -288,35 +292,49 @@ export default function ParentHome() {
             parsedTodos = [];
         }
 
-        const nextEvent = {
-            id: eventId,
+        const fallbackDate: RepeatDate = {
             year: Number(params.addedEventYear),
             month: Number(params.addedEventMonth),
             day: Number(params.addedEventDay),
-            title: params.addedEventTitle,
-            companion: params.addedEventCompanion,
-            todos: parsedTodos,
         };
+        const eventDates = parseRepeatDates(params.addedEventDates);
+        const nextEvents = (eventDates.length > 0 ? eventDates : [fallbackDate]).map((date, index) => ({
+            id: eventId + index,
+            year: date.year,
+            month: date.month,
+            day: date.day,
+            title: eventTitle,
+            companion: eventCompanion,
+            todos: parsedTodos.map((todo) => ({
+                ...todo,
+                id: todo.id + index * 1000,
+            })),
+        }));
+        const firstEvent = nextEvents[0];
 
         if (
-            Number.isNaN(nextEvent.id) ||
-            Number.isNaN(nextEvent.year) ||
-            Number.isNaN(nextEvent.month) ||
-            Number.isNaN(nextEvent.day)
+            !firstEvent ||
+            nextEvents.some((event) => (
+                Number.isNaN(event.id) ||
+                Number.isNaN(event.year) ||
+                Number.isNaN(event.month) ||
+                Number.isNaN(event.day)
+            ))
         ) {
             return;
         }
 
-        setCalendarYear(nextEvent.year);
-        setCalendarMonth(nextEvent.month);
-        setSelectedCalendarDay(nextEvent.day);
+        setCalendarYear(firstEvent.year);
+        setCalendarMonth(firstEvent.month);
+        setSelectedCalendarDay(firstEvent.day);
         setCalendarEvents((current) => (
-            current.some((event) => event.id === nextEvent.id)
+            current.some((event) => event.id === firstEvent.id)
                 ? current
-                : [...current, nextEvent]
+                : [...current, ...nextEvents]
         ));
     }, [
         params.addedEventCompanion,
+        params.addedEventDates,
         params.addedEventDay,
         params.addedEventId,
         params.addedEventMonth,
@@ -638,7 +656,7 @@ export default function ParentHome() {
 
                         <View style={styles.section}>
                             <Pressable onPress={cancelAddInputs}>
-                                <Text style={styles.sectionTitle}>아이 인수인계 자료</Text>
+                                <Text style={styles.sectionTitle}>아이 주의사항</Text>
                             </Pressable>
 
                             <View style={styles.handoffCard}>
@@ -878,7 +896,7 @@ export default function ParentHome() {
                             onPress={(event) => event.stopPropagation()}
                         >
                             <Text style={styles.modalTitle}>
-                                {editTarget?.type === 'handoff' ? '인수인계 자료 수정하기' : '일정 수정하기'}
+                                {editTarget?.type === 'handoff' ? '주의사항 수정하기' : '일정 수정하기'}
                             </Text>
                             <TextInput
                                 style={[

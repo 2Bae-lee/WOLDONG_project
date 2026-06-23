@@ -15,6 +15,8 @@ import {
 import BackButton from '../../../components/BackButton';
 import PrimaryButton from '../../../components/PrimaryButton';
 import RequiredMark from '../../../components/RequiredMark';
+import { generateCharacterImage } from '../../../constants/Api';
+import { saveGeneratedCharacterImage } from '../../../constants/CharacterImageStore';
 import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
 
@@ -31,8 +33,11 @@ export default function MakeCharacterStory() {
     const profileImage = params.profileImage ?? '';
     const [story, setStory] = useState('');
     const [storyError, setStoryError] = useState('');
+    const [isGenerating, setIsGenerating] = useState(false);
 
-    const handleNext = () => {
+    const handleNext = async () => {
+        if (isGenerating) return;
+
         const trimmedStory = story.trim();
 
         if (!trimmedStory) {
@@ -41,17 +46,28 @@ export default function MakeCharacterStory() {
         }
 
         Keyboard.dismiss();
+        setIsGenerating(true);
 
-        router.push({
-            pathname: '/childprofile/makecharacter/customize',
-            params: {
-                name: childName,
-                profileImage,
-                profileSections: params.profileSections ?? '',
-                childId: params.childId ?? '',
-                story: trimmedStory,
-            },
-        } as any);
+        try {
+            const characterImageUri = await generateCharacterImage(trimmedStory);
+            const characterImageKey = saveGeneratedCharacterImage(characterImageUri);
+
+            router.push({
+                pathname: '/childprofile/makecharacter/customize',
+                params: {
+                    name: childName,
+                    profileImage,
+                    profileSections: params.profileSections ?? '',
+                    childId: params.childId ?? '',
+                    characterImageKey,
+                    story: trimmedStory,
+                },
+            } as any);
+        } catch (error) {
+            setStoryError(error instanceof Error ? error.message : '캐릭터 생성에 실패했어요.');
+        } finally {
+            setIsGenerating(false);
+        }
     };
 
     const scrollToStoryInput = () => {
@@ -141,7 +157,11 @@ export default function MakeCharacterStory() {
                     </View>
 
                     <View style={styles.buttonArea}>
-                        <PrimaryButton label="캐릭터 만들기" width="100%" onPress={handleNext} />
+                        <PrimaryButton
+                            label={isGenerating ? '캐릭터 생성 중' : '캐릭터 만들기'}
+                            width="100%"
+                            onPress={handleNext}
+                        />
                     </View>
                 </ScrollView>
             </TouchableWithoutFeedback>

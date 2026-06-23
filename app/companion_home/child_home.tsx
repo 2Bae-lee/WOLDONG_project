@@ -13,6 +13,7 @@ import {
     toggleCompanionTodayTodo,
 } from '../../constants/CompanionTodayState';
 import { Fonts } from '../../constants/Fonts';
+import { RepeatDate, parseRepeatDates } from '../../constants/Recurrence';
 
 type ActiveTab = 'today' | 'calendar';
 
@@ -96,6 +97,7 @@ export default function CompanionChildHome() {
         addedEventTitle?: string;
         addedEventGuardian?: string;
         addedEventTodos?: string;
+        addedEventDates?: string;
     }>();
     const childName = params.childName || '김월동';
     const guardian = params.guardian || '김보호자';
@@ -164,6 +166,8 @@ export default function CompanionChildHome() {
             return;
         }
 
+        const eventTitle = params.addedEventTitle;
+        const eventGuardian = params.addedEventGuardian;
         const eventId = Number(params.addedEventId);
         let parsedTodos: ScheduleTodo[] = [];
 
@@ -182,34 +186,48 @@ export default function CompanionChildHome() {
             parsedTodos = [];
         }
 
-        const nextEvent: CalendarEvent = {
-            id: eventId,
+        const fallbackDate: RepeatDate = {
             year: Number(params.addedEventYear),
             month: Number(params.addedEventMonth),
             day: Number(params.addedEventDay),
-            title: params.addedEventTitle,
-            guardian: params.addedEventGuardian,
-            todos: parsedTodos,
         };
+        const eventDates = parseRepeatDates(params.addedEventDates);
+        const nextEvents: CalendarEvent[] = (eventDates.length > 0 ? eventDates : [fallbackDate]).map((date, index) => ({
+            id: eventId + index,
+            year: date.year,
+            month: date.month,
+            day: date.day,
+            title: eventTitle,
+            guardian: eventGuardian,
+            todos: parsedTodos.map((todo) => ({
+                ...todo,
+                id: todo.id + index * 1000,
+            })),
+        }));
+        const firstEvent = nextEvents[0];
 
         if (
-            Number.isNaN(nextEvent.id) ||
-            Number.isNaN(nextEvent.year) ||
-            Number.isNaN(nextEvent.month) ||
-            Number.isNaN(nextEvent.day)
+            !firstEvent ||
+            nextEvents.some((event) => (
+                Number.isNaN(event.id) ||
+                Number.isNaN(event.year) ||
+                Number.isNaN(event.month) ||
+                Number.isNaN(event.day)
+            ))
         ) {
             return;
         }
 
-        setCalendarYear(nextEvent.year);
-        setCalendarMonth(nextEvent.month);
-        setSelectedDay(nextEvent.day);
+        setCalendarYear(firstEvent.year);
+        setCalendarMonth(firstEvent.month);
+        setSelectedDay(firstEvent.day);
         setCalendarEvents((current) => (
-            current.some((event) => event.id === nextEvent.id)
+            current.some((event) => event.id === firstEvent.id)
                 ? current
-                : [...current, nextEvent]
+                : [...current, ...nextEvents]
         ));
     }, [
+        params.addedEventDates,
         params.addedEventDay,
         params.addedEventGuardian,
         params.addedEventId,
@@ -333,7 +351,7 @@ export default function CompanionChildHome() {
                         </View>
 
                         <View style={styles.section}>
-                            <Text style={styles.sectionTitle}>아이 인수인계 자료</Text>
+                            <Text style={styles.sectionTitle}>아이 주의사항</Text>
                             <View style={styles.handoffCard}>
                                 {handoffs.map((handoff) => (
                                     <View key={handoff} style={styles.handoffRow}>

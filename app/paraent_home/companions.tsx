@@ -22,7 +22,7 @@ const companions: Companion[] = [
         relation: '담임 선생님',
         phone: '010-1234-5678',
         status: '아이 프로필 공유 완료',
-        permissions: ['아이 프로필', '오늘 일정', '인수인계 자료'],
+        permissions: ['아이 프로필', '오늘 일정', '주의사항'],
     },
     {
         id: 2,
@@ -30,14 +30,14 @@ const companions: Companion[] = [
         relation: '활동지원사',
         phone: '010-2345-6789',
         status: '오늘 일정 확인 가능',
-        permissions: ['오늘 일정', '공유 캘린더', '인수인계 자료'],
+        permissions: ['오늘 일정', '공유 캘린더', '주의사항'],
     },
     {
         id: 3,
         name: '최서윤',
         relation: '치료사',
         phone: '010-3456-7890',
-        status: '인수인계 자료 공유 완료',
+        status: '주의사항 공유 완료',
         permissions: ['아이 프로필', '공유 캘린더'],
     },
 ];

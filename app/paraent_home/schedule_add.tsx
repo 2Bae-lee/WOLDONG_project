@@ -36,7 +36,7 @@ const companions = [
     {
         name: '이하늘',
         relation: '활동지원사',
-        description: '외출 일정과 인수인계 자료를 함께 확인해요.',
+        description: '외출 일정과 주의사항을 함께 확인해요.',
     },
     {
         name: '최서윤',

@@ -16,8 +16,16 @@ import {
 } from 'react-native';
 import BackButton from '../../components/BackButton';
 import PrimaryButton from '../../components/PrimaryButton';
+import RepeatSelector from '../../components/RepeatSelector';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
+import {
+    RepeatDate,
+    RepeatOption,
+    getDateKey,
+    getRepeatDates,
+    toggleRepeatDate,
+} from '../../constants/Recurrence';
 
 const scheduleTypes = [
     { label: '병원', description: '진료, 검사, 예방접종 일정' },
@@ -71,6 +79,11 @@ export default function CompanionHomeCalendarCreate() {
     const [error, setError] = useState('');
     const [sheetTarget, setSheetTarget] = useState<SheetTarget>(null);
     const selectedChild = childOptions.find((child) => child.name === selectedChildName);
+    const [repeatOption, setRepeatOption] = useState<RepeatOption>('none');
+    const [customRepeatDates, setCustomRepeatDates] = useState<RepeatDate[]>([]);
+    const selectedDate = { year: selectedYear, month: selectedMonth, day: selectedDay };
+    const repeatDates = getRepeatDates(repeatOption, selectedDate, customRepeatDates);
+    const repeatDateKeys = new Set(repeatDates.map(getDateKey));
     const calendarDays = useMemo(() => {
         const firstDay = new Date(selectedYear, selectedMonth - 1, 1).getDay();
         const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
@@ -116,8 +129,24 @@ export default function CompanionHomeCalendarCreate() {
             return;
         }
 
+        const nextDate = {
+            year: selectedYear,
+            month: selectedMonth,
+            day: calendarDay.day,
+        };
+
         setSelectedDay(calendarDay.day);
+        if (repeatOption === 'custom') {
+            setCustomRepeatDates((current) => toggleRepeatDate(current, nextDate));
+        }
         clearError();
+    };
+
+    const handleRepeatChange = (option: RepeatOption) => {
+        setRepeatOption(option);
+        if (option === 'custom' && customRepeatDates.length === 0) {
+            setCustomRepeatDates([selectedDate]);
+        }
     };
 
     const addTodo = () => {
@@ -153,6 +182,7 @@ export default function CompanionHomeCalendarCreate() {
                 addedEventChildName: selectedChild.name,
                 addedEventGuardian: selectedChild.guardian,
                 addedEventTodos: JSON.stringify(todos),
+                addedEventDates: JSON.stringify(repeatDates),
             },
         } as any);
     };
@@ -226,11 +256,20 @@ export default function CompanionHomeCalendarCreate() {
                             {calendarDays.map((calendarDay, index) => {
                                 const selected = calendarDay.monthOffset === 0 && calendarDay.day === selectedDay;
                                 const muted = calendarDay.monthOffset !== 0;
+                                const repeated = calendarDay.monthOffset === 0 && repeatDateKeys.has(getDateKey({
+                                    year: selectedYear,
+                                    month: selectedMonth,
+                                    day: calendarDay.day,
+                                }));
 
                                 return (
                                     <Pressable
                                         key={`${calendarDay.monthOffset}-${calendarDay.day}-${index}`}
-                                        style={[styles.dayCell, selected && styles.dayCellSelected]}
+                                        style={[
+                                            styles.dayCell,
+                                            repeated && styles.dayCellRepeated,
+                                            selected && styles.dayCellSelected,
+                                        ]}
                                         onPress={() => selectCalendarDay(calendarDay)}
                                     >
                                         <Text style={[
@@ -245,6 +284,15 @@ export default function CompanionHomeCalendarCreate() {
                             })}
                         </View>
                     </View>
+                </View>
+
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>반복</Text>
+                    <RepeatSelector
+                        value={repeatOption}
+                        repeatDates={repeatDates}
+                        onChange={handleRepeatChange}
+                    />
                 </View>
 
                 <View style={styles.section}>
@@ -582,6 +630,11 @@ const styles = StyleSheet.create({
 
     dayCellSelected: {
         backgroundColor: Colors.highlight1,
+        borderRadius: 12,
+    },
+
+    dayCellRepeated: {
+        backgroundColor: '#FFF4CF',
         borderRadius: 12,
     },
 

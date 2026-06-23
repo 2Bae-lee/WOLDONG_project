@@ -16,6 +16,7 @@ import {
 import BackButton from '../../../components/BackButton';
 import PrimaryButton from '../../../components/PrimaryButton';
 import RequiredMark from '../../../components/RequiredMark';
+import { getGeneratedCharacterImage } from '../../../constants/CharacterImageStore';
 import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
 
@@ -90,11 +91,13 @@ export default function MakeCharacterCustomize() {
         profileImage?: string;
         profileSections?: string;
         childId?: string;
+        characterImageKey?: string;
         story?: string;
     }>();
 
     const childName = params.name || '아이';
     const profileImage = params.profileImage ?? '';
+    const characterImageUri = getGeneratedCharacterImage(params.characterImageKey);
     const [characterName, setCharacterName] = useState('');
     const [gender, setGender] = useState<CharacterGender | null>(null);
     const [tone, setTone] = useState<VoiceTone | null>(null);
@@ -128,6 +131,7 @@ export default function MakeCharacterCustomize() {
                 profileImage,
                 profileSections: params.profileSections ?? '',
                 childId: params.childId ?? '',
+                characterImageKey: params.characterImageKey ?? '',
                 characterName: trimmedName,
                 gender,
                 tone,
@@ -189,7 +193,11 @@ export default function MakeCharacterCustomize() {
 
                 <View style={styles.characterArea}>
                     <Image
-                        source={require('../../../assets/images/mock_character.png')}
+                        source={
+                            characterImageUri
+                                ? { uri: characterImageUri }
+                                : require('../../../assets/images/mock_character.png')
+                        }
                         style={styles.characterImage}
                         resizeMode="contain"
                     />

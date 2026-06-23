@@ -32,7 +32,7 @@ export default function CompanionProfile() {
                     <Text style={styles.name}>박민지</Text>
                     <Text style={styles.relation}>담임 선생님</Text>
                     <Text style={styles.info}>010-1234-5678</Text>
-                    <Text style={styles.info}>아이 프로필, 오늘 일정, 인수인계 자료 접근 가능</Text>
+                    <Text style={styles.info}>아이 프로필, 오늘 일정, 주의사항 접근 가능</Text>
                 </View>
 
                 <Text style={styles.taskText}>일정 정리하기</Text>

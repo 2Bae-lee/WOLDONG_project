@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../../components/BackButton';
 import PrimaryButton from '../../../components/PrimaryButton';
+import { getGeneratedCharacterImage } from '../../../constants/CharacterImageStore';
 import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
 
@@ -11,11 +12,13 @@ export default function MakeCharacterComplete() {
         profileImage?: string;
         profileSections?: string;
         childId?: string;
+        characterImageKey?: string;
         characterName?: string;
     }>();
 
     const childName = params.name || '아이';
     const characterName = params.characterName || '캐릭터';
+    const characterImageUri = getGeneratedCharacterImage(params.characterImageKey);
 
     const handleVoicePreview = () => {
         // TODO: 생성된 음성 파일이 연결되면 이곳에서 재생합니다.
@@ -48,7 +51,11 @@ export default function MakeCharacterComplete() {
                 </Text>
 
                 <Image
-                    source={require('../../../assets/images/mock_character.png')}
+                    source={
+                        characterImageUri
+                            ? { uri: characterImageUri }
+                            : require('../../../assets/images/mock_character.png')
+                    }
                     style={styles.characterImage}
                     resizeMode="contain"
                 />

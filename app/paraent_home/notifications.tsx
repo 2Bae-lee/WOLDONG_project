@@ -42,7 +42,7 @@ const notifications: NotificationItem[] = [
     },
     {
         id: 3,
-        title: '인수인계 자료',
+        title: '주의사항',
         message: '아이에게 전달할 자료를 다시 확인해주세요.',
         time: '1시간 전',
         type: 'handoff',

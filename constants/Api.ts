@@ -30,6 +30,18 @@ type AuthData = {
     user: AuthUser;
 };
 
+const MOCK_PARENT_LOGIN = {
+    email: 'woldong',
+    password: 'wd1!',
+    token: 'mock-parent-token',
+    user: {
+        id: 'mock-parent',
+        name: '월동 보호자',
+        email: 'woldong',
+        role: 'parent',
+    } satisfies AuthUser,
+};
+
 export type ChildProfilePayload = {
     name: string;
     gender: '남자아이' | '여자아이';
@@ -53,6 +65,23 @@ export type ChildProfileCreateResponse = {
     name: string;
     created_at: string;
 };
+
+const blobToDataUri = (blob: Blob) => (
+    new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+
+        reader.onloadend = () => {
+            if (typeof reader.result === 'string') {
+                resolve(reader.result);
+                return;
+            }
+
+            reject(new Error('생성된 캐릭터 이미지를 불러올 수 없어요.'));
+        };
+        reader.onerror = () => reject(new Error('생성된 캐릭터 이미지를 불러올 수 없어요.'));
+        reader.readAsDataURL(blob);
+    })
+);
 
 let authToken: string | null = null;
 let authUser: AuthUser | null = null;
@@ -227,15 +256,25 @@ export const login = async (body: {
     email: string;
     password: string;
 }) => {
-    const response = await apiRequest<AuthData>('/api/auth/login', {
-        method: 'POST',
-        body: JSON.stringify(body),
-    });
+    const isMockParent =
+        body.email === MOCK_PARENT_LOGIN.email &&
+        body.password === MOCK_PARENT_LOGIN.password;
 
-    if (response.data?.token && response.data.user) {
-        await setAuthSession(response.data.token, response.data.user);
+    if (!isMockParent) {
+        throw new ApiError('아이디 또는 비밀번호가 일치하지 않아요.', 401);
     }
 
+    const responseData: AuthData = {
+        token: MOCK_PARENT_LOGIN.token,
+        user: MOCK_PARENT_LOGIN.user,
+    };
+    const response: ApiSuccess<AuthData> = {
+        success: true,
+        message: '목 데이터로 로그인했어요.',
+        data: responseData,
+    };
+
+    await setAuthSession(responseData.token, responseData.user);
     return response;
 };
 
@@ -255,3 +294,31 @@ export const createChildProfile = (body: ChildProfilePayload) => (
         body: JSON.stringify(body),
     })
 );
+
+export const generateCharacterImage = async (traits: string) => {
+    const response = await fetch(`${API_BASE_URL}/api/ai/generate-character`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Accept: 'image/png',
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+        body: JSON.stringify({ traits }),
+    });
+
+    if (!response.ok) {
+        const responseText = await response.text();
+        let message = '캐릭터 생성에 실패했어요.';
+
+        try {
+            const body = responseText ? JSON.parse(responseText) as ApiFailure : null;
+            message = body?.message ?? message;
+        } catch {
+            message = responseText || message;
+        }
+
+        throw new ApiError(message, response.status);
+    }
+
+    return blobToDataUri(await response.blob());
+};

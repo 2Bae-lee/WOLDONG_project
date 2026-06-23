@@ -27,6 +27,7 @@ import {
 } from '../../constants/CompanionTodayState';
 import { Fonts } from '../../constants/Fonts';
 import { hasUnreadCompanionNotifications } from '../../constants/NotificationState';
+import { RepeatDate, parseRepeatDates } from '../../constants/Recurrence';
 
 type ActiveTab = 'today' | 'calendar';
 
@@ -65,7 +66,7 @@ const initialChildren: ChildItem[] = [
         name: '김월동',
         guardian: '김보호자',
         schedules: 3,
-        permissions: ['오늘 일정', '공유 캘린더', '인수인계 자료'],
+        permissions: ['오늘 일정', '공유 캘린더', '주의사항'],
         status: 'connected',
     },
     {
@@ -100,6 +101,7 @@ export default function CompanionChildren() {
         addedEventChildName?: string;
         addedEventGuardian?: string;
         addedEventTodos?: string;
+        addedEventDates?: string;
         tab?: string;
     }>();
     const companionName = params.companionName || '박민지';
@@ -266,29 +268,41 @@ export default function CompanionChildren() {
             parsedTodos = [];
         }
 
+        const fallbackDate: RepeatDate = {
+            year: addedEventYear,
+            month: addedEventMonth,
+            day: addedEventDay,
+        };
+        const eventDates = parseRepeatDates(params.addedEventDates);
+        const nextEvents = (eventDates.length > 0 ? eventDates : [fallbackDate]).map((date, index) => ({
+            id: addedEventId + index,
+            year: date.year,
+            month: date.month,
+            day: date.day,
+            childName: params.addedEventChildName ?? '김월동',
+            guardian: params.addedEventGuardian ?? '김보호자',
+            title: params.addedEventTitle ?? '새 일정',
+            todos: parsedTodos.map((todo) => ({
+                ...todo,
+                id: todo.id + index * 1000,
+            })),
+        }));
+        const firstEvent = nextEvents[0];
+
+        if (!firstEvent) return;
+
         setCalendarEvents((current) => {
             if (current.some((event) => event.id === addedEventId)) return current;
 
-            return [
-                ...current,
-                {
-                    id: addedEventId,
-                    year: addedEventYear,
-                    month: addedEventMonth,
-                    day: addedEventDay,
-                    childName: params.addedEventChildName ?? '김월동',
-                    guardian: params.addedEventGuardian ?? '김보호자',
-                    title: params.addedEventTitle ?? '새 일정',
-                    todos: parsedTodos,
-                },
-            ];
+            return [...current, ...nextEvents];
         });
-        setCalendarYear(addedEventYear);
-        setCalendarMonth(addedEventMonth);
-        setSelectedDay(addedEventDay);
+        setCalendarYear(firstEvent.year);
+        setCalendarMonth(firstEvent.month);
+        setSelectedDay(firstEvent.day);
         setActiveTab('calendar');
     }, [
         params.addedEventChildName,
+        params.addedEventDates,
         params.addedEventDay,
         params.addedEventGuardian,
         params.addedEventId,

@@ -204,6 +204,19 @@ export type ParentHomeResponse = {
     today_schedules: TodayScheduleSummary[];
 };
 
+export type CompanionProfile = AuthUser & {
+    phone?: string;
+    created_at: string;
+};
+
+export type CompanionChild = {
+    child_id: string;
+    name: string;
+    gender: string;
+    birth_date: string;
+    disability_type: string;
+};
+
 export type ParentNotification = {
     notification_id: string;
     type: 'companion_request' | 'request_approved' | 'request_rejected' | 'emergency' | string;
@@ -571,6 +584,14 @@ export const getParentHome = () => (
 
 export const getTodaySchedules = () => (
     apiRequest<TodayScheduleSummary[]>('/api/schedules/today')
+);
+
+export const getCompanionProfile = () => (
+    apiRequest<CompanionProfile>('/api/companion/me')
+);
+
+export const getCompanionChildren = () => (
+    apiRequest<CompanionChild[]>('/api/companion/children')
 );
 
 export const getSchedules = () => (

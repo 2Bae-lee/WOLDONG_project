@@ -5,6 +5,10 @@ import { Platform } from 'react-native';
 const API_PORT = 8003;
 
 function getApiBaseUrl() {
+    if (process.env.EXPO_PUBLIC_API_BASE_URL) {
+        return process.env.EXPO_PUBLIC_API_BASE_URL;
+    }
+
     if (Platform.OS === 'web') {
         return `http://127.0.0.1:${API_PORT}`;
     }

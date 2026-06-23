@@ -1,10 +1,18 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../../components/BackButton';
 import PrimaryButton from '../../../components/PrimaryButton';
+import { CharacterSpeed, updateChildProfile } from '../../../constants/Api';
 import { getGeneratedCharacterImage } from '../../../constants/CharacterImageStore';
 import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
+
+const speedMap: Record<string, CharacterSpeed> = {
+    '느리게': 'slow',
+    '중간': 'normal',
+    '빠르게': 'fast',
+};
 
 export default function MakeCharacterComplete() {
     const params = useLocalSearchParams<{
@@ -14,14 +22,50 @@ export default function MakeCharacterComplete() {
         childId?: string;
         characterImageKey?: string;
         characterName?: string;
+        gender?: 'female' | 'male';
+        tone?: 'kind' | 'strict';
+        speed?: string;
     }>();
 
     const childName = params.name || '아이';
     const characterName = params.characterName || '캐릭터';
     const characterImageUri = getGeneratedCharacterImage(params.characterImageKey);
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveError, setSaveError] = useState('');
 
     const handleVoicePreview = () => {
         // TODO: 생성된 음성 파일이 연결되면 이곳에서 재생합니다.
+    };
+
+    const goHome = async () => {
+        if (isSaving) return;
+
+        setSaveError('');
+        setIsSaving(true);
+
+        try {
+            if (params.childId) {
+                await updateChildProfile(params.childId, {
+                    character_name: characterName,
+                    character_tone: params.tone ?? 'kind',
+                    character_speed: speedMap[params.speed ?? '중간'] ?? 'normal',
+                    character_voice: params.gender ?? 'female',
+                });
+            }
+
+            router.replace({
+                pathname: '/paraent_home',
+                params: {
+                    updatedChildName: childName,
+                    updatedProfileImage: params.profileImage ?? '',
+                    updatedProfileSections: params.profileSections ?? '',
+                },
+            } as any);
+        } catch (error) {
+            setSaveError(error instanceof Error ? error.message : '캐릭터 설정 저장에 실패했어요.');
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     return (
@@ -67,22 +111,14 @@ export default function MakeCharacterComplete() {
                     <Text style={styles.voiceIcon}>▶</Text>
                     <Text style={styles.voiceText}>음성 듣기</Text>
                 </Pressable>
+                {saveError ? <Text style={styles.errorText}>{saveError}</Text> : null}
             </View>
 
             <View style={styles.buttonArea}>
                 <PrimaryButton
-                    label="홈"
+                    label={isSaving ? '저장 중...' : '홈'}
                     width="100%"
-                    onPress={() =>
-                        router.replace({
-                            pathname: '/paraent_home',
-                            params: {
-                                updatedChildName: childName,
-                                updatedProfileImage: params.profileImage ?? '',
-                                updatedProfileSections: params.profileSections ?? '',
-                            },
-                        } as any)
-                    }
+                    onPress={goHome}
                 />
             </View>
         </View>
@@ -214,6 +250,14 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '900',
         color: Colors.text,
+    },
+
+    errorText: {
+        marginTop: 14,
+        fontFamily: Fonts.body,
+        fontSize: 13,
+        color: Colors.highlight3,
+        textAlign: 'center',
     },
 
     buttonArea: {

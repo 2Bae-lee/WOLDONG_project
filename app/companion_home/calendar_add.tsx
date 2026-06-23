@@ -156,6 +156,11 @@ export default function CompanionCalendarAdd() {
             return;
         }
 
+        if (repeatOption === 'custom' && repeatDates.length === 0) {
+            setError('기타 반복에서는 캘린더에서 날짜를 하나 이상 선택해주세요.');
+            return;
+        }
+
         Keyboard.dismiss();
         router.replace({
             pathname: '/companion_home/child_home',
@@ -230,13 +235,17 @@ export default function CompanionCalendarAdd() {
 
                         <View style={styles.calendarGrid}>
                             {calendarDays.map((calendarDay, index) => {
-                                const selected = calendarDay.monthOffset === 0 && calendarDay.day === selectedDay;
                                 const muted = calendarDay.monthOffset !== 0;
                                 const repeated = calendarDay.monthOffset === 0 && repeatDateKeys.has(getDateKey({
                                     year: selectedYear,
                                     month: selectedMonth,
                                     day: calendarDay.day,
                                 }));
+                                const selected = calendarDay.monthOffset === 0 && (
+                                    repeatOption === 'custom'
+                                        ? repeated
+                                        : calendarDay.day === selectedDay
+                                );
 
                                 return (
                                     <Pressable

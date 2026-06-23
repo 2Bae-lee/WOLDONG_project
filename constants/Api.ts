@@ -30,6 +30,10 @@ type AuthData = {
     user: AuthUser;
 };
 
+export type CharacterTone = 'kind' | 'strict';
+export type CharacterSpeed = 'slow' | 'normal' | 'fast';
+export type CharacterVoice = 'female' | 'male';
+
 const MOCK_PARENT_LOGIN = {
     email: 'woldong',
     password: 'wd1!',
@@ -58,7 +62,13 @@ export type ChildProfilePayload = {
     notice_time?: string;
     calming_methods?: string[];
     avoid_behaviors?: string;
+    character_name?: string;
+    character_tone?: CharacterTone;
+    character_speed?: CharacterSpeed;
+    character_voice?: CharacterVoice;
 };
+
+export type ChildProfileUpdatePayload = Partial<ChildProfilePayload>;
 
 export type ChildProfileCreateResponse = {
     child_id: string;
@@ -72,6 +82,16 @@ export type ParentHomeChild = {
     gender: string;
     birth_date: string;
     disability_type: string;
+    character_name?: string;
+    character_tone?: CharacterTone | null;
+    character_speed?: CharacterSpeed | null;
+    character_voice?: CharacterVoice | null;
+};
+
+export type ChildProfileDetail = ChildProfilePayload & {
+    child_id: string;
+    created_at: string;
+    updated_at: string;
 };
 
 export type TodayScheduleSummary = {
@@ -97,6 +117,7 @@ export type SchedulePayload = {
     activities?: string[];
     wait_possible?: boolean;
     crowd_possible?: boolean;
+    schedule_features?: string[];
     preparations?: string[];
     checklist?: string[];
 };
@@ -113,16 +134,26 @@ export type ScheduleChecklistItem = {
     is_checked: boolean;
 };
 
+export type ScheduleJournal = {
+    reaction?: string;
+    difficulties?: string;
+    memo?: string;
+    recorded_at?: string;
+};
+
 export type ScheduleDetail = {
     schedule_id: string;
     title: string;
     date: string;
     start_time: string;
+    destination?: string;
+    transport?: string;
     place_type: string;
     transport_type: string;
     activities: string[];
     wait_possible: boolean;
     crowd_possible: boolean;
+    schedule_features?: string[];
     status: 'upcoming' | 'ongoing' | 'done' | string;
     child_id: string;
     companion_id?: string | null;
@@ -136,7 +167,7 @@ export type ScheduleDetail = {
         difficult_environments?: string[];
         notice_time?: string;
     };
-    journal?: Record<string, unknown> | null;
+    journal?: ScheduleJournal | null;
     created_at: string;
     updated_at: string;
 };
@@ -145,9 +176,9 @@ export type ScheduleUpdatePayload = Partial<SchedulePayload> & {
     status?: 'upcoming' | 'ongoing' | 'done' | string;
 };
 
-export type SocialStoryTone = 'kind' | 'strict';
-export type SocialStorySpeed = 'slow' | 'normal' | 'fast';
-export type SocialStoryVoice = 'female' | 'male';
+export type SocialStoryTone = CharacterTone;
+export type SocialStorySpeed = CharacterSpeed;
+export type SocialStoryVoice = CharacterVoice;
 
 export type SocialStoryRequest = {
     script: string;
@@ -440,6 +471,27 @@ export const signupParent = async (body: {
     return response;
 };
 
+export const signupCompanion = async (body: {
+    name: string;
+    email: string;
+    password: string;
+    phone?: string;
+}) => {
+    const response = await apiRequest<AuthData>('/api/auth/signup', {
+        method: 'POST',
+        body: JSON.stringify({
+            ...body,
+            role: 'companion',
+        }),
+    });
+
+    if (response.data?.token && response.data.user) {
+        await setAuthSession(response.data.token, response.data.user);
+    }
+
+    return response;
+};
+
 export const login = async (body: {
     email: string;
     password: string;
@@ -449,7 +501,16 @@ export const login = async (body: {
         body.password === MOCK_PARENT_LOGIN.password;
 
     if (!isMockParent) {
-        throw new ApiError('아이디 또는 비밀번호가 일치하지 않아요.', 401);
+        const response = await apiRequest<AuthData>('/api/auth/login', {
+            method: 'POST',
+            body: JSON.stringify(body),
+        });
+
+        if (response.data?.token && response.data.user) {
+            await setAuthSession(response.data.token, response.data.user);
+        }
+
+        return response;
     }
 
     const responseData: AuthData = {
@@ -476,9 +537,30 @@ export const logout = async () => {
     }
 };
 
+export const deleteMe = async () => {
+    try {
+        await apiRequest<null>('/api/auth/me', {
+            method: 'DELETE',
+        });
+    } finally {
+        await clearAuthSession();
+    }
+};
+
 export const createChildProfile = (body: ChildProfilePayload) => (
     apiRequest<ChildProfileCreateResponse>('/api/children', {
         method: 'POST',
+        body: JSON.stringify(body),
+    })
+);
+
+export const getChildProfile = (childId: string) => (
+    apiRequest<ChildProfileDetail>(`/api/children/${encodeURIComponent(childId)}`)
+);
+
+export const updateChildProfile = (childId: string, body: ChildProfileUpdatePayload) => (
+    apiRequest<null>(`/api/children/${encodeURIComponent(childId)}`, {
+        method: 'PATCH',
         body: JSON.stringify(body),
     })
 );
@@ -542,6 +624,13 @@ export const approveInviteRequest = (requestId: string, approve: boolean) => (
 export const generateInviteCode = (childId: string) => (
     apiRequest<InviteCodeResponse>(`/api/invite/generate?child_id=${encodeURIComponent(childId)}`, {
         method: 'POST',
+    })
+);
+
+export const verifyInviteCode = (code: string) => (
+    apiRequest<null>('/api/invite/verify', {
+        method: 'POST',
+        body: JSON.stringify({ code }),
     })
 );
 

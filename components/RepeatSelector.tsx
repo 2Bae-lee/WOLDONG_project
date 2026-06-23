@@ -53,7 +53,7 @@ export default function RepeatSelector({ value, repeatDates, onChange }: Props) 
                     </Text>
                     {value === 'custom' ? (
                         <Text style={styles.customHint}>
-                            위 캘린더에서 원하는 날짜를 눌러 선택해주세요.
+                            위 캘린더에서 원하는 날짜를 누르고, 다시 누르면 선택이 해제돼요.
                         </Text>
                     ) : null}
                 </View>

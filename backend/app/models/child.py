@@ -1,8 +1,8 @@
-from typing import Optional
 from beanie import Document
 from pydantic import Field
 from datetime import datetime
 from enum import Enum
+from typing import Optional
 
 
 class GenderEnum(str, Enum):
@@ -19,6 +19,22 @@ class RelationEnum(str, Enum):
 class DisabilityTypeEnum(str, Enum):
     intellectual = "지적장애"
     autism = "자폐스펙트럼장애"
+
+
+class CharacterToneEnum(str, Enum):
+    kind = "kind"
+    strict = "strict"
+
+
+class CharacterSpeedEnum(str, Enum):
+    slow = "slow"
+    normal = "normal"
+    fast = "fast"
+
+
+class CharacterVoiceEnum(str, Enum):
+    female = "female"
+    male = "male"
 
 
 # 3단계 - 설명 방식
@@ -143,9 +159,10 @@ class Child(Document):
 
     # 캐릭터 설정
     character_image_url: Optional[dict] = None
-    character_tone: Optional[str] = "kind"
-    character_speed: Optional[str] = "normal"
-    character_voice: Optional[str] = "female"
+    character_name: str = ""
+    character_tone: Optional[CharacterToneEnum] = CharacterToneEnum.kind
+    character_speed: Optional[CharacterSpeedEnum] = CharacterSpeedEnum.normal
+    character_voice: Optional[CharacterVoiceEnum] = CharacterVoiceEnum.female
 
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

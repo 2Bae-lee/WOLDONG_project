@@ -18,6 +18,15 @@ import BackButton from '../../components/BackButton';
 import PrimaryButton from '../../components/PrimaryButton';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
+import {
+    SCHEDULE_FEATURE_CROWD,
+    SCHEDULE_FEATURE_WAIT,
+    getScheduleFeatureLabels,
+    getUniqueScheduleFeatures,
+    scheduleFeatureGroups,
+    scheduleFeatureTemplates,
+    scheduleTypeFeatureMap,
+} from '../../constants/ScheduleFeatures';
 
 const scheduleTypes = [
     { label: '병원', description: '진료, 검사, 예방접종 일정' },
@@ -56,8 +65,20 @@ export default function ScheduleAdd() {
     const [memo, setMemo] = useState('');
     const [todos, setTodos] = useState<string[]>([]);
     const [todoText, setTodoText] = useState('');
+    const [selectedFeatureValues, setSelectedFeatureValues] = useState<string[]>([]);
+    const [excludedFeatureValues, setExcludedFeatureValues] = useState<string[]>([]);
     const [error, setError] = useState('');
     const [sheetTarget, setSheetTarget] = useState<SheetTarget>(null);
+    const baseScheduleFeatureValues = useMemo(() => getUniqueScheduleFeatures(
+        scheduleTypeFeatureMap[selectedType] ?? [],
+    ), [selectedType]);
+    const selectedScheduleFeatureValues = useMemo(() => getUniqueScheduleFeatures(
+        baseScheduleFeatureValues.filter((value) => !excludedFeatureValues.includes(value)),
+        selectedFeatureValues,
+    ), [baseScheduleFeatureValues, excludedFeatureValues, selectedFeatureValues]);
+    const selectedScheduleFeatureLabels = getScheduleFeatureLabels(selectedScheduleFeatureValues);
+    const waitPossible = selectedScheduleFeatureValues.includes(SCHEDULE_FEATURE_WAIT);
+    const crowdPossible = selectedScheduleFeatureValues.includes(SCHEDULE_FEATURE_CROWD);
 
     const clearError = () => {
         if (error) setError('');
@@ -96,6 +117,44 @@ export default function ScheduleAdd() {
         setTodos((current) => current.filter((_, itemIndex) => itemIndex !== index));
     };
 
+    const toggleScheduleFeature = (featureValue: string) => {
+        if (baseScheduleFeatureValues.includes(featureValue)) {
+            setSelectedFeatureValues((current) => current.filter((value) => value !== featureValue));
+            setExcludedFeatureValues((current) => (
+                current.includes(featureValue)
+                    ? current.filter((value) => value !== featureValue)
+                    : [...current, featureValue]
+            ));
+            return;
+        }
+
+        setSelectedFeatureValues((current) => (
+            current.includes(featureValue)
+                ? current.filter((value) => value !== featureValue)
+                : [...current, featureValue]
+        ));
+    };
+
+    const toggleFeatureTemplate = (featureValues: string[]) => {
+        setSelectedFeatureValues((current) => {
+            const templateValueSet = new Set(featureValues);
+            const allSelected = featureValues.every((value) => selectedScheduleFeatureValues.includes(value));
+
+            if (allSelected) {
+                setExcludedFeatureValues((excluded) => getUniqueScheduleFeatures(
+                    excluded,
+                    featureValues.filter((value) => baseScheduleFeatureValues.includes(value)),
+                ));
+                return current.filter((value) => !templateValueSet.has(value));
+            }
+
+            setExcludedFeatureValues((excluded) => (
+                excluded.filter((value) => !templateValueSet.has(value))
+            ));
+            return getUniqueScheduleFeatures(current, featureValues);
+        });
+    };
+
     const handleSave = () => {
         const title = scheduleTitle.trim();
 
@@ -113,6 +172,7 @@ export default function ScheduleAdd() {
                 addedScheduleTitle: title,
                 addedScheduleCompanion: selectedCompanion,
                 addedScheduleTodos: JSON.stringify(todos),
+                addedScheduleFeatures: JSON.stringify(selectedScheduleFeatureValues),
             },
         } as any);
     };
@@ -224,6 +284,107 @@ export default function ScheduleAdd() {
                         multiline
                         textAlignVertical="top"
                     />
+                </View>
+
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>일정 특성</Text>
+                    <View style={styles.templateGrid}>
+                        {scheduleFeatureTemplates.map((template) => {
+                            const selected = template.values.every((value) => (
+                                selectedScheduleFeatureValues.includes(value)
+                            ));
+
+                            return (
+                                <Pressable
+                                    key={template.title}
+                                    style={[styles.templateButton, selected && styles.templateButtonSelected]}
+                                    onPress={() => toggleFeatureTemplate(template.values)}
+                                >
+                                    <View style={styles.templateTitleRow}>
+                                        <Ionicons
+                                            name={selected ? 'checkmark-circle' : 'albums-outline'}
+                                            size={18}
+                                            color={selected ? Colors.highlight1 : Colors.textShadow}
+                                        />
+                                        <Text style={styles.templateTitle}>{template.title}</Text>
+                                    </View>
+                                    <Text style={styles.templateDescription}>{template.description}</Text>
+                                </Pressable>
+                            );
+                        })}
+                    </View>
+
+                    <View style={styles.featurePanel}>
+                        {scheduleFeatureGroups.map((group) => (
+                            <View key={group.title} style={styles.featureGroup}>
+                                <Text style={styles.featureGroupTitle}>{group.title}</Text>
+                                <View style={styles.featureChipRow}>
+                                    {group.items.map((feature) => {
+                                        const selected = selectedScheduleFeatureValues.includes(feature.value);
+
+                                        return (
+                                            <Pressable
+                                                key={feature.value}
+                                                style={[
+                                                    styles.featureChip,
+                                                    selected && styles.featureChipSelected,
+                                                ]}
+                                                onPress={() => toggleScheduleFeature(feature.value)}
+                                            >
+                                                <Ionicons
+                                                    name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+                                                    size={15}
+                                                    color={selected ? Colors.highlight1 : Colors.textShadow}
+                                                />
+                                                <Text style={styles.featureChipText}>{feature.label}</Text>
+                                            </Pressable>
+                                        );
+                                    })}
+                                </View>
+                            </View>
+                        ))}
+                    </View>
+
+                    {selectedScheduleFeatureLabels.length ? (
+                        <View style={styles.selectedFeatureBox}>
+                            {selectedScheduleFeatureLabels.slice(0, 8).map((label) => (
+                                <Text key={label} style={styles.selectedFeatureText}>{label}</Text>
+                            ))}
+                            {selectedScheduleFeatureLabels.length > 8 ? (
+                                <Text style={styles.selectedFeatureText}>
+                                    + {selectedScheduleFeatureLabels.length - 8}개
+                                </Text>
+                            ) : null}
+                        </View>
+                    ) : null}
+                </View>
+
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>외출 환경</Text>
+                    <View style={styles.toggleRow}>
+                        <Pressable
+                            style={[styles.toggleButton, waitPossible && styles.toggleButtonSelected]}
+                            onPress={() => toggleScheduleFeature(SCHEDULE_FEATURE_WAIT)}
+                        >
+                            <Ionicons
+                                name={waitPossible ? 'checkmark-circle' : 'ellipse-outline'}
+                                size={18}
+                                color={waitPossible ? Colors.highlight1 : Colors.textShadow}
+                            />
+                            <Text style={styles.toggleText}>대기 가능성</Text>
+                        </Pressable>
+                        <Pressable
+                            style={[styles.toggleButton, crowdPossible && styles.toggleButtonSelected]}
+                            onPress={() => toggleScheduleFeature(SCHEDULE_FEATURE_CROWD)}
+                        >
+                            <Ionicons
+                                name={crowdPossible ? 'checkmark-circle' : 'ellipse-outline'}
+                                size={18}
+                                color={crowdPossible ? Colors.highlight1 : Colors.textShadow}
+                            />
+                            <Text style={styles.toggleText}>혼잡 가능성</Text>
+                        </Pressable>
+                    </View>
                 </View>
 
                 <View style={styles.section}>
@@ -519,6 +680,154 @@ const styles = StyleSheet.create({
         fontFamily: Fonts.body,
         fontSize: 15,
         lineHeight: 22,
+        color: Colors.text,
+    },
+
+    templateGrid: {
+        gap: 10,
+        marginBottom: 12,
+    },
+
+    templateButton: {
+        width: '100%',
+        minHeight: 70,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+    },
+
+    templateButtonSelected: {
+        borderColor: Colors.highlight1,
+        backgroundColor: '#FFF4CF',
+    },
+
+    templateTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 7,
+        marginBottom: 5,
+    },
+
+    templateTitle: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 15,
+        fontWeight: '900',
+        color: Colors.text,
+    },
+
+    templateDescription: {
+        fontFamily: Fonts.body,
+        fontSize: 13,
+        lineHeight: 18,
+        color: Colors.textShadow,
+    },
+
+    featurePanel: {
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        padding: 12,
+        gap: 13,
+    },
+
+    featureGroup: {
+        gap: 8,
+    },
+
+    featureGroupTitle: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 13,
+        fontWeight: '900',
+        color: Colors.textShadow,
+    },
+
+    featureChipRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+
+    featureChip: {
+        minHeight: 36,
+        borderRadius: 18,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: Colors.pageBg,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 11,
+        gap: 5,
+    },
+
+    featureChipSelected: {
+        borderColor: Colors.highlight1,
+        backgroundColor: '#FFF8DF',
+    },
+
+    featureChipLocked: {
+        opacity: 0.9,
+    },
+
+    featureChipText: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 13,
+        fontWeight: '900',
+        color: Colors.text,
+    },
+
+    selectedFeatureBox: {
+        marginTop: 10,
+        borderRadius: 14,
+        backgroundColor: '#FFF8DF',
+        padding: 10,
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 6,
+    },
+
+    selectedFeatureText: {
+        borderRadius: 12,
+        backgroundColor: Colors.pageBg,
+        paddingHorizontal: 9,
+        paddingVertical: 5,
+        fontFamily: Fonts.body,
+        fontSize: 12,
+        color: Colors.text,
+        overflow: 'hidden',
+    },
+
+    toggleRow: {
+        flexDirection: 'row',
+        gap: 10,
+    },
+
+    toggleButton: {
+        flex: 1,
+        minHeight: 48,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: '#F7F4E8',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 10,
+        gap: 6,
+    },
+
+    toggleButtonSelected: {
+        borderColor: Colors.highlight1,
+        backgroundColor: '#FFF4CF',
+    },
+
+    toggleText: {
+        fontFamily: Fonts.bodyBold,
+        fontSize: 14,
+        fontWeight: '900',
         color: Colors.text,
     },
 

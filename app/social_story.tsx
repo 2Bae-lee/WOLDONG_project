@@ -19,31 +19,12 @@ import PrimaryButton from '../components/PrimaryButton';
 import {
     ApiError,
     SocialStoryResponse,
-    SocialStorySpeed,
-    SocialStoryTone,
-    SocialStoryVoice,
     generateScheduleSocialStory,
     generateSocialStoryTts,
     toApiAssetUrl,
 } from '../constants/Api';
 import { Colors } from '../constants/Colors';
 import { Fonts } from '../constants/Fonts';
-
-const toneOptions: { label: string; value: SocialStoryTone }[] = [
-    { label: '다정', value: 'kind' },
-    { label: '엄격', value: 'strict' },
-];
-
-const speedOptions: { label: string; value: SocialStorySpeed }[] = [
-    { label: '느리게', value: 'slow' },
-    { label: '중간', value: 'normal' },
-    { label: '빠르게', value: 'fast' },
-];
-
-const voiceOptions: { label: string; value: SocialStoryVoice }[] = [
-    { label: '여자', value: 'female' },
-    { label: '남자', value: 'male' },
-];
 
 const parseCheckedItems = (value?: string) => {
     if (!value) return [];
@@ -70,9 +51,6 @@ export default function SocialStoryScreen() {
     const [script, setScript] = useState(
         params.script || (params.title ? `오늘은 ${params.title} 일정이 있어요.` : '오늘은 병원에 가요.')
     );
-    const [tone, setTone] = useState<SocialStoryTone>('kind');
-    const [speed, setSpeed] = useState<SocialStorySpeed>('normal');
-    const [voice, setVoice] = useState<SocialStoryVoice>('female');
     const [result, setResult] = useState<SocialStoryResponse | null>(null);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
@@ -93,15 +71,9 @@ export default function SocialStoryScreen() {
             const response = params.scheduleId
                 ? await generateScheduleSocialStory(params.scheduleId, {
                     script: trimmedScript,
-                    tone,
-                    speed,
-                    voice,
                 })
                 : await generateSocialStoryTts({
                     script: trimmedScript,
-                    tone,
-                    speed,
-                    voice,
                     checked_items: checkedItems,
                     threshold: 0.5,
                 });
@@ -176,51 +148,6 @@ export default function SocialStoryScreen() {
                         multiline
                         textAlignVertical="top"
                     />
-                </View>
-
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>말투</Text>
-                    <View style={styles.optionRow}>
-                        {toneOptions.map((option) => (
-                            <Pressable
-                                key={option.value}
-                                style={[styles.optionButton, tone === option.value && styles.optionButtonSelected]}
-                                onPress={() => setTone(option.value)}
-                            >
-                                <Text style={styles.optionText}>{option.label}</Text>
-                            </Pressable>
-                        ))}
-                    </View>
-                </View>
-
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>빠르기</Text>
-                    <View style={styles.optionRow}>
-                        {speedOptions.map((option) => (
-                            <Pressable
-                                key={option.value}
-                                style={[styles.optionButton, speed === option.value && styles.optionButtonSelected]}
-                                onPress={() => setSpeed(option.value)}
-                            >
-                                <Text style={styles.optionText}>{option.label}</Text>
-                            </Pressable>
-                        ))}
-                    </View>
-                </View>
-
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>목소리</Text>
-                    <View style={styles.optionRow}>
-                        {voiceOptions.map((option) => (
-                            <Pressable
-                                key={option.value}
-                                style={[styles.optionButton, voice === option.value && styles.optionButtonSelected]}
-                                onPress={() => setVoice(option.value)}
-                            >
-                                <Text style={styles.optionText}>{option.label}</Text>
-                            </Pressable>
-                        ))}
-                    </View>
                 </View>
 
                 {checkedItems.length > 0 ? (
@@ -368,34 +295,6 @@ const styles = StyleSheet.create({
         fontFamily: Fonts.body,
         fontSize: 15,
         lineHeight: 22,
-        color: Colors.text,
-    },
-
-    optionRow: {
-        flexDirection: 'row',
-        gap: 10,
-    },
-
-    optionButton: {
-        flex: 1,
-        minHeight: 46,
-        borderRadius: 14,
-        borderWidth: 1,
-        borderColor: '#E8DDC8',
-        backgroundColor: '#F7F4E8',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-
-    optionButtonSelected: {
-        backgroundColor: Colors.highlight1,
-        borderColor: Colors.highlight1,
-    },
-
-    optionText: {
-        fontFamily: Fonts.bodyBold,
-        fontSize: 14,
-        fontWeight: '900',
         color: Colors.text,
     },
 

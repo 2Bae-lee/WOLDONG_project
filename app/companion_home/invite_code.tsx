@@ -12,9 +12,9 @@ import {
 } from 'react-native';
 import BackButton from '../../components/BackButton';
 import PrimaryButton from '../../components/PrimaryButton';
+import { verifyInviteCode } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
-import { registerCompanionRequestNotification } from '../../constants/NotificationState';
 
 const CODE_LENGTH = 4;
 
@@ -28,10 +28,11 @@ export default function CompanionInviteCode() {
     const companionName = params.companionName || '박민지';
     const [code, setCode] = useState(['', '', '', '']);
     const [error, setError] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const inputRefs = useRef<Array<TextInput | null>>([]);
 
     const handleChange = (text: string, index: number) => {
-        const value = text.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+        const value = text.replace(/[^0-9]/g, '');
         const nextCode = [...code];
         nextCode[index] = value.slice(-1);
 
@@ -49,7 +50,9 @@ export default function CompanionInviteCode() {
         }
     };
 
-    const submitCode = () => {
+    const submitCode = async () => {
+        if (isSubmitting) return;
+
         const fullCode = code.join('');
 
         if (fullCode.length < CODE_LENGTH) {
@@ -57,8 +60,18 @@ export default function CompanionInviteCode() {
             return;
         }
 
-        const childName = fullCode === 'ROW8' ? '김월동' : `초대 코드 ${fullCode}`;
-        registerCompanionRequestNotification(companionName, childName);
+        setError('');
+        setIsSubmitting(true);
+
+        try {
+            await verifyInviteCode(fullCode);
+        } catch (requestError) {
+            setError(requestError instanceof Error ? requestError.message : '승인 요청을 보내지 못했어요.');
+            setIsSubmitting(false);
+            return;
+        }
+
+        setIsSubmitting(false);
 
         router.replace({
             pathname: '/companion_home',
@@ -69,7 +82,7 @@ export default function CompanionInviteCode() {
                 companionProfileImage: params.companionProfileImage,
                 requestSent: 'true',
                 requestedInviteCode: fullCode,
-                requestedChildName: childName,
+                requestedChildName: `초대 코드 ${fullCode}`,
             },
         } as any);
     };
@@ -117,7 +130,7 @@ export default function CompanionInviteCode() {
                             value={digit}
                             onChangeText={(text) => handleChange(text, index)}
                             onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, index)}
-                            autoCapitalize="characters"
+                            keyboardType="number-pad"
                             maxLength={1}
                             textAlign="center"
                             returnKeyType={index === CODE_LENGTH - 1 ? 'done' : 'next'}
@@ -130,7 +143,7 @@ export default function CompanionInviteCode() {
             </View>
 
             <View style={styles.buttonArea}>
-                <PrimaryButton label="요청 보내기" width="100%" onPress={submitCode} />
+                <PrimaryButton label={isSubmitting ? '요청 중...' : '요청 보내기'} width="100%" onPress={submitCode} />
             </View>
         </KeyboardAvoidingView>
     );

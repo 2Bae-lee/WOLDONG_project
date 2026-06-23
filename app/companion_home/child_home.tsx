@@ -361,6 +361,8 @@ export default function CompanionChildHome() {
                             </View>
                         </View>
 
+                        <View style={styles.sectionDivider} />
+
                         <View style={styles.section}>
                             <Text style={styles.sectionTitle}>아이 주의사항</Text>
                             <View style={styles.handoffCard}>
@@ -613,6 +615,14 @@ const styles = StyleSheet.create({
 
     section: {
         marginBottom: 34,
+    },
+
+    sectionDivider: {
+        width: '100%',
+        height: 1,
+        backgroundColor: '#E8DDC8',
+        marginTop: -10,
+        marginBottom: 28,
     },
 
     sectionTitle: {

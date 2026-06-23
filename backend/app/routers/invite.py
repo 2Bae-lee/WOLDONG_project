@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from datetime import datetime
 import random
 
@@ -11,6 +12,10 @@ from beanie import PydanticObjectId
 from app.models.notification import Notification, NotificationType
 
 router = APIRouter(prefix="/api/invite", tags=["초대코드"])
+
+
+class InviteVerifyRequest(BaseModel):
+    code: str
 
 
 # POST /api/invite/generate - 초대코드 생성 (부모 전용)
@@ -52,8 +57,8 @@ async def generate_invite(child_id: str, user: User = Depends(parent_only)):
 
 # POST /api/invite/verify - 코드 검증 + 승인 요청 (동행인 전용)
 @router.post("/verify")
-async def verify_invite(code: str, user: User = Depends(companion_only)):
-    invite = await InviteCode.find_one(InviteCode.code == code)
+async def verify_invite(body: InviteVerifyRequest, user: User = Depends(companion_only)):
+    invite = await InviteCode.find_one(InviteCode.code == body.code)
 
     # 유효성 검증
     if not invite:
@@ -61,7 +66,7 @@ async def verify_invite(code: str, user: User = Depends(companion_only)):
     if invite.is_used:
         return error("이미 사용된 초대코드입니다", 400)
     if datetime.utcnow() > invite.expires_at:
-        return error("만료된 초대코드입니다", 400)
+        return error("만료된 초대코드입니다", 404)
 
     # 이미 요청했는지 확인
     existing = await CompanionRequest.find_one(

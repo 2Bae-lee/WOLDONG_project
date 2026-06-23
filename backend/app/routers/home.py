@@ -27,6 +27,10 @@ async def get_home(user: User = Depends(parent_only)):
                 "gender": c.gender,
                 "birth_date": c.birth_date,
                 "disability_type": c.disability_type,
+                "character_name": c.character_name,
+                "character_tone": c.character_tone,
+                "character_speed": c.character_speed,
+                "character_voice": c.character_voice,
             }
             for c in children
         ],

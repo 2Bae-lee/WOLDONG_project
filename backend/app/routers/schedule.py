@@ -25,11 +25,12 @@ class ScheduleCreateRequest(BaseModel):
     title: str
     date: date
     start_time: str
-    place_type: str
-    transport_type: str
-    activities: list[str] = []
-    wait_possible: bool = False
-    crowd_possible: bool = False
+    place_type: str                     # 장소 유형 (병원, 마트, 공원 등)
+    transport_type: str                 # 이동수단 (버스, 지하철, 택시 등)
+    activities: list[str] = []          # 활동 목록 (진료, 주사 등)
+    wait_possible: bool = False         # 대기 가능성
+    crowd_possible: bool = False        # 혼잡 가능성
+    schedule_features: list[str] = []   # AI 모델 입력용 일정 특성 값
     preparations: list[str] = []
     checklist: list[str] = []
 
@@ -46,6 +47,7 @@ class ScheduleCreateRequest(BaseModel):
                 "activities": ["진료", "주사"],
                 "wait_possible": True,
                 "crowd_possible": True,
+                "schedule_features": ["일정_장소_병원방문", "일정_활동_주사또는치료있음"],
                 "preparations": ["선글라스", "이어폰"],
                 "checklist": ["10분 전 일정 알려주기", "손 잡고 이동하기"]
             }
@@ -61,6 +63,7 @@ class ScheduleUpdateRequest(BaseModel):
     activities: Optional[list[str]] = None
     wait_possible: Optional[bool] = None
     crowd_possible: Optional[bool] = None
+    schedule_features: Optional[list[str]] = None
     companion_id: Optional[str] = None
     preparations: Optional[list[str]] = None
     checklist: Optional[list[str]] = None
@@ -123,6 +126,7 @@ async def create_schedule(body: ScheduleCreateRequest, user: User = Depends(get_
         activities=body.activities,
         wait_possible=body.wait_possible,
         crowd_possible=body.crowd_possible,
+        schedule_features=body.schedule_features,
         preparations=body.preparations,
         checklist=checklist_items,
     )
@@ -236,6 +240,7 @@ async def get_schedule(schedule_id: str, user: User = Depends(get_current_user))
         "activities": schedule.activities,
         "wait_possible": schedule.wait_possible,
         "crowd_possible": schedule.crowd_possible,
+        "schedule_features": schedule.schedule_features,
         "status": schedule.status,
         "child_id": schedule.child_id,
         "companion_id": schedule.companion_id,

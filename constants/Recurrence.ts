@@ -49,7 +49,7 @@ export const getRepeatDates = (
     customDates: RepeatDate[] = []
 ) => {
     if (option === 'custom') {
-        return uniqueDates(customDates.length > 0 ? customDates : [baseDate]);
+        return uniqueDates(customDates);
     }
 
     if (option === 'none') {

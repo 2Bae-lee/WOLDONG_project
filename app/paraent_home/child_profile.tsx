@@ -136,6 +136,7 @@ const parseSections = (value?: string) => {
 
 export default function ParentChildProfile() {
     const params = useLocalSearchParams<{
+        childId?: string;
         childName?: string;
         profileImage?: string;
         sections?: string;
@@ -238,6 +239,7 @@ export default function ParentChildProfile() {
             pathname: '/childprofile/makecharacter',
             params: {
                 name: childName,
+                childId: params.childId ?? '',
                 profileImage: profileImage ?? '',
             },
         } as any);

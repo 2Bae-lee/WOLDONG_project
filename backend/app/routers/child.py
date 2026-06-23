@@ -9,6 +9,7 @@ from app.middleware.auth import parent_only
 from app.utils.response import success, error
 from app.models.child import (
     Child, GenderEnum, RelationEnum, DisabilityTypeEnum,
+    CharacterToneEnum, CharacterSpeedEnum, CharacterVoiceEnum,
     EXPLANATION_STYLES, COMMUNICATION_STYLES, CAUTION_SITUATIONS,
     DIFFICULT_ENVIRONMENTS, DIFFICULT_PLACES, TRANSITION_DIFFICULTIES,
     NOTICE_TIMES, CALMING_METHODS
@@ -41,6 +42,11 @@ class ChildCreateRequest(BaseModel):
     # 7단계
     calming_methods: list[str] = []
     avoid_behaviors: str = ""
+    # 소셜 스토리 캐릭터 음성 설정
+    character_name: str = ""
+    character_tone: Optional[CharacterToneEnum] = None
+    character_speed: Optional[CharacterSpeedEnum] = None
+    character_voice: Optional[CharacterVoiceEnum] = None
 
     class Config:
         json_schema_extra = {
@@ -81,9 +87,10 @@ class ChildUpdateRequest(BaseModel):
     calming_methods: Optional[list[str]] = None
     avoid_behaviors: Optional[str] = None
     character_image_url: Optional[dict] = None
-    character_tone: Optional[str] = None
-    character_speed: Optional[str] = None
-    character_voice: Optional[str] = None
+    character_name: Optional[str] = None
+    character_tone: Optional[CharacterToneEnum] = None
+    character_speed: Optional[CharacterSpeedEnum] = None
+    character_voice: Optional[CharacterVoiceEnum] = None
 
 
 # ─── 유효성 검사 ────────────────────────────────────────
@@ -136,6 +143,10 @@ async def create_child(body: ChildCreateRequest, user: User = Depends(parent_onl
         notice_time=body.notice_time,
         calming_methods=body.calming_methods,
         avoid_behaviors=body.avoid_behaviors,
+        character_name=body.character_name,
+        character_tone=body.character_tone,
+        character_speed=body.character_speed,
+        character_voice=body.character_voice,
     )
     await child.insert()
 
@@ -158,6 +169,10 @@ async def get_my_children(user: User = Depends(parent_only)):
             "birth_date": c.birth_date,
             "disability_type": c.disability_type,
             "character_image_url": c.character_image_url,
+            "character_name": c.character_name,
+            "character_tone": c.character_tone,
+            "character_speed": c.character_speed,
+            "character_voice": c.character_voice,
         }
         for c in children
     ])
@@ -195,6 +210,7 @@ async def get_child(child_id: str, user: User = Depends(parent_only)):
         "calming_methods": child.calming_methods,
         "avoid_behaviors": child.avoid_behaviors,
         "character_image_url": child.character_image_url,
+        "character_name": child.character_name,
         "character_tone": child.character_tone,
         "character_speed": child.character_speed,
         "character_voice": child.character_voice,

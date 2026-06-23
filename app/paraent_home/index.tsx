@@ -755,6 +755,7 @@ export default function ParentHome() {
                                 router.push({
                                     pathname: '/paraent_home/child_profile',
                                     params: {
+                                        childId,
                                         childName,
                                         profileImage: childProfileImage,
                                         sections: childProfileSections,
@@ -857,6 +858,8 @@ export default function ParentHome() {
                                 <Text style={styles.addButtonText}>일정 추가하기</Text>
                             </Pressable>
                         </View>
+
+                        <View style={styles.sectionDivider} />
 
                         <View style={styles.section}>
                             <Pressable onPress={cancelAddInputs}>
@@ -1022,27 +1025,47 @@ export default function ParentHome() {
                         </View>
 
                         {selectedStoryEvent ? (
-                            <Pressable
-                                style={styles.socialStoryButton}
-                                onPress={() =>
-                                    router.push({
-                                        pathname: '/social_story',
-                                        params: {
-                                            scheduleId: selectedStoryEvent.scheduleId ?? '',
-                                            childName,
-                                            title: selectedStoryEvent.title,
-                                            script: `오늘은 ${selectedStoryEvent.title} 일정이 있어요.`,
-                                            checkedItems: JSON.stringify([
-                                                `일정_${selectedStoryEvent.title}`,
-                                                ...selectedStoryEvent.todos.map((todo) => `체크_${todo.text}`),
-                                            ]),
-                                        },
-                                    } as any)
-                                }
-                            >
-                                <Ionicons name="book-outline" size={19} color={Colors.text} />
-                                <Text style={styles.socialStoryButtonText}>소셜 스토리 만들기</Text>
-                            </Pressable>
+                            <View style={styles.calendarActionRow}>
+                                <Pressable
+                                    style={styles.socialStoryButton}
+                                    onPress={() =>
+                                        router.push({
+                                            pathname: '/social_story',
+                                            params: {
+                                                scheduleId: selectedStoryEvent.scheduleId ?? '',
+                                                childName,
+                                                title: selectedStoryEvent.title,
+                                                script: `오늘은 ${selectedStoryEvent.title} 일정이 있어요.`,
+                                                checkedItems: JSON.stringify([
+                                                    `일정_${selectedStoryEvent.title}`,
+                                                    ...selectedStoryEvent.todos.map((todo) => `체크_${todo.text}`),
+                                                ]),
+                                            },
+                                        } as any)
+                                    }
+                                >
+                                    <Ionicons name="book-outline" size={19} color={Colors.text} />
+                                    <Text style={styles.socialStoryButtonText}>소셜 스토리 만들기</Text>
+                                </Pressable>
+
+                                {selectedStoryEvent.scheduleId ? (
+                                    <Pressable
+                                        style={styles.socialStoryButton}
+                                        onPress={() =>
+                                            router.push({
+                                                pathname: '/paraent_home/outing_record',
+                                                params: {
+                                                    scheduleId: selectedStoryEvent.scheduleId,
+                                                    childName,
+                                                },
+                                            } as any)
+                                        }
+                                    >
+                                        <Ionicons name="document-text-outline" size={19} color={Colors.text} />
+                                        <Text style={styles.socialStoryButtonText}>외출 기록 보기</Text>
+                                    </Pressable>
+                                ) : null}
+                            </View>
                         ) : null}
 
                         <Pressable
@@ -1334,6 +1357,15 @@ const styles = StyleSheet.create({
         zIndex: 1,
     },
 
+    sectionDivider: {
+        width: '100%',
+        height: 1,
+        backgroundColor: '#E8DDC8',
+        marginTop: -12,
+        marginBottom: 28,
+        zIndex: 1,
+    },
+
     sectionTitle: {
         fontFamily: Fonts.bodyBold,
         fontSize: 20,
@@ -1501,6 +1533,13 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '900',
         color: Colors.text,
+    },
+
+    calendarActionRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: 4,
     },
 
     inlineInputRow: {

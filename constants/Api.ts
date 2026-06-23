@@ -66,6 +66,32 @@ export type ChildProfileCreateResponse = {
     created_at: string;
 };
 
+export type ParentHomeChild = {
+    child_id: string;
+    name: string;
+    gender: string;
+    birth_date: string;
+    disability_type: string;
+};
+
+export type TodayScheduleSummary = {
+    schedule_id: string;
+    title: string;
+    date: string;
+    start_time: string;
+    destination?: string;
+    place_type?: string;
+    transport_type?: string;
+    status: 'upcoming' | 'ongoing' | 'done' | string;
+    child_id: string;
+};
+
+export type ParentHomeResponse = {
+    guardian: AuthUser;
+    children: ParentHomeChild[];
+    today_schedules: TodayScheduleSummary[];
+};
+
 const blobToDataUri = (blob: Blob) => (
     new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -293,6 +319,14 @@ export const createChildProfile = (body: ChildProfilePayload) => (
         method: 'POST',
         body: JSON.stringify(body),
     })
+);
+
+export const getParentHome = () => (
+    apiRequest<ParentHomeResponse>('/api/home')
+);
+
+export const getTodaySchedules = () => (
+    apiRequest<TodayScheduleSummary[]>('/api/schedules/today')
 );
 
 export const generateCharacterImage = async (traits: string) => {

@@ -16,6 +16,11 @@ import {
     TextInput,
     View,
 } from 'react-native';
+import {
+    TodayScheduleSummary,
+    getParentHome,
+    getTodaySchedules,
+} from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 import { hasUnreadParentNotifications } from '../../constants/NotificationState';
@@ -98,6 +103,53 @@ function getTodayTitle() {
 
     return `${month}월 ${date}일 오늘의 일정`;
 }
+
+const toNumericId = (id: string) => (
+    id.split('').reduce((sum, char, index) => sum + char.charCodeAt(0) * (index + 1), 0)
+);
+
+const mapScheduleTodos = (schedule: TodayScheduleSummary, baseId: number): ScheduleTodo[] => {
+    const details = [
+        schedule.start_time ? `${schedule.start_time} 시작` : '',
+        schedule.destination || schedule.place_type || '',
+        schedule.transport_type ? `${schedule.transport_type} 이동` : '',
+    ].filter(Boolean);
+
+    return details.map((text, index) => ({
+        id: baseId + index + 1,
+        text,
+        done: schedule.status === 'done',
+    }));
+};
+
+const mapTodaySchedule = (schedule: TodayScheduleSummary): ScheduleItem => {
+    const id = toNumericId(schedule.schedule_id);
+
+    return {
+        id,
+        text: schedule.title,
+        done: schedule.status === 'done',
+        companion: '동행인 미정',
+        todos: mapScheduleTodos(schedule, id),
+    };
+};
+
+const mapCalendarEvent = (schedule: TodayScheduleSummary): CalendarEvent | null => {
+    const [year, month, day] = schedule.date.split('-').map(Number);
+    const id = toNumericId(schedule.schedule_id);
+
+    if ([year, month, day].some(Number.isNaN)) return null;
+
+    return {
+        id,
+        year,
+        month,
+        day,
+        title: schedule.title,
+        companion: '동행인 미정',
+        todos: mapScheduleTodos(schedule, id),
+    };
+};
 
 export default function ParentHome() {
     const params = useLocalSearchParams<{
@@ -201,6 +253,43 @@ export default function ParentHome() {
             setHasUnreadNotifications(hasUnreadParentNotifications());
         }, [])
     );
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadParentHome = async () => {
+            try {
+                const [homeResponse, todaySchedulesResponse] = await Promise.all([
+                    getParentHome(),
+                    getTodaySchedules(),
+                ]);
+
+                if (cancelled) return;
+
+                const firstChild = homeResponse.data?.children?.[0];
+                if (firstChild?.name) {
+                    setChildName(firstChild.name);
+                }
+
+                const apiSchedules = todaySchedulesResponse.data?.length
+                    ? todaySchedulesResponse.data
+                    : homeResponse.data?.today_schedules ?? [];
+
+                setSchedules(apiSchedules.map(mapTodaySchedule));
+                setCalendarEvents(apiSchedules.map(mapCalendarEvent).filter((event): event is CalendarEvent => (
+                    event !== null
+                )));
+            } catch {
+                // 목 로그인이나 로컬 서버 미실행 상태에서는 기존 목데이터 홈을 유지합니다.
+            }
+        };
+
+        loadParentHome();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     useEffect(() => {
         if (params.tab === 'calendar') {
@@ -581,7 +670,7 @@ export default function ParentHome() {
                             </Pressable>
 
                             <View style={styles.scheduleCard}>
-                                {schedules.map((item) => (
+                                {schedules.length > 0 ? schedules.map((item) => (
                                     <View key={item.id} style={styles.scheduleRow}>
                                         <Pressable
                                             style={[styles.checkBox, item.done && styles.checkBoxDone]}
@@ -637,7 +726,9 @@ export default function ParentHome() {
                                             ) : null}
                                         </Pressable>
                                     </View>
-                                ))}
+                                )) : (
+                                    <Text style={styles.emptyScheduleText}>오늘 예정된 일정이 없어요.</Text>
+                                )}
                             </View>
 
                             <Pressable
@@ -1123,6 +1214,15 @@ const styles = StyleSheet.create({
         paddingVertical: 18,
         marginBottom: 16,
         gap: 18,
+    },
+
+    emptyScheduleText: {
+        fontFamily: Fonts.body,
+        fontSize: 14,
+        lineHeight: 20,
+        color: Colors.textShadow,
+        textAlign: 'center',
+        paddingVertical: 38,
     },
 
     scheduleRow: {

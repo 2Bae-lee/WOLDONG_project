@@ -372,7 +372,10 @@ export default function CompanionHomeCalendarCreate() {
                             </View>
                         ))}
 
-                        <View style={styles.todoInputRow}>
+                        <View style={[
+                            styles.todoInputRow,
+                            todos.length > 0 && styles.todoInputRowDivider,
+                        ]}>
                             <TextInput
                                 style={styles.todoInput}
                                 placeholder="ex) 진료 카드 챙기기"
@@ -757,6 +760,9 @@ const styles = StyleSheet.create({
     todoInputRow: {
         flexDirection: 'row',
         alignItems: 'center',
+    },
+
+    todoInputRowDivider: {
         borderTopWidth: 1,
         borderTopColor: '#E8DDC8',
         paddingTop: 10,

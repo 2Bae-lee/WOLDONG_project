@@ -6,7 +6,9 @@ import { Image, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } fr
 import BackButton from '../../components/BackButton';
 import {
     ChildNotification,
+    TodayScheduleSummary,
     getChildNotifications,
+    getSchedules,
     getScheduleWarnings,
     markNotificationRead,
 } from '../../constants/Api';
@@ -33,6 +35,7 @@ type ScheduleTodo = {
 
 type CalendarEvent = {
     id: number;
+    scheduleId?: string;
     year: number;
     month: number;
     day: number;
@@ -46,6 +49,47 @@ type CalendarDay = {
     month: number;
     day: number;
     monthOffset: -1 | 0 | 1;
+};
+
+const createNumericId = (value: string) => (
+    Number.parseInt(value.slice(-8), 16) ||
+    value.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
+);
+
+const getSchedulePlace = (schedule: TodayScheduleSummary) => (
+    schedule.destination || schedule.place_type || '장소 확인'
+);
+
+const mapScheduleToCalendarEvent = (
+    schedule: TodayScheduleSummary,
+    guardian: string
+): CalendarEvent | null => {
+    const [year, month, day] = schedule.date.split('-').map(Number);
+
+    if (!year || !month || !day) return null;
+
+    const eventId = createNumericId(schedule.schedule_id);
+    const place = getSchedulePlace(schedule);
+    const todoTexts = [
+        schedule.start_time ? `${schedule.start_time} 출발` : '',
+        place,
+        schedule.transport_type ? `${schedule.transport_type} 이동` : '',
+    ].filter(Boolean);
+
+    return {
+        id: eventId,
+        scheduleId: schedule.schedule_id,
+        year,
+        month,
+        day,
+        title: schedule.title,
+        guardian,
+        todos: todoTexts.map((text, index) => ({
+            id: eventId + index + 1,
+            text,
+            done: schedule.status === 'done',
+        })),
+    };
 };
 
 const createInitialEvents = (
@@ -275,14 +319,39 @@ export default function CompanionChildHome() {
                 }
             };
 
+            const loadCalendarSchedules = async () => {
+                if (!childId) {
+                    if (active) {
+                        setCalendarEvents(createInitialEvents(currentYear, currentMonth, todayDay, guardian));
+                    }
+                    return;
+                }
+
+                try {
+                    const response = await getSchedules();
+                    if (!active) return;
+
+                    const nextEvents = (response.data ?? [])
+                        .filter((schedule) => schedule.child_id === childId)
+                        .map((schedule) => mapScheduleToCalendarEvent(schedule, guardian))
+                        .filter((event): event is CalendarEvent => event !== null);
+
+                    setCalendarEvents(nextEvents);
+                } catch {
+                    if (!active) return;
+                    setCalendarEvents((current) => current);
+                }
+            };
+
             loadChildNotifications();
             loadScheduleWarnings();
+            loadCalendarSchedules();
 
             return () => {
                 active = false;
                 unsubscribe();
             };
-        }, [childId, childName, scheduleId])
+        }, [childId, childName, currentMonth, currentYear, guardian, scheduleId, todayDay])
     );
 
     const toggleTodayTodo = (scheduleId: number, todoId: number) => {
@@ -365,7 +434,17 @@ export default function CompanionChildHome() {
         setCalendarMonth(firstEvent.month);
         setSelectedDay(firstEvent.day);
         setCalendarEvents((current) => (
-            current.some((event) => event.id === firstEvent.id)
+            nextEvents.every((nextEvent) => (
+                current.some((event) => (
+                    event.id === nextEvent.id ||
+                    (
+                        event.year === nextEvent.year &&
+                        event.month === nextEvent.month &&
+                        event.day === nextEvent.day &&
+                        event.title === nextEvent.title
+                    )
+                ))
+            ))
                 ? current
                 : [...current, ...nextEvents]
         ));

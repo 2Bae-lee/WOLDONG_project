@@ -21,6 +21,7 @@ import {
     TodayScheduleSummary,
     getCompanionChildren,
     getCompanionProfile,
+    getSchedules,
     getTodaySchedules,
 } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
@@ -51,6 +52,7 @@ type CalendarTodo = {
 
 type CalendarEvent = {
     id: number;
+    scheduleId?: string;
     year: number;
     month: number;
     day: number;
@@ -100,6 +102,44 @@ const mapTodaySchedules = (
                 : [],
         };
     })
+);
+
+const mapCalendarSchedules = (
+    schedules: TodayScheduleSummary[],
+    childById: Map<string, CompanionChild>
+): CalendarEvent[] => (
+    schedules.map((schedule) => {
+        const [year, month, day] = schedule.date.split('-').map(Number);
+
+        if (!year || !month || !day) return null;
+
+        const eventId = createNumericId(schedule.schedule_id);
+        const child = childById.get(schedule.child_id);
+        const place = getSchedulePlace(schedule);
+        const todoTexts = [
+            schedule.start_time ? `${schedule.start_time} 출발` : '',
+            place,
+            schedule.transport_type ? `${schedule.transport_type} 이동` : '',
+        ].filter(Boolean);
+
+        const event: CalendarEvent = {
+            id: eventId,
+            scheduleId: schedule.schedule_id,
+            year,
+            month,
+            day,
+            childName: child?.name ?? '담당 어린이',
+            title: schedule.title,
+            guardian: '연결된 보호자',
+            todos: todoTexts.map((text, index) => ({
+                id: eventId + index + 1,
+                text,
+                done: schedule.status === 'done',
+            })),
+        };
+
+        return event;
+    }).filter((event): event is CalendarEvent => event !== null)
 );
 
 export default function CompanionChildren() {
@@ -204,19 +244,21 @@ export default function CompanionChildren() {
 
     const loadCompanionHome = useCallback(async () => {
         try {
-            const [profileResponse, childrenResponse, todaySchedulesResponse] = await Promise.all([
+            const [profileResponse, childrenResponse, todaySchedulesResponse, allSchedulesResponse] = await Promise.all([
                 getCompanionProfile(),
                 getCompanionChildren(),
                 getTodaySchedules(),
+                getSchedules(),
             ]);
 
             const companionProfile = profileResponse.data;
             const assignedChildren = childrenResponse.data ?? [];
             const todaySchedules = todaySchedulesResponse.data ?? [];
+            const allSchedules = allSchedulesResponse.data ?? [];
             const scheduleCountByChildId = new Map<string, number>();
             const primaryScheduleByChildId = new Map<string, string>();
 
-            todaySchedules.forEach((schedule) => {
+            allSchedules.forEach((schedule) => {
                 scheduleCountByChildId.set(
                     schedule.child_id,
                     (scheduleCountByChildId.get(schedule.child_id) ?? 0) + 1
@@ -244,6 +286,7 @@ export default function CompanionChildren() {
 
             setApiCompanionName(companionProfile?.name ?? '');
             setTodayTodos(mapTodaySchedules(todaySchedules, childById));
+            setCalendarEvents(mapCalendarSchedules(allSchedules, childById));
             setChildren((current) => [
                 ...nextConnectedChildren,
                 ...current.filter((child) => (
@@ -365,7 +408,20 @@ export default function CompanionChildren() {
         if (!firstEvent) return;
 
         setCalendarEvents((current) => {
-            if (current.some((event) => event.id === addedEventId)) return current;
+            const alreadyLoaded = nextEvents.every((nextEvent) => (
+                current.some((event) => (
+                    event.id === nextEvent.id ||
+                    (
+                        event.year === nextEvent.year &&
+                        event.month === nextEvent.month &&
+                        event.day === nextEvent.day &&
+                        event.title === nextEvent.title &&
+                        event.childName === nextEvent.childName
+                    )
+                ))
+            ));
+
+            if (alreadyLoaded) return current;
 
             return [...current, ...nextEvents];
         });
@@ -539,6 +595,7 @@ export default function CompanionChildren() {
             pathname: '/companion_home/calendar_edit',
             params: {
                 eventId: String(event.id),
+                scheduleId: event.scheduleId ?? '',
                 year: String(event.year),
                 month: String(event.month),
                 day: String(event.day),

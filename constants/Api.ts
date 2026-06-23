@@ -198,3 +198,29 @@ export const signupParent = async (body: {
 
     return response;
 };
+
+export const login = async (body: {
+    email: string;
+    password: string;
+}) => {
+    const response = await apiRequest<AuthData>('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify(body),
+    });
+
+    if (response.data?.token && response.data.user) {
+        await setAuthSession(response.data.token, response.data.user);
+    }
+
+    return response;
+};
+
+export const logout = async () => {
+    try {
+        await apiRequest<null>('/api/auth/logout', {
+            method: 'POST',
+        });
+    } finally {
+        await clearAuthSession();
+    }
+};

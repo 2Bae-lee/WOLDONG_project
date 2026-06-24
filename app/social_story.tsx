@@ -53,14 +53,101 @@ const getInfoItemLabel = (value: string) => (
 
 const fallbackCharacterImage = require('../assets/images/mock_character.png');
 
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+    Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+);
+
+const getFrameValue = (value: unknown) => {
+    if (typeof value === 'string' && value.trim()) return value;
+    if (!isRecord(value)) return '';
+
+    const candidateKeys = [
+        'url',
+        'uri',
+        'image_url',
+        'imageUrl',
+        'frame_url',
+        'frameUrl',
+        'src',
+        'path',
+        'image',
+    ];
+
+    for (const key of candidateKeys) {
+        const candidate = value[key];
+        if (typeof candidate === 'string' && candidate.trim()) return candidate;
+    }
+
+    return '';
+};
+
+const normalizeCharacterImages = (payload: unknown): CharacterImages | null => {
+    if (Array.isArray(payload)) {
+        const frames = payload.map(getFrameValue).filter(Boolean);
+        if (!frames.length) return null;
+
+        const [idle, mouthOpen, mouthWide, blink, smile] = frames;
+
+        return {
+            idle,
+            mouth_open: mouthOpen,
+            mouth_wide: mouthWide,
+            blink,
+            smile,
+        };
+    }
+
+    if (!isRecord(payload)) return null;
+
+    const idle = getFrameValue(payload.idle ?? payload.default ?? payload.neutral ?? payload.frame_0 ?? payload.image_0);
+    const mouthOpen = getFrameValue(
+        payload.mouth_open ?? payload.mouthOpen ?? payload.open ?? payload.talking ?? payload.speaking ?? payload.frame_1 ?? payload.image_1
+    );
+    const mouthWide = getFrameValue(
+        payload.mouth_wide ?? payload.mouthWide ?? payload.wide ?? payload.talking_wide ?? payload.frame_2 ?? payload.image_2
+    );
+    const blink = getFrameValue(payload.blink ?? payload.blinking ?? payload.eyes_closed ?? payload.frame_3 ?? payload.image_3);
+    const smile = getFrameValue(payload.smile ?? payload.smiling ?? payload.happy ?? payload.frame_4 ?? payload.image_4);
+    const firstFrame = idle || mouthOpen || mouthWide || blink || smile;
+
+    if (firstFrame) {
+        return {
+            idle: idle || firstFrame,
+            mouth_open: mouthOpen,
+            mouth_wide: mouthWide,
+            blink,
+            smile,
+        };
+    }
+
+    const nestedKeys = [
+        'frames',
+        'frame_urls',
+        'frameUrls',
+        'images',
+        'image_urls',
+        'imageUrls',
+        'character_images',
+        'characterImages',
+        'character_frames',
+        'characterFrames',
+        'data',
+        'result',
+    ];
+
+    for (const key of nestedKeys) {
+        const nestedImages = normalizeCharacterImages(payload[key]);
+        if (nestedImages) return nestedImages;
+    }
+
+    return null;
+};
+
 const parseCharacterImages = (value?: string): CharacterImages | null => {
     if (!value) return null;
 
     try {
-        const parsed = JSON.parse(value);
-        if (!parsed || typeof parsed !== 'object') return null;
-
-        return parsed as CharacterImages;
+        return normalizeCharacterImages(JSON.parse(value));
     } catch {
         return null;
     }

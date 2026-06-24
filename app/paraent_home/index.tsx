@@ -17,6 +17,7 @@ import {
     View,
 } from 'react-native';
 import {
+    CharacterImages,
     TodayScheduleSummary,
     deleteSchedule,
     getInviteRequests,
@@ -231,6 +232,7 @@ export default function ParentHome() {
     const [childName, setChildName] = useState('김월동');
     const [childProfileImage, setChildProfileImage] = useState('');
     const [childProfileSections, setChildProfileSections] = useState('');
+    const [childCharacterImages, setChildCharacterImages] = useState<CharacterImages | null>(null);
     const [selectedCalendarDay, setSelectedCalendarDay] = useState(todayDay);
     const [schedules, setSchedules] = useState(initialSchedules);
     const [handoffs, setHandoffs] = useState(initialHandoffs);
@@ -347,6 +349,9 @@ export default function ParentHome() {
                 }
                 if (firstChild?.profile_image_url) {
                     setChildProfileImage(firstChild.profile_image_url);
+                }
+                if (firstChild?.character_image_url) {
+                    setChildCharacterImages(firstChild.character_image_url);
                 }
 
                 const apiSchedules = todaySchedulesResponse.data?.length
@@ -1087,6 +1092,10 @@ export default function ParentHome() {
                                                 childName,
                                                 title: selectedStoryEvent.title,
                                                 script: `오늘은 ${selectedStoryEvent.title} 일정이 있어요.`,
+                                                characterImages: childCharacterImages
+                                                    ? JSON.stringify(childCharacterImages)
+                                                    : '',
+                                                profileImage: childProfileImage,
                                                 checkedItems: JSON.stringify([
                                                     `일정_${selectedStoryEvent.title}`,
                                                     ...selectedStoryEvent.todos.map((todo) => `체크_${todo.text}`),

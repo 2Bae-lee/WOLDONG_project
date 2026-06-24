@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
+import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     Image,
+    ImageSourcePropType,
     Keyboard,
     KeyboardAvoidingView,
-    Linking,
     Platform,
     Pressable,
     ScrollView,
@@ -18,6 +19,7 @@ import BackButton from '../components/BackButton';
 import PrimaryButton from '../components/PrimaryButton';
 import {
     ApiError,
+    CharacterImages,
     SocialStoryResponse,
     generateScheduleSocialStory,
     generateSocialStoryTts,
@@ -39,6 +41,31 @@ const parseCheckedItems = (value?: string) => {
     }
 };
 
+const fallbackCharacterImage = require('../assets/images/mock_character.png');
+
+const parseCharacterImages = (value?: string): CharacterImages | null => {
+    if (!value) return null;
+
+    try {
+        const parsed = JSON.parse(value);
+        if (!parsed || typeof parsed !== 'object') return null;
+
+        return parsed as CharacterImages;
+    } catch {
+        return null;
+    }
+};
+
+const toImageSource = (value?: string): ImageSourcePropType | null => {
+    if (!value) return null;
+
+    if (/^(data:|https?:\/\/|file:\/\/)/.test(value)) {
+        return { uri: value };
+    }
+
+    return { uri: toApiAssetUrl(value) };
+};
+
 export default function SocialStoryScreen() {
     const params = useLocalSearchParams<{
         scheduleId?: string;
@@ -46,6 +73,8 @@ export default function SocialStoryScreen() {
         childName?: string;
         script?: string;
         checkedItems?: string;
+        characterImages?: string;
+        profileImage?: string;
     }>();
     const checkedItems = useMemo(() => parseCheckedItems(params.checkedItems), [params.checkedItems]);
     const [script, setScript] = useState(
@@ -54,7 +83,69 @@ export default function SocialStoryScreen() {
     const [result, setResult] = useState<SocialStoryResponse | null>(null);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [isSpeaking, setIsSpeaking] = useState(false);
+    const [speakingFrameIndex, setSpeakingFrameIndex] = useState(0);
     const audioUrl = toApiAssetUrl(result?.audio_url);
+    const audioPlayer = useAudioPlayer(null, { updateInterval: 250 });
+    const audioStatus = useAudioPlayerStatus(audioPlayer);
+    const characterFrames = useMemo(() => {
+        const parsedImages = parseCharacterImages(params.characterImages);
+        const frameSources = [
+            toImageSource(parsedImages?.idle),
+            toImageSource(parsedImages?.mouth_open),
+            toImageSource(parsedImages?.mouth_wide),
+            toImageSource(parsedImages?.smile),
+            toImageSource(parsedImages?.blink),
+            ...(result?.story_images ?? []).map((image) => toImageSource(image)),
+            toImageSource(params.profileImage),
+        ].filter((source): source is ImageSourcePropType => Boolean(source));
+
+        return frameSources.length > 0 ? frameSources : [fallbackCharacterImage];
+    }, [params.characterImages, params.profileImage, result?.story_images]);
+    const activeCharacterFrame = characterFrames[speakingFrameIndex % characterFrames.length];
+
+    useEffect(() => {
+        setAudioModeAsync({
+            playsInSilentMode: true,
+        }).catch(() => undefined);
+    }, []);
+
+    useEffect(() => {
+        if (!audioUrl) {
+            audioPlayer.pause();
+            setIsSpeaking(false);
+            return;
+        }
+
+        audioPlayer.replace({ uri: audioUrl });
+        setIsSpeaking(false);
+    }, [audioPlayer, audioUrl]);
+
+    useEffect(() => {
+        if (audioStatus.playing) {
+            setIsSpeaking(true);
+            return;
+        }
+
+        if (audioStatus.didJustFinish) {
+            setIsSpeaking(false);
+        }
+    }, [audioStatus.didJustFinish, audioStatus.playing]);
+
+    useEffect(() => {
+        if (!isSpeaking) {
+            setSpeakingFrameIndex(0);
+            return undefined;
+        }
+
+        const frameTimer = setInterval(() => {
+            setSpeakingFrameIndex((current) => current + 1);
+        }, 220);
+
+        return () => {
+            clearInterval(frameTimer);
+        };
+    }, [isSpeaking]);
 
     const generateStory = async () => {
         const trimmedScript = script.trim();
@@ -92,13 +183,15 @@ export default function SocialStoryScreen() {
     const openAudio = async () => {
         if (!audioUrl) return;
 
-        const canOpen = await Linking.canOpenURL(audioUrl);
-        if (canOpen) {
-            await Linking.openURL(audioUrl);
-            return;
+        try {
+            setError('');
+            await audioPlayer.seekTo(0);
+            audioPlayer.play();
+            setIsSpeaking(true);
+        } catch {
+            setIsSpeaking(false);
+            setError('음성 파일을 재생할 수 없어요.');
         }
-
-        setError('음성 파일을 열 수 없어요.');
     };
 
     return (
@@ -175,6 +268,17 @@ export default function SocialStoryScreen() {
                 {result ? (
                     <View style={styles.resultCard}>
                         <Text style={styles.resultTitle}>완성된 이야기</Text>
+
+                        <View style={styles.characterStage}>
+                            <Image
+                                source={activeCharacterFrame}
+                                style={[
+                                    styles.characterImage,
+                                    isSpeaking && speakingFrameIndex % 2 === 1 ? styles.characterImageSpeaking : null,
+                                ]}
+                                resizeMode="contain"
+                            />
+                        </View>
                         <Text style={styles.resultScript}>{result.converted_script}</Text>
 
                         {result.predicted_warnings?.length ? (
@@ -200,8 +304,14 @@ export default function SocialStoryScreen() {
 
                         {audioUrl ? (
                             <Pressable style={styles.audioButton} onPress={openAudio}>
-                                <Ionicons name="volume-high-outline" size={20} color={Colors.text} />
-                                <Text style={styles.audioButtonText}>음성으로 듣기</Text>
+                                <Ionicons
+                                    name={isSpeaking ? 'volume-high' : 'volume-high-outline'}
+                                    size={20}
+                                    color={Colors.text}
+                                />
+                                <Text style={styles.audioButtonText}>
+                                    {isSpeaking ? '말하는 중...' : '소셜 스토리 듣기'}
+                                </Text>
                             </Pressable>
                         ) : null}
                     </View>
@@ -344,6 +454,26 @@ const styles = StyleSheet.create({
         fontWeight: '900',
         color: Colors.text,
         marginBottom: 12,
+    },
+
+    characterStage: {
+        height: 230,
+        borderRadius: 14,
+        backgroundColor: Colors.pageBg,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        marginBottom: 16,
+    },
+
+    characterImage: {
+        width: '86%',
+        height: '86%',
+    },
+
+    characterImageSpeaking: {
+        transform: [{ scale: 1.035 }],
+        opacity: 0.94,
     },
 
     resultScript: {

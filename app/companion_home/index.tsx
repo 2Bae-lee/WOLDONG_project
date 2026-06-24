@@ -37,6 +37,7 @@ type ChildItem = {
     childId?: string;
     primaryScheduleId?: string;
     name: string;
+    characterImages?: CompanionChild['character_image_url'];
     guardian: string;
     schedules: number;
     permissions: string[];
@@ -277,6 +278,7 @@ export default function CompanionChildren() {
                 childId: child.child_id,
                 primaryScheduleId: primaryScheduleByChildId.get(child.child_id),
                 name: child.name,
+                characterImages: child.character_image_url,
                 guardian: '연결된 보호자',
                 schedules: scheduleCountByChildId.get(child.child_id) ?? 0,
                 permissions: [
@@ -562,6 +564,7 @@ export default function CompanionChildren() {
                 scheduleId: child.primaryScheduleId ?? '',
                 childName: child.name,
                 guardian: child.guardian,
+                characterImages: child.characterImages ? JSON.stringify(child.characterImages) : '',
             },
         } as any);
     };

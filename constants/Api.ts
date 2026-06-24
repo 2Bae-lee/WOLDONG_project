@@ -52,6 +52,14 @@ export type CharacterTone = 'kind' | 'strict';
 export type CharacterSpeed = 'slow' | 'normal' | 'fast';
 export type CharacterVoice = 'female' | 'male';
 
+export type CharacterImages = {
+    idle: string;
+    blink?: string;
+    mouth_open?: string;
+    mouth_wide?: string;
+    smile?: string;
+};
+
 const MOCK_PARENT_LOGIN = {
     email: 'woldong',
     password: 'wd1!',
@@ -81,6 +89,7 @@ export type ChildProfilePayload = {
     calming_methods?: string[];
     avoid_behaviors?: string;
     profile_image_url?: string;
+    character_image_url?: CharacterImages;
     character_name?: string;
     character_tone?: CharacterTone;
     character_speed?: CharacterSpeed;
@@ -102,6 +111,7 @@ export type ParentHomeChild = {
     birth_date: string;
     disability_type: string;
     profile_image_url?: string | null;
+    character_image_url?: CharacterImages | null;
     character_name?: string;
     character_tone?: CharacterTone | null;
     character_speed?: CharacterSpeed | null;
@@ -236,7 +246,20 @@ export type ParentHomeResponse = {
 
 export type CompanionProfile = AuthUser & {
     phone?: string;
-    created_at: string;
+    relation?: string | null;
+    job?: string | null;
+    intro?: string | null;
+    profile_image_url?: string | null;
+    created_at?: string;
+};
+
+export type CompanionProfileUpdatePayload = {
+    name?: string;
+    phone?: string;
+    relation?: string;
+    job?: string;
+    intro?: string;
+    profile_image_url?: string;
 };
 
 export type CompanionChild = {
@@ -245,6 +268,11 @@ export type CompanionChild = {
     gender: string;
     birth_date: string;
     disability_type: string;
+    character_image_url?: CharacterImages | null;
+    character_name?: string | null;
+    character_tone?: CharacterTone | null;
+    character_speed?: CharacterSpeed | null;
+    character_voice?: CharacterVoice | null;
 };
 
 export type ParentNotification = {
@@ -631,6 +659,13 @@ export const getTodaySchedules = () => (
 
 export const getCompanionProfile = () => (
     apiRequest<CompanionProfile>('/api/companion/me')
+);
+
+export const updateCompanionProfile = (body: CompanionProfileUpdatePayload) => (
+    apiRequest<CompanionProfile>('/api/companion/me', {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+    })
 );
 
 export const getCompanionChildren = () => (

@@ -183,6 +183,7 @@ export default function ParentHome() {
         addedScheduleTitle?: string;
         addedScheduleCompanion?: string;
         addedScheduleTodos?: string;
+        updatedChildId?: string;
         updatedChildName?: string;
         updatedProfileImage?: string;
         updatedProfileSections?: string;
@@ -344,6 +345,9 @@ export default function ParentHome() {
                 if (firstChild?.name) {
                     setChildName(firstChild.name);
                 }
+                if (firstChild?.profile_image_url) {
+                    setChildProfileImage(firstChild.profile_image_url);
+                }
 
                 const apiSchedules = todaySchedulesResponse.data?.length
                     ? todaySchedulesResponse.data
@@ -373,6 +377,10 @@ export default function ParentHome() {
 
         if (params.updatedChildName) {
             setChildName(params.updatedChildName);
+        }
+
+        if (params.updatedChildId) {
+            setChildId(params.updatedChildId);
         }
 
         if (typeof params.updatedProfileImage === 'string') {
@@ -513,6 +521,7 @@ export default function ParentHome() {
         params.addedScheduleTitle,
         params.addedScheduleTodos,
         params.tab,
+        params.updatedChildId,
         params.updatedChildName,
         params.updatedProfileImage,
         params.updatedProfileSections,

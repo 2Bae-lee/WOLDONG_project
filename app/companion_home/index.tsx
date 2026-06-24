@@ -168,11 +168,14 @@ export default function CompanionChildren() {
         tab?: string;
     }>();
     const [apiCompanionName, setApiCompanionName] = useState('');
+    const [apiCompanionJob, setApiCompanionJob] = useState('');
+    const [apiCompanionIntro, setApiCompanionIntro] = useState('');
+    const [apiCompanionProfileImage, setApiCompanionProfileImage] = useState('');
     const [loadError, setLoadError] = useState('');
     const companionName = params.companionName || apiCompanionName || '동행인';
-    const companionJob = params.companionJob || params.companionRelation || '담임 선생님';
-    const companionIntro = params.companionIntro || '아이에게 필요한 일정을 차분하게 함께 확인해요.';
-    const companionProfileImage = params.companionProfileImage || '';
+    const companionJob = params.companionJob || params.companionRelation || apiCompanionJob || '담임 선생님';
+    const companionIntro = params.companionIntro || apiCompanionIntro || '아이에게 필요한 일정을 차분하게 함께 확인해요.';
+    const companionProfileImage = params.companionProfileImage || apiCompanionProfileImage || '';
     const today = useMemo(() => new Date(), []);
     const currentYear = today.getFullYear();
     const currentMonth = today.getMonth() + 1;
@@ -285,6 +288,9 @@ export default function CompanionChildren() {
             }));
 
             setApiCompanionName(companionProfile?.name ?? '');
+            setApiCompanionJob(companionProfile?.job || companionProfile?.relation || '');
+            setApiCompanionIntro(companionProfile?.intro ?? '');
+            setApiCompanionProfileImage(companionProfile?.profile_image_url ?? '');
             setTodayTodos(mapTodaySchedules(todaySchedules, childById));
             setCalendarEvents(mapCalendarSchedules(allSchedules, childById));
             setChildren((current) => [

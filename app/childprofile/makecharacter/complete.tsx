@@ -46,6 +46,7 @@ export default function MakeCharacterComplete() {
         try {
             if (params.childId) {
                 await updateChildProfile(params.childId, {
+                    character_image_url: characterImageUri ? { idle: characterImageUri } : undefined,
                     character_name: characterName,
                     character_tone: params.tone ?? 'kind',
                     character_speed: speedMap[params.speed ?? '중간'] ?? 'normal',

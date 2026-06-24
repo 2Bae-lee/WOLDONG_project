@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     Image,
     Keyboard,
@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import BackButton from '../../components/BackButton';
 import PrimaryButton from '../../components/PrimaryButton';
+import { getCompanionProfile, updateCompanionProfile } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 
@@ -44,7 +45,35 @@ export default function CompanionProfileSetup() {
     const [profileImage, setProfileImage] = useState<string | null>(params.companionProfileImage || null);
     const [nameError, setNameError] = useState('');
     const [jobError, setJobError] = useState('');
+    const [saveError, setSaveError] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
     const [isJobSheetOpen, setIsJobSheetOpen] = useState(false);
+
+    useEffect(() => {
+        let active = true;
+
+        const loadProfile = async () => {
+            if (params.companionName || params.companionJob || params.companionRelation) return;
+
+            try {
+                const response = await getCompanionProfile();
+                if (!active || !response.data) return;
+
+                setName(response.data.name ?? '');
+                setJob(response.data.job || response.data.relation || '');
+                setIntro(response.data.intro ?? '');
+                setProfileImage(response.data.profile_image_url ?? null);
+            } catch {
+                // 입력 화면 자체는 계속 사용할 수 있게 둡니다.
+            }
+        };
+
+        loadProfile();
+
+        return () => {
+            active = false;
+        };
+    }, [params.companionJob, params.companionName, params.companionRelation]);
 
     const pickImage = async () => {
         const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -66,7 +95,9 @@ export default function CompanionProfileSetup() {
         }
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
+        if (isSaving) return;
+
         const trimmedName = name.trim();
         const trimmedJob = job.trim();
         const trimmedIntro = intro.trim();
@@ -82,16 +113,33 @@ export default function CompanionProfileSetup() {
         }
 
         Keyboard.dismiss();
-        router.replace({
-            pathname: '/companion_home',
-            params: {
-                companionName: trimmedName,
-                companionJob: trimmedJob,
-                companionRelation: trimmedJob,
-                companionIntro: trimmedIntro,
-                companionProfileImage: profileImage ?? '',
-            },
-        } as any);
+        setSaveError('');
+        setIsSaving(true);
+
+        try {
+            await updateCompanionProfile({
+                name: trimmedName,
+                job: trimmedJob,
+                relation: trimmedJob,
+                intro: trimmedIntro,
+                profile_image_url: profileImage ?? '',
+            });
+
+            router.replace({
+                pathname: '/companion_home',
+                params: {
+                    companionName: trimmedName,
+                    companionJob: trimmedJob,
+                    companionRelation: trimmedJob,
+                    companionIntro: trimmedIntro,
+                    companionProfileImage: profileImage ?? '',
+                },
+            } as any);
+        } catch (error) {
+            setSaveError(error instanceof Error ? error.message : '프로필 저장에 실패했어요.');
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     return (
@@ -196,9 +244,14 @@ export default function CompanionProfileSetup() {
                             저장한 정보는 아이 부모님과 공유됩니다.
                         </Text>
                     </View>
+                    {saveError ? <Text style={styles.saveErrorText}>{saveError}</Text> : null}
 
                     <View style={styles.buttonArea}>
-                        <PrimaryButton label="프로필 저장하기" width="100%" onPress={handleSave} />
+                        <PrimaryButton
+                            label={isSaving ? '저장 중...' : '프로필 저장하기'}
+                            width="100%"
+                            onPress={handleSave}
+                        />
                     </View>
                 </ScrollView>
             </TouchableWithoutFeedback>
@@ -545,6 +598,16 @@ const styles = StyleSheet.create({
         fontSize: 13,
         lineHeight: 20,
         color: Colors.textShadow,
+    },
+
+    saveErrorText: {
+        marginTop: -10,
+        marginBottom: 14,
+        fontFamily: Fonts.body,
+        fontSize: 13,
+        lineHeight: 18,
+        color: Colors.highlight3,
+        textAlign: 'center',
     },
 
     buttonArea: {

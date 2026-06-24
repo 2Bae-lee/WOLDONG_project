@@ -96,12 +96,11 @@ export default function SocialStoryScreen() {
             toImageSource(parsedImages?.mouth_wide),
             toImageSource(parsedImages?.smile),
             toImageSource(parsedImages?.blink),
-            ...(result?.story_images ?? []).map((image) => toImageSource(image)),
             toImageSource(params.profileImage),
         ].filter((source): source is ImageSourcePropType => Boolean(source));
 
         return frameSources.length > 0 ? frameSources : [fallbackCharacterImage];
-    }, [params.characterImages, params.profileImage, result?.story_images]);
+    }, [params.characterImages, params.profileImage]);
     const activeCharacterFrame = characterFrames[speakingFrameIndex % characterFrames.length];
 
     useEffect(() => {
@@ -180,11 +179,18 @@ export default function SocialStoryScreen() {
         }
     };
 
-    const openAudio = async () => {
+    const toggleAudio = async () => {
         if (!audioUrl) return;
 
         try {
             setError('');
+
+            if (audioStatus.playing || isSpeaking) {
+                audioPlayer.pause();
+                setIsSpeaking(false);
+                return;
+            }
+
             await audioPlayer.seekTo(0);
             audioPlayer.play();
             setIsSpeaking(true);
@@ -303,14 +309,14 @@ export default function SocialStoryScreen() {
                         </View>
 
                         {audioUrl ? (
-                            <Pressable style={styles.audioButton} onPress={openAudio}>
+                            <Pressable style={styles.audioButton} onPress={toggleAudio}>
                                 <Ionicons
-                                    name={isSpeaking ? 'volume-high' : 'volume-high-outline'}
+                                    name={isSpeaking ? 'pause-circle-outline' : 'volume-high-outline'}
                                     size={20}
                                     color={Colors.text}
                                 />
                                 <Text style={styles.audioButtonText}>
-                                    {isSpeaking ? '말하는 중...' : '소셜 스토리 듣기'}
+                                    {isSpeaking ? '멈추기' : '소셜 스토리 듣기'}
                                 </Text>
                             </Pressable>
                         ) : null}

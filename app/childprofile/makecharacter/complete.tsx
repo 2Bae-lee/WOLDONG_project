@@ -43,7 +43,8 @@ export default function MakeCharacterComplete() {
     const [voiceError, setVoiceError] = useState('');
     const [isPreparingVoice, setIsPreparingVoice] = useState(false);
     const [voiceAudioUrl, setVoiceAudioUrl] = useState('');
-    const audioPlayer = useAudioPlayer(null, { updateInterval: 250 });
+    const [shouldPlayVoice, setShouldPlayVoice] = useState(false);
+    const audioPlayer = useAudioPlayer(voiceAudioUrl ? { uri: voiceAudioUrl } : null, { updateInterval: 250 });
     const audioStatus = useAudioPlayerStatus(audioPlayer);
 
     useEffect(() => {
@@ -51,6 +52,41 @@ export default function MakeCharacterComplete() {
             playsInSilentMode: true,
         }).catch(() => undefined);
     }, []);
+
+    useEffect(() => {
+        if (!shouldPlayVoice || !voiceAudioUrl || !audioStatus.isLoaded || audioStatus.isBuffering) {
+            return undefined;
+        }
+
+        let active = true;
+
+        const playPreview = async () => {
+            try {
+                await audioPlayer.seekTo(0);
+                if (!active) return;
+
+                audioPlayer.play();
+                setShouldPlayVoice(false);
+            } catch {
+                if (!active) return;
+
+                setShouldPlayVoice(false);
+                setVoiceError('음성 파일을 재생할 수 없어요.');
+            }
+        };
+
+        playPreview();
+
+        return () => {
+            active = false;
+        };
+    }, [
+        audioPlayer,
+        audioStatus.isBuffering,
+        audioStatus.isLoaded,
+        shouldPlayVoice,
+        voiceAudioUrl,
+    ]);
 
     const handleVoicePreview = async () => {
         if (isPreparingVoice) return;
@@ -64,8 +100,7 @@ export default function MakeCharacterComplete() {
             }
 
             if (voiceAudioUrl) {
-                await audioPlayer.seekTo(0);
-                audioPlayer.play();
+                setShouldPlayVoice(true);
                 return;
             }
 
@@ -87,9 +122,9 @@ export default function MakeCharacterComplete() {
             }
 
             setVoiceAudioUrl(nextAudioUrl);
-            audioPlayer.replace({ uri: nextAudioUrl });
-            audioPlayer.play();
+            setShouldPlayVoice(true);
         } catch (error) {
+            setShouldPlayVoice(false);
             setVoiceError(error instanceof ApiError || error instanceof Error
                 ? error.message
                 : '음성을 재생하지 못했어요.');
@@ -169,7 +204,14 @@ export default function MakeCharacterComplete() {
                 <Text style={styles.characterName}>{characterName}</Text>
                 <Text style={styles.description}>{childName}에게 들려줄 목소리를 준비했어요.</Text>
 
-                <Pressable style={styles.voiceButton} onPress={handleVoicePreview}>
+                <Pressable
+                    style={[
+                        styles.voiceButton,
+                        isPreparingVoice && styles.voiceButtonDisabled,
+                    ]}
+                    onPress={handleVoicePreview}
+                    disabled={isPreparingVoice}
+                >
                     <Text style={styles.voiceIcon}>{audioStatus.playing ? 'Ⅱ' : '▶'}</Text>
                     <Text style={styles.voiceText}>
                         {isPreparingVoice
@@ -305,6 +347,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         paddingHorizontal: 18,
+    },
+
+    voiceButtonDisabled: {
+        opacity: 0.62,
     },
 
     voiceIcon: {

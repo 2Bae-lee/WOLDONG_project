@@ -66,6 +66,8 @@ type CalendarEvent = {
     title: string;
     companion: string;
     todos: ScheduleTodo[];
+    features?: string[];
+    preparations?: string[];
 };
 
 type CalendarDay = {
@@ -167,6 +169,8 @@ const mapCalendarEvent = (schedule: TodayScheduleSummary): CalendarEvent | null 
         day,
         title: schedule.title,
         companion: '동행인 미정',
+        features: schedule.schedule_features ?? [],
+        preparations: schedule.preparations ?? [],
         todos: mapScheduleTodos(schedule, id),
     };
 };
@@ -182,6 +186,7 @@ export default function ParentHome() {
         addedEventCompanion?: string;
         addedEventTodos?: string;
         addedEventDates?: string;
+        addedEventFeatures?: string;
         addedScheduleId?: string;
         addedScheduleTitle?: string;
         addedScheduleCompanion?: string;
@@ -486,6 +491,7 @@ export default function ParentHome() {
         const fallbackEventId = params.addedEventId ? toNumericId(params.addedEventId) : Date.now();
         const numericEventId = Number.isNaN(eventId) ? fallbackEventId : eventId;
         let parsedTodos: ScheduleTodo[] = [];
+        let parsedFeatures: string[] = [];
 
         try {
             const parsed = params.addedEventTodos ? JSON.parse(params.addedEventTodos) : [];
@@ -502,6 +508,15 @@ export default function ParentHome() {
             parsedTodos = [];
         }
 
+        try {
+            const parsed = params.addedEventFeatures ? JSON.parse(params.addedEventFeatures) : [];
+            parsedFeatures = Array.isArray(parsed)
+                ? parsed.filter((item) => typeof item === 'string' && item.trim())
+                : [];
+        } catch {
+            parsedFeatures = [];
+        }
+
         const fallbackDate: RepeatDate = {
             year: Number(params.addedEventYear),
             month: Number(params.addedEventMonth),
@@ -516,6 +531,8 @@ export default function ParentHome() {
             day: date.day,
             title: eventTitle,
             companion: eventCompanion,
+            features: parsedFeatures,
+            preparations: [],
             todos: parsedTodos.map((todo) => ({
                 ...todo,
                 id: todo.id + index * 1000,
@@ -547,6 +564,7 @@ export default function ParentHome() {
         params.addedEventCompanion,
         params.addedEventDates,
         params.addedEventDay,
+        params.addedEventFeatures,
         params.addedEventId,
         params.addedEventMonth,
         params.addedEventTitle,
@@ -1135,6 +1153,8 @@ export default function ParentHome() {
                                                 characterVoice: childCharacterVoice ?? '',
                                                 checkedItems: JSON.stringify([
                                                     `일정_${selectedStoryEvent.title}`,
+                                                    ...(selectedStoryEvent.features ?? []),
+                                                    ...(selectedStoryEvent.preparations ?? []).map((item) => `체크_${item}`),
                                                     ...selectedStoryEvent.todos
                                                         .filter((todo) => !todo.done)
                                                         .map((todo) => `체크_${todo.text}`),

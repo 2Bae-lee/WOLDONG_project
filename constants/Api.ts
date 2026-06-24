@@ -135,6 +135,11 @@ export type TodayScheduleSummary = {
     destination?: string;
     place_type?: string;
     transport_type?: string;
+    activities?: string[];
+    wait_possible?: boolean;
+    crowd_possible?: boolean;
+    schedule_features?: string[];
+    preparations?: string[];
     status: 'upcoming' | 'ongoing' | 'done' | string;
     child_id: string;
 };

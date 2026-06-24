@@ -111,7 +111,9 @@ const mapTodaySchedules = (
     schedules: TodayScheduleSummary[],
     childById: Map<string, CompanionChild>
 ): CompanionTodaySchedule[] => (
-    schedules.map((schedule) => {
+    schedules
+        .filter((schedule) => childById.has(schedule.child_id))
+        .map((schedule) => {
         const child = childById.get(schedule.child_id);
         const scheduleId = createNumericId(schedule.schedule_id);
         const place = getSchedulePlace(schedule);
@@ -135,7 +137,9 @@ const mapCalendarSchedules = (
     schedules: TodayScheduleSummary[],
     childById: Map<string, CompanionChild>
 ): CalendarEvent[] => (
-    schedules.map((schedule) => {
+    schedules
+        .filter((schedule) => childById.has(schedule.child_id))
+        .map((schedule) => {
         const [year, month, day] = schedule.date.split('-').map(Number);
 
         if (!year || !month || !day) return null;
@@ -213,45 +217,7 @@ export default function CompanionChildren() {
     const [calendarYear, setCalendarYear] = useState(currentYear);
     const [calendarMonth, setCalendarMonth] = useState(currentMonth);
     const [selectedDay, setSelectedDay] = useState(todayDay);
-    const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([
-        {
-            id: 1,
-            year: currentYear,
-            month: currentMonth,
-            day: todayDay,
-            childName: '김월동',
-            title: '병원 진료',
-            guardian: '김보호자',
-            todos: [
-                { id: 101, text: '병원 접수하기', done: false },
-                { id: 102, text: '진료 후 조용한 곳에서 쉬기', done: true },
-            ],
-        },
-        {
-            id: 2,
-            year: currentYear,
-            month: currentMonth,
-            day: Math.min(todayDay + 3, new Date(currentYear, currentMonth, 0).getDate()),
-            childName: '김월동',
-            title: '언어 치료',
-            guardian: '김보호자',
-            todos: [
-                { id: 201, text: '치료 카드 챙기기', done: false },
-            ],
-        },
-        {
-            id: 3,
-            year: currentYear,
-            month: currentMonth,
-            day: todayDay,
-            childName: '이하준',
-            title: '하원 동행',
-            guardian: '이보호자',
-            todos: [
-                { id: 301, text: '하원 준비물 확인하기', done: false },
-            ],
-        },
-    ]);
+    const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
     const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
     const [isCalendarEditorOpen, setIsCalendarEditorOpen] = useState(false);
     const [editTitle, setEditTitle] = useState('');

@@ -42,6 +42,8 @@ type CalendarEvent = {
     title: string;
     guardian: string;
     todos: ScheduleTodo[];
+    features?: string[];
+    preparations?: string[];
 };
 
 type CalendarDay = {
@@ -84,6 +86,8 @@ const mapScheduleToCalendarEvent = (
         day,
         title: schedule.title,
         guardian,
+        features: schedule.schedule_features ?? [],
+        preparations: schedule.preparations ?? [],
         todos: todoTexts.map((text, index) => ({
             id: eventId + index + 1,
             text,
@@ -196,6 +200,7 @@ export default function CompanionChildHome() {
         addedEventGuardian?: string;
         addedEventTodos?: string;
         addedEventDates?: string;
+        addedEventFeatures?: string;
     }>();
     const childId = params.childId || '';
     const scheduleId = params.scheduleId || '';
@@ -263,12 +268,20 @@ export default function CompanionChildHome() {
         ? `오늘은 ${storySource.title} 일정이 있어요.`
         : `${childName}의 외출 이야기를 준비해요.`;
     const visibleHandoffs = scheduleWarnings.length > 0 ? scheduleWarnings : handoffs;
+    const storySourceFeatures = storySource && 'features' in storySource
+        ? storySource.features ?? []
+        : [];
+    const storySourcePreparations = storySource && 'preparations' in storySource
+        ? storySource.preparations ?? []
+        : [];
     const storyCheckedItems = storySource
         ? [
             `일정_${storySource.title}`,
             ...storySource.todos
                 .filter((todo) => !todo.done)
                 .map((todo) => `체크_${todo.text}`),
+            ...storySourceFeatures,
+            ...storySourcePreparations.map((item) => `체크_${item}`),
             ...visibleHandoffs.map((handoff) => `아동_주의_${handoff}`),
         ]
         : visibleHandoffs.map((handoff) => `아동_주의_${handoff}`);
@@ -387,6 +400,7 @@ export default function CompanionChildHome() {
         const eventGuardian = params.addedEventGuardian;
         const eventId = Number(params.addedEventId);
         let parsedTodos: ScheduleTodo[] = [];
+        let parsedFeatures: string[] = [];
 
         try {
             const parsed = params.addedEventTodos ? JSON.parse(params.addedEventTodos) : [];
@@ -403,6 +417,15 @@ export default function CompanionChildHome() {
             parsedTodos = [];
         }
 
+        try {
+            const parsed = params.addedEventFeatures ? JSON.parse(params.addedEventFeatures) : [];
+            parsedFeatures = Array.isArray(parsed)
+                ? parsed.filter((item) => typeof item === 'string' && item.trim())
+                : [];
+        } catch {
+            parsedFeatures = [];
+        }
+
         const fallbackDate: RepeatDate = {
             year: Number(params.addedEventYear),
             month: Number(params.addedEventMonth),
@@ -416,6 +439,8 @@ export default function CompanionChildHome() {
             day: date.day,
             title: eventTitle,
             guardian: eventGuardian,
+            features: parsedFeatures,
+            preparations: [],
             todos: parsedTodos.map((todo) => ({
                 ...todo,
                 id: todo.id + index * 1000,
@@ -457,6 +482,7 @@ export default function CompanionChildHome() {
         params.addedEventDates,
         params.addedEventDay,
         params.addedEventGuardian,
+        params.addedEventFeatures,
         params.addedEventId,
         params.addedEventMonth,
         params.addedEventTitle,

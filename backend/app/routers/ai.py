@@ -15,6 +15,23 @@ AI_SERVER_URL = settings.AI_SERVER_URL.rstrip("/")
 AI_SERVER_HEADERS = {"ngrok-skip-browser-warning": "true"}
 
 
+def normalize_ai_asset_urls(payload: dict) -> dict:
+    normalized = dict(payload)
+
+    audio_url = normalized.get("audio_url")
+    if isinstance(audio_url, str) and audio_url.startswith("/"):
+        normalized["audio_url"] = f"{AI_SERVER_URL}{audio_url}"
+
+    story_images = normalized.get("story_images")
+    if isinstance(story_images, list):
+        normalized["story_images"] = [
+            f"{AI_SERVER_URL}{url}" if isinstance(url, str) and url.startswith("/") else url
+            for url in story_images
+        ]
+
+    return normalized
+
+
 # ─── 요청 스키마 ────────────────────────────────────────
 class PredictWarningRequest(BaseModel):
     checked_items: list[str]
@@ -143,7 +160,7 @@ async def social_story_tts(body: SocialStoryTTSRequest, user: User = Depends(get
                 timeout=240.0
             )
         response.raise_for_status()
-        return success(response.json(), "소셜 스토리 생성 완료")
+        return success(normalize_ai_asset_urls(response.json()), "소셜 스토리 생성 완료")
     except httpx.ConnectError:
         return error("AI 서버에 연결할 수 없습니다", 503)
     except Exception as e:
@@ -284,7 +301,7 @@ async def get_social_story(
                 timeout=240.0
             )
         response.raise_for_status()
-        return success(response.json(), "소셜 스토리 생성 완료")
+        return success(normalize_ai_asset_urls(response.json()), "소셜 스토리 생성 완료")
     except httpx.ConnectError:
         return error("AI 서버에 연결할 수 없습니다", 503)
     except Exception as e:

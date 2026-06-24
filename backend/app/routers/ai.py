@@ -11,6 +11,7 @@ from config.settings import settings
 router = APIRouter(prefix="/api/ai", tags=["AI 연동"])
 
 AI_SERVER_URL = settings.AI_SERVER_URL.rstrip("/")
+AI_SERVER_HEADERS = {"ngrok-skip-browser-warning": "true"}
 
 
 # ─── 요청 스키마 ────────────────────────────────────────
@@ -105,6 +106,7 @@ async def social_story_tts(body: SocialStoryTTSRequest, user: User = Depends(get
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{AI_SERVER_URL}/social-story/tts",
+                headers=AI_SERVER_HEADERS,
                 json={
                     "script": body.script,
                     "tone": body.tone,
@@ -113,8 +115,9 @@ async def social_story_tts(body: SocialStoryTTSRequest, user: User = Depends(get
                     "checked_items": body.checked_items,
                     "threshold": body.threshold
                 },
-                timeout=60.0
+                timeout=240.0
             )
+        response.raise_for_status()
         return success(response.json(), "소셜 스토리 생성 완료")
     except httpx.ConnectError:
         return error("AI 서버에 연결할 수 없습니다", 503)
@@ -244,6 +247,7 @@ async def get_social_story(
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{AI_SERVER_URL}/social-story/tts",
+                headers=AI_SERVER_HEADERS,
                 json={
                     "script": script,
                     "tone": final_tone,
@@ -252,8 +256,9 @@ async def get_social_story(
                     "checked_items": checked_items,
                     "threshold": 0.5
                 },
-                timeout=60.0
+                timeout=240.0
             )
+        response.raise_for_status()
         return success(response.json(), "소셜 스토리 생성 완료")
     except httpx.ConnectError:
         return error("AI 서버에 연결할 수 없습니다", 503)

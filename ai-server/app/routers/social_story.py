@@ -1,11 +1,12 @@
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from ai_model.inference import predict_warnings
 from ai_model.social_story_difficulty_inference import predict_social_story_difficulty
 from ai_model.social_story_inference import predict_social_story_category
 from app.models.social_story import SocialStoryRequest, SocialStoryResponse
+from app.services.story_image_service import generate_story_images
 from app.services.story_style import convert_tone
 from app.services.tts_service import synthesize_speech
 
@@ -17,7 +18,7 @@ router = APIRouter(tags=["소셜스토리"])
     response_model=SocialStoryResponse,
     summary="소셜스토리 생성 및 음성 생성",
 )
-def generate_social_story_tts(req: SocialStoryRequest):
+def generate_social_story_tts(req: SocialStoryRequest, request: Request):
     if not req.script.strip():
         raise HTTPException(status_code=400, detail="script must not be empty")
 
@@ -72,11 +73,14 @@ def generate_social_story_tts(req: SocialStoryRequest):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     audio_filename = Path(audio_path).name
+    story_images = generate_story_images(converted_script)
+    server_url = str(request.base_url).rstrip("/")
 
     return SocialStoryResponse(
         original_script=req.script,
         converted_script=converted_script,
-        audio_url=f"/static/audio/{audio_filename}",
+        audio_url=f"{server_url}/static/audio/{audio_filename}",
+        story_images=[f"{server_url}{image_url}" for image_url in story_images],
         story_category=story_category,
         story_difficulty=story_difficulty,
         predicted_warnings=predicted_warnings,

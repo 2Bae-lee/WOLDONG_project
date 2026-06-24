@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import Optional
 import httpx
@@ -80,6 +81,30 @@ async def predict_warning(body: PredictWarningRequest, user: User = Depends(get_
         return error("AI 서버에 연결할 수 없습니다", 503)
     except Exception as e:
         return error(f"AI 서버 오류: {str(e)}", 500)
+
+
+# POST /api/ai/generate-character - 캐릭터 단일 이미지 생성
+@router.post("/generate-character")
+async def generate_character(body: GenerateCharacterRequest, user: User = Depends(get_current_user)):
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{AI_SERVER_URL}/generate-character",
+                headers=AI_SERVER_HEADERS,
+                json={"traits": body.traits},
+                timeout=120.0,
+            )
+        response.raise_for_status()
+        return Response(
+            content=response.content,
+            media_type=response.headers.get("content-type", "image/png"),
+        )
+    except httpx.ConnectError:
+        return error("AI 서버에 연결할 수 없습니다", 503)
+    except httpx.HTTPStatusError as exc:
+        return error(f"AI 서버 오류: {exc.response.status_code}", exc.response.status_code)
+    except Exception as exc:
+        return error(f"AI 서버 오류: {str(exc)}", 500)
 
 
 # POST /api/ai/generate-character-frames - 캐릭터 프레임 생성

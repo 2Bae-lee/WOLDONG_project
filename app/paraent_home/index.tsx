@@ -1095,7 +1095,6 @@ export default function ParentHome() {
                                                 characterImages: childCharacterImages
                                                     ? JSON.stringify(childCharacterImages)
                                                     : '',
-                                                profileImage: childProfileImage,
                                                 checkedItems: JSON.stringify([
                                                     `일정_${selectedStoryEvent.title}`,
                                                     ...selectedStoryEvent.todos.map((todo) => `체크_${todo.text}`),

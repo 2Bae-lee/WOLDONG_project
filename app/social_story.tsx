@@ -74,7 +74,6 @@ export default function SocialStoryScreen() {
         script?: string;
         checkedItems?: string;
         characterImages?: string;
-        profileImage?: string;
     }>();
     const checkedItems = useMemo(() => parseCheckedItems(params.checkedItems), [params.checkedItems]);
     const [script, setScript] = useState(
@@ -96,12 +95,10 @@ export default function SocialStoryScreen() {
             toImageSource(parsedImages?.mouth_wide),
             toImageSource(parsedImages?.smile),
             toImageSource(parsedImages?.blink),
-            ...(result?.story_images ?? []).map((image) => toImageSource(image)),
-            toImageSource(params.profileImage),
         ].filter((source): source is ImageSourcePropType => Boolean(source));
 
         return frameSources.length > 0 ? frameSources : [fallbackCharacterImage];
-    }, [params.characterImages, params.profileImage, result?.story_images]);
+    }, [params.characterImages]);
     const activeCharacterFrame = characterFrames[speakingFrameIndex % characterFrames.length];
 
     useEffect(() => {

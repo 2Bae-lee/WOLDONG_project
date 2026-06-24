@@ -91,6 +91,22 @@ async def get_assigned_children(user: User = Depends(companion_only)):
                     "gender": child.gender,
                     "birth_date": child.birth_date,
                     "disability_type": child.disability_type,
+                    "explanation_styles": child.explanation_styles,
+                    "communication_styles": child.communication_styles,
+                    "caution_situations": child.caution_situations,
+                    "required_actions": child.required_actions,
+                    "difficult_environments": child.difficult_environments,
+                    "difficult_places": child.difficult_places,
+                    "transition_difficulties": child.transition_difficulties,
+                    "notice_time": child.notice_time,
+                    "calming_methods": child.calming_methods,
+                    "avoid_behaviors": child.avoid_behaviors,
+                    "profile_image_url": child.profile_image_url,
+                    "character_image_url": child.character_image_url,
+                    "character_name": child.character_name,
+                    "character_tone": child.character_tone,
+                    "character_speed": child.character_speed,
+                    "character_voice": child.character_voice,
                 })
         except Exception:
             continue

@@ -18,6 +18,7 @@ import BackButton from '../../components/BackButton';
 import PrimaryButton from '../../components/PrimaryButton';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
+import { toShareableImageUri } from '../../constants/ImagePicker';
 
 export default function SignupRole() {
     const [name, setName] = useState('');
@@ -113,10 +114,11 @@ export default function SignupRole() {
               allowsEditing: true,
               aspect: [1, 1],
               quality: 0.8,
+              base64: true,
             });
           
             if (!result.canceled) {
-              setProfileImage(result.assets[0].uri);
+              setProfileImage(toShareableImageUri(result.assets[0]));
             }
           
     }

@@ -7,10 +7,6 @@ import PrimaryButton from '../../components/PrimaryButton';
 import { approveInviteRequest, markNotificationRead } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
-import {
-    approveCompanionRequestNotification,
-    getCompanionRequestNotification,
-} from '../../constants/NotificationState';
 
 const relationOptions = ['담임 선생님', '활동지원사', '치료사', '가족'];
 const permissionOptions = [
@@ -26,10 +22,10 @@ export default function NotificationRequest() {
         notificationId?: string;
         companionName?: string;
         childId?: string;
+        requestMessage?: string;
     }>();
-    const companionRequest = getCompanionRequestNotification();
-    const companionName = params.companionName || companionRequest.companionName;
-    const childName = companionRequest.childName;
+    const companionName = params.companionName || '동행인';
+    const requestMessage = params.requestMessage || `${companionName}님이 아동 연결을 요청했어요.`;
     const [selectedRelation, setSelectedRelation] = useState('담임 선생님');
     const [selectedPermissions, setSelectedPermissions] = useState([
         '아이 프로필',
@@ -53,7 +49,7 @@ export default function NotificationRequest() {
         try {
             await markNotificationRead(params.notificationId);
         } catch {
-            // 이미 읽음 처리되었거나 목데이터 흐름이어도 승인/거절은 계속 진행합니다.
+            // 이미 읽음 처리되었어도 승인/거절은 계속 진행합니다.
         }
     };
 
@@ -71,7 +67,6 @@ export default function NotificationRequest() {
                 });
             }
             await markCurrentNotificationRead();
-            approveCompanionRequestNotification(companionName);
 
             router.replace({
                 pathname: '/paraent_home/companions',
@@ -100,7 +95,6 @@ export default function NotificationRequest() {
                 await approveInviteRequest(params.requestId, false);
             }
             await markCurrentNotificationRead();
-            approveCompanionRequestNotification(companionName);
             router.replace('/paraent_home/notifications' as any);
         } catch (error) {
             setErrorText(error instanceof Error ? error.message : '동행인 요청 거절에 실패했어요.');
@@ -130,9 +124,7 @@ export default function NotificationRequest() {
 
                 <View style={styles.headerArea}>
                     <Text style={styles.title}>동행인 승인 요청</Text>
-                    <Text style={styles.description}>
-                        {companionName}님이 {childName} 어린이의 동행인 권한을 요청했어요.
-                    </Text>
+                    <Text style={styles.description}>{requestMessage}</Text>
                 </View>
 
                 <View style={styles.profileCard}>

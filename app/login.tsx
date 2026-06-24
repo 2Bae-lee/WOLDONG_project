@@ -17,6 +17,9 @@ import { login } from '../constants/Api';
 import { Colors } from '../constants/Colors';
 import { Fonts } from '../constants/Fonts';
 
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const mockLoginEmail = 'woldong';
+
 export default function Login() {
     const [id, setId] = useState('');
     const [password, setPassword] = useState('');
@@ -33,7 +36,11 @@ export default function Login() {
         const trimmedpassword = password.trim();
 
         if (trimmedid === '') {
-            setIdError('아이디를 입력해주세요.');
+            setIdError('이메일을 입력해주세요.');
+            return;
+        }
+        if (trimmedid !== mockLoginEmail && !emailRegex.test(trimmedid)) {
+            setIdError('이메일 형식에 오류가 있어요.');
             return;
         }
         if (trimmedpassword === '') {
@@ -110,6 +117,8 @@ export default function Login() {
                             <TextInput
                                 style={styles.idInput}
                                 autoCapitalize="none"
+                                keyboardType="email-address"
+                                textContentType="emailAddress"
                                 value={id}
                                 onChangeText={(text) => {
                                 setId(text);

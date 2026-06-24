@@ -2,12 +2,15 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useRef, useState } from 'react';
 import {
     Image,
+    Keyboard,
     KeyboardAvoidingView,
     Platform,
     Pressable,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
+    TouchableWithoutFeedback,
     View,
 } from 'react-native';
 import BackButton from '../../components/BackButton';
@@ -95,59 +98,71 @@ export default function CompanionInviteCode() {
             style={styles.container}
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-            <View style={styles.logoArea}>
-                <View style={styles.logoRow}>
-                    <BackButton />
-                    <Text style={styles.logoTitle}>월동</Text>
-                    <Image
-                        source={require('../../assets/images/canola_flower_small.png')}
-                        style={styles.logoFlower}
-                        resizeMode="contain"
-                    />
-                </View>
-            </View>
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+                <ScrollView
+                    contentContainerStyle={styles.inner}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                >
+                    <View style={styles.logoArea}>
+                        <View style={styles.logoRow}>
+                            <BackButton />
+                            <Text style={styles.logoTitle}>월동</Text>
+                            <Image
+                                source={require('../../assets/images/canola_flower_small.png')}
+                                style={styles.logoFlower}
+                                resizeMode="contain"
+                            />
+                        </View>
+                    </View>
 
-            <View style={styles.content}>
-                <View style={styles.centerLogoRow}>
-                    <Text style={styles.centerLogo}>월동</Text>
-                    <Image
-                        source={require('../../assets/images/canola_flower_small.png')}
-                        style={styles.centerFlower}
-                        resizeMode="contain"
-                    />
-                </View>
+                    <View style={styles.content}>
+                        <View style={styles.centerLogoRow}>
+                            <Text style={styles.centerLogo}>월동</Text>
+                            <Image
+                                source={require('../../assets/images/canola_flower_small.png')}
+                                style={styles.centerFlower}
+                                resizeMode="contain"
+                            />
+                        </View>
 
-                <Text style={styles.title}>초대 코드를 입력해주세요</Text>
-                <Text style={styles.description}>
-                    보호자가 공유한 코드를 입력하면{'\n'}담당 어린이 승인 요청이 전송돼요.
-                </Text>
+                        <Text style={styles.title}>초대 코드를 입력해주세요</Text>
+                        <Text style={styles.description}>
+                            보호자가 공유한 코드를 입력하면{'\n'}담당 어린이 승인 요청이 전송돼요.
+                        </Text>
 
-                <View style={styles.codeRow}>
-                    {code.map((digit, index) => (
-                        <TextInput
-                            key={index}
-                            ref={(ref) => {
-                                inputRefs.current[index] = ref;
-                            }}
-                            style={[styles.codeInput, error ? styles.codeInputError : null]}
-                            value={digit}
-                            onChangeText={(text) => handleChange(text, index)}
-                            onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, index)}
-                            keyboardType="number-pad"
-                            maxLength={1}
-                            textAlign="center"
-                            returnKeyType={index === CODE_LENGTH - 1 ? 'done' : 'next'}
-                            onSubmitEditing={submitCode}
+                        <View style={styles.codeRow}>
+                            {code.map((digit, index) => (
+                                <TextInput
+                                    key={index}
+                                    ref={(ref) => {
+                                        inputRefs.current[index] = ref;
+                                    }}
+                                    style={[styles.codeInput, error ? styles.codeInputError : null]}
+                                    value={digit}
+                                    onChangeText={(text) => handleChange(text, index)}
+                                    onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, index)}
+                                    keyboardType="number-pad"
+                                    maxLength={1}
+                                    textAlign="center"
+                                    returnKeyType={index === CODE_LENGTH - 1 ? 'done' : 'next'}
+                                    onSubmitEditing={submitCode}
+                                />
+                            ))}
+                        </View>
+
+                        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+                    </View>
+
+                    <View style={styles.buttonArea}>
+                        <PrimaryButton
+                            label={isSubmitting ? '요청 중...' : '요청 보내기'}
+                            width="100%"
+                            onPress={submitCode}
                         />
-                    ))}
-                </View>
-
-                {error ? <Text style={styles.errorText}>{error}</Text> : null}
-            </View>
-
-            <View style={styles.buttonArea}>
-                <PrimaryButton label={isSubmitting ? '요청 중...' : '요청 보내기'} width="100%" onPress={submitCode} />
-            </View>
+                    </View>
+                </ScrollView>
+            </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
     );
 }
@@ -157,9 +172,13 @@ const styles = StyleSheet.create({
         flex: 1,
         width: '100%',
         backgroundColor: Colors.pageBg,
+    },
+
+    inner: {
+        flexGrow: 1,
         paddingTop: 10,
         paddingHorizontal: 32,
-        paddingBottom: 54,
+        paddingBottom: 44,
     },
 
     logoArea: {
@@ -190,7 +209,9 @@ const styles = StyleSheet.create({
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
-        paddingBottom: 42,
+        minHeight: 420,
+        paddingTop: 18,
+        paddingBottom: 26,
     },
 
     centerLogoRow: {
@@ -260,5 +281,6 @@ const styles = StyleSheet.create({
 
     buttonArea: {
         width: '100%',
+        paddingTop: 4,
     },
 });

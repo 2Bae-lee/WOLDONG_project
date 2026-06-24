@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../components/BackButton';
 import {
     ChildNotification,
@@ -180,6 +180,8 @@ export default function CompanionChildHome() {
         childId?: string;
         scheduleId?: string;
         childName?: string;
+        profileImage?: string;
+        profileSections?: string;
         guardian?: string;
         characterImages?: string;
         tab?: string;
@@ -195,6 +197,7 @@ export default function CompanionChildHome() {
     const childId = params.childId || '';
     const scheduleId = params.scheduleId || '';
     const childName = params.childName || '김월동';
+    const profileImage = params.profileImage || '';
     const guardian = params.guardian || '김보호자';
     const today = useMemo(() => new Date(), []);
     const currentYear = today.getFullYear();
@@ -211,6 +214,7 @@ export default function CompanionChildHome() {
         getCompanionTodaySchedulesForChild(childName)
     ));
     const [childNotifications, setChildNotifications] = useState<ChildNotification[]>([]);
+    const [isNotificationOpen, setIsNotificationOpen] = useState(false);
     const [notificationError, setNotificationError] = useState('');
     const [scheduleWarnings, setScheduleWarnings] = useState<string[]>([]);
     const [warningsError, setWarningsError] = useState('');
@@ -250,6 +254,7 @@ export default function CompanionChildHome() {
         event.month === calendarMonth &&
         event.day === selectedDay
     ));
+    const hasUnreadChildNotifications = childNotifications.some((notification) => !notification.is_read);
     const storySource = activeTab === 'calendar' ? selectedEvents[0] : todayEvents[0];
     const storyScript = storySource
         ? `오늘은 ${storySource.title} 일정이 있어요.`
@@ -258,7 +263,9 @@ export default function CompanionChildHome() {
     const storyCheckedItems = storySource
         ? [
             `일정_${storySource.title}`,
-            ...storySource.todos.map((todo) => `체크_${todo.text}`),
+            ...storySource.todos
+                .filter((todo) => !todo.done)
+                .map((todo) => `체크_${todo.text}`),
             ...visibleHandoffs.map((handoff) => `아동_주의_${handoff}`),
         ]
         : visibleHandoffs.map((handoff) => `아동_주의_${handoff}`);
@@ -285,12 +292,6 @@ export default function CompanionChildHome() {
 
                     const notifications = response.data ?? [];
                     setChildNotifications(notifications);
-
-                    const unreadIds = notifications
-                        .filter((notification) => !notification.is_read)
-                        .map((notification) => notification.notification_id);
-
-                    await Promise.allSettled(unreadIds.map(markNotificationRead));
                 } catch (error) {
                     if (!active) return;
                     setChildNotifications([]);
@@ -480,6 +481,25 @@ export default function CompanionChildHome() {
         setSelectedDay(calendarDay.day);
     };
 
+    const openNotifications = async () => {
+        setIsNotificationOpen(true);
+
+        const unreadIds = childNotifications
+            .filter((notification) => !notification.is_read)
+            .map((notification) => notification.notification_id);
+
+        if (unreadIds.length === 0) return;
+
+        await Promise.allSettled(unreadIds.map(markNotificationRead));
+        setChildNotifications((current) => (
+            current.map((notification) => (
+                unreadIds.includes(notification.notification_id)
+                    ? { ...notification, is_read: true }
+                    : notification
+            ))
+        ));
+    };
+
     return (
         <SafeAreaView style={styles.safeArea}>
             <ScrollView
@@ -498,69 +518,45 @@ export default function CompanionChildHome() {
                         />
                     </View>
 
-                    <Pressable
-                        style={styles.profileButton}
-                        onPress={() =>
-                            router.push({
-                                pathname: '/companion_home/child_profile',
-                                params: { childName },
-                            } as any)
-                        }
-                    >
-                        <Image
-                            source={require('../../assets/images/icon_child.png')}
-                            style={styles.profileImage}
-                            resizeMode="contain"
-                        />
-                    </Pressable>
+                    <View style={styles.headerActions}>
+                        <Pressable
+                            style={styles.notificationButton}
+                            onPress={openNotifications}
+                            hitSlop={6}
+                        >
+                            <Ionicons name="notifications-outline" size={23} color={Colors.text} />
+                            {hasUnreadChildNotifications ? <View style={styles.notificationDot} /> : null}
+                        </Pressable>
+
+                        <Pressable
+                            style={styles.profileButton}
+                            onPress={() =>
+                                router.push({
+                                    pathname: '/companion_home/child_profile',
+                                    params: {
+                                        childName,
+                                        profileImage,
+                                        profileSections: params.profileSections ?? '',
+                                    },
+                                } as any)
+                            }
+                        >
+                            <Image
+                                source={
+                                    profileImage
+                                        ? { uri: profileImage }
+                                        : require('../../assets/images/icon_child.png')
+                                }
+                                style={profileImage ? styles.profileImageFilled : styles.profileImage}
+                                resizeMode={profileImage ? 'cover' : 'contain'}
+                            />
+                        </Pressable>
+                    </View>
                 </View>
 
                 <View style={styles.childSummary}>
                     <Text style={styles.childName}>{childName}</Text>
                     <Text style={styles.summaryText}>{guardian} 보호자가 공유한 일정이에요.</Text>
-                </View>
-
-                <View style={styles.notificationSection}>
-                    <View style={styles.notificationSectionHeader}>
-                        <Text style={styles.notificationSectionTitle}>푸시알림 확인</Text>
-                        <Ionicons name="notifications-outline" size={19} color={Colors.textShadow} />
-                    </View>
-                    {notificationError ? (
-                        <Text style={styles.notificationStatusText}>{notificationError}</Text>
-                    ) : null}
-                    {childNotifications.length > 0 ? (
-                        <View style={styles.notificationList}>
-                            {childNotifications.slice(0, 3).map((notification) => (
-                                <View key={notification.notification_id} style={styles.notificationCard}>
-                                    <View style={[
-                                        styles.notificationIconCircle,
-                                        !notification.is_read && styles.notificationIconCircleUnread,
-                                    ]}>
-                                        <Ionicons
-                                            name={getNotificationIcon(notification.type) as any}
-                                            size={18}
-                                            color={Colors.text}
-                                        />
-                                    </View>
-                                    <View style={styles.notificationTextArea}>
-                                        <View style={styles.notificationTitleRow}>
-                                            <Text style={styles.notificationTitle}>
-                                                {getNotificationTitle(notification.type)}
-                                            </Text>
-                                            <Text style={styles.notificationTime}>
-                                                {formatTime(notification.created_at)}
-                                            </Text>
-                                        </View>
-                                        <Text style={styles.notificationMessage}>{notification.message}</Text>
-                                    </View>
-                                </View>
-                            ))}
-                        </View>
-                    ) : (
-                        <View style={styles.notificationEmptyCard}>
-                            <Text style={styles.notificationEmptyText}>확인할 알림이 없어요.</Text>
-                        </View>
-                    )}
                 </View>
 
                 {activeTab === 'today' ? (
@@ -768,6 +764,7 @@ export default function CompanionChildHome() {
                                 script: storyScript,
                                 scheduleId,
                                 characterImages: params.characterImages ?? '',
+                                profileImage,
                                 checkedItems: JSON.stringify(storyCheckedItems),
                             },
                         } as any)
@@ -795,6 +792,78 @@ export default function CompanionChildHome() {
                     </Pressable>
                 ) : null}
             </ScrollView>
+
+            <Modal
+                visible={isNotificationOpen}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setIsNotificationOpen(false)}
+            >
+                <Pressable
+                    style={styles.notificationModalBackdrop}
+                    onPress={() => setIsNotificationOpen(false)}
+                >
+                    <Pressable style={styles.notificationModal} onPress={() => undefined}>
+                        <View style={styles.notificationModalHeader}>
+                            <View style={styles.notificationModalTitleArea}>
+                                <Text style={styles.notificationSectionTitle}>{childName} 알림</Text>
+                                <Text style={styles.notificationModalDescription}>
+                                    이 아이와 관련된 알림만 모아봤어요.
+                                </Text>
+                            </View>
+                            <Pressable
+                                style={styles.notificationCloseButton}
+                                onPress={() => setIsNotificationOpen(false)}
+                                hitSlop={6}
+                            >
+                                <Ionicons name="close" size={20} color={Colors.text} />
+                            </Pressable>
+                        </View>
+
+                        {notificationError ? (
+                            <Text style={styles.notificationStatusText}>{notificationError}</Text>
+                        ) : null}
+
+                        {childNotifications.length > 0 ? (
+                            <ScrollView
+                                style={styles.notificationModalScroll}
+                                contentContainerStyle={styles.notificationList}
+                                showsVerticalScrollIndicator={false}
+                            >
+                                {childNotifications.map((notification) => (
+                                    <View key={notification.notification_id} style={styles.notificationCard}>
+                                        <View style={[
+                                            styles.notificationIconCircle,
+                                            !notification.is_read && styles.notificationIconCircleUnread,
+                                        ]}>
+                                            <Ionicons
+                                                name={getNotificationIcon(notification.type) as any}
+                                                size={18}
+                                                color={Colors.text}
+                                            />
+                                        </View>
+                                        <View style={styles.notificationTextArea}>
+                                            <View style={styles.notificationTitleRow}>
+                                                <Text style={styles.notificationTitle}>
+                                                    {getNotificationTitle(notification.type)}
+                                                </Text>
+                                                <Text style={styles.notificationTime}>
+                                                    {formatTime(notification.created_at)}
+                                                </Text>
+                                            </View>
+                                            <Text style={styles.notificationMessage}>{notification.message}</Text>
+                                        </View>
+                                    </View>
+                                ))}
+                            </ScrollView>
+                        ) : (
+                            <View style={styles.notificationEmptyCard}>
+                                <Text style={styles.notificationEmptyText}>확인할 알림이 없어요.</Text>
+                            </View>
+                        )}
+                    </Pressable>
+                </Pressable>
+            </Modal>
 
             <View style={styles.bottomTabWrap}>
                 <View style={styles.bottomTab}>
@@ -862,6 +931,33 @@ const styles = StyleSheet.create({
         transform: [{ rotate: '-18deg' }],
     },
 
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+
+    notificationButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        borderWidth: 1,
+        borderColor: Colors.highlight1,
+        backgroundColor: '#FFF8DF',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    notificationDot: {
+        position: 'absolute',
+        right: 8,
+        bottom: 8,
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: Colors.highlight3,
+    },
+
     profileButton: {
         width: 44,
         height: 44,
@@ -877,6 +973,12 @@ const styles = StyleSheet.create({
     profileImage: {
         width: 34,
         height: 34,
+    },
+
+    profileImageFilled: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
     },
 
     childSummary: {
@@ -897,15 +999,32 @@ const styles = StyleSheet.create({
         color: Colors.textShadow,
     },
 
-    notificationSection: {
-        marginBottom: 28,
+    notificationModalBackdrop: {
+        flex: 1,
+        backgroundColor: 'rgba(17, 17, 17, 0.28)',
+        justifyContent: 'center',
+        paddingHorizontal: 24,
     },
 
-    notificationSectionHeader: {
+    notificationModal: {
+        maxHeight: '78%',
+        borderRadius: 22,
+        borderWidth: 1,
+        borderColor: '#E8DDC8',
+        backgroundColor: Colors.pageBg,
+        padding: 18,
+    },
+
+    notificationModalHeader: {
         flexDirection: 'row',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         justifyContent: 'space-between',
-        marginBottom: 12,
+        gap: 12,
+        marginBottom: 14,
+    },
+
+    notificationModalTitleArea: {
+        flex: 1,
     },
 
     notificationSectionTitle: {
@@ -915,11 +1034,32 @@ const styles = StyleSheet.create({
         color: Colors.text,
     },
 
+    notificationModalDescription: {
+        marginTop: 4,
+        fontFamily: Fonts.body,
+        fontSize: 13,
+        lineHeight: 18,
+        color: Colors.textShadow,
+    },
+
+    notificationCloseButton: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        backgroundColor: '#F7F4E8',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
     notificationStatusText: {
         marginBottom: 10,
         fontFamily: Fonts.body,
         fontSize: 13,
         color: Colors.highlight3,
+    },
+
+    notificationModalScroll: {
+        maxHeight: 420,
     },
 
     notificationList: {

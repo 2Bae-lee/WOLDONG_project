@@ -286,6 +286,7 @@ export default function CalendarAdd() {
             label: option.label,
             description: option.description,
             badge: '',
+            profileImage: '',
         }))
         : linkedCompanions.map((option) => ({
             value: option.companion_id,
@@ -293,7 +294,8 @@ export default function CalendarAdd() {
             description: option.permissions?.length
                 ? option.permissions.join(', ')
                 : '승인된 동행인이에요.',
-            badge: option.relation ?? '승인됨',
+            badge: option.companion_job || option.companion_relation || option.relation || '승인됨',
+            profileImage: option.companion_profile_image_url || '',
         }));
 
     const formatApiDate = (date: RepeatDate) => {
@@ -486,6 +488,7 @@ export default function CalendarAdd() {
                                     ? repeated
                                     : calendarDay.day === selectedDay
                             );
+                            const highlighted = repeatOption !== 'custom' && selected;
 
                             return (
                                 <Pressable
@@ -493,14 +496,14 @@ export default function CalendarAdd() {
                                     style={[
                                         styles.dayCell,
                                         repeated && styles.dayCellRepeated,
-                                        selected && styles.dayCellSelected,
+                                        highlighted && styles.dayCellSelected,
                                     ]}
                                     onPress={() => selectCalendarDay(calendarDay)}
                                 >
                                     <Text style={[
                                         styles.dayText,
                                         muted && styles.dayTextMuted,
-                                        selected && styles.dayTextSelected,
+                                        highlighted && styles.dayTextSelected,
                                     ]}>
                                         {calendarDay.day}
                                     </Text>
@@ -540,9 +543,15 @@ export default function CalendarAdd() {
                         {selectedCompanion ? (
                             <View style={styles.companionAvatarSmall}>
                                 <Image
-                                    source={require('../../assets/images/icon_companion.png')}
-                                    style={styles.companionImageSmall}
-                                    resizeMode="contain"
+                                    source={
+                                        selectedCompanionOption?.companion_profile_image_url
+                                            ? { uri: selectedCompanionOption.companion_profile_image_url }
+                                            : require('../../assets/images/icon_companion.png')
+                                    }
+                                    style={selectedCompanionOption?.companion_profile_image_url
+                                        ? styles.companionImageSmallFilled
+                                        : styles.companionImageSmall}
+                                    resizeMode={selectedCompanionOption?.companion_profile_image_url ? 'cover' : 'contain'}
                                 />
                             </View>
                         ) : null}
@@ -853,9 +862,15 @@ export default function CalendarAdd() {
                                         {sheetTarget === 'companion' ? (
                                             <View style={styles.sheetCompanionAvatar}>
                                                 <Image
-                                                    source={require('../../assets/images/icon_companion.png')}
-                                                    style={styles.sheetCompanionImage}
-                                                    resizeMode="contain"
+                                                    source={
+                                                        option.profileImage
+                                                            ? { uri: option.profileImage }
+                                                            : require('../../assets/images/icon_companion.png')
+                                                    }
+                                                    style={option.profileImage
+                                                        ? styles.sheetCompanionImageFilled
+                                                        : styles.sheetCompanionImage}
+                                                    resizeMode={option.profileImage ? 'cover' : 'contain'}
                                                 />
                                             </View>
                                         ) : (
@@ -1115,6 +1130,12 @@ const styles = StyleSheet.create({
     companionImageSmall: {
         width: 21,
         height: 21,
+    },
+
+    companionImageSmallFilled: {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
     },
 
     optionGrid: {
@@ -1549,6 +1570,12 @@ const styles = StyleSheet.create({
     sheetCompanionImage: {
         width: 25,
         height: 25,
+    },
+
+    sheetCompanionImageFilled: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
     },
 
     sheetOptionText: {

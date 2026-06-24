@@ -1,9 +1,16 @@
+import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../../components/BackButton';
 import PrimaryButton from '../../../components/PrimaryButton';
-import { CharacterSpeed, updateChildProfile } from '../../../constants/Api';
+import {
+    ApiError,
+    CharacterSpeed,
+    generateSocialStoryTts,
+    toApiAssetUrl,
+    updateChildProfile,
+} from '../../../constants/Api';
 import { getGeneratedCharacterImage } from '../../../constants/CharacterImageStore';
 import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
@@ -25,6 +32,7 @@ export default function MakeCharacterComplete() {
         gender?: 'female' | 'male';
         tone?: 'kind' | 'strict';
         speed?: string;
+        story?: string;
     }>();
 
     const childName = params.name || '아이';
@@ -32,9 +40,62 @@ export default function MakeCharacterComplete() {
     const characterImageUri = getGeneratedCharacterImage(params.characterImageKey);
     const [isSaving, setIsSaving] = useState(false);
     const [saveError, setSaveError] = useState('');
+    const [voiceError, setVoiceError] = useState('');
+    const [isPreparingVoice, setIsPreparingVoice] = useState(false);
+    const [voiceAudioUrl, setVoiceAudioUrl] = useState('');
+    const audioPlayer = useAudioPlayer(null, { updateInterval: 250 });
+    const audioStatus = useAudioPlayerStatus(audioPlayer);
 
-    const handleVoicePreview = () => {
-        // TODO: 생성된 음성 파일이 연결되면 이곳에서 재생합니다.
+    useEffect(() => {
+        setAudioModeAsync({
+            playsInSilentMode: true,
+        }).catch(() => undefined);
+    }, []);
+
+    const handleVoicePreview = async () => {
+        if (isPreparingVoice) return;
+
+        try {
+            setVoiceError('');
+
+            if (audioStatus.playing) {
+                audioPlayer.pause();
+                return;
+            }
+
+            if (voiceAudioUrl) {
+                await audioPlayer.seekTo(0);
+                audioPlayer.play();
+                return;
+            }
+
+            setIsPreparingVoice(true);
+            const previewScript = params.story?.trim()
+                || `안녕 ${childName}. 나는 ${characterName}야. 오늘도 천천히 함께 해볼게.`;
+            const response = await generateSocialStoryTts({
+                script: previewScript,
+                tone: params.tone ?? 'kind',
+                speed: speedMap[params.speed ?? '중간'] ?? 'normal',
+                voice: params.gender ?? 'female',
+                checked_items: [],
+                threshold: 0.5,
+            });
+            const nextAudioUrl = toApiAssetUrl(response.audio_url);
+
+            if (!nextAudioUrl) {
+                throw new Error('생성된 음성 파일을 찾지 못했어요.');
+            }
+
+            setVoiceAudioUrl(nextAudioUrl);
+            audioPlayer.replace({ uri: nextAudioUrl });
+            audioPlayer.play();
+        } catch (error) {
+            setVoiceError(error instanceof ApiError || error instanceof Error
+                ? error.message
+                : '음성을 재생하지 못했어요.');
+        } finally {
+            setIsPreparingVoice(false);
+        }
     };
 
     const goHome = async () => {
@@ -109,9 +170,16 @@ export default function MakeCharacterComplete() {
                 <Text style={styles.description}>{childName}에게 들려줄 목소리를 준비했어요.</Text>
 
                 <Pressable style={styles.voiceButton} onPress={handleVoicePreview}>
-                    <Text style={styles.voiceIcon}>▶</Text>
-                    <Text style={styles.voiceText}>음성 듣기</Text>
+                    <Text style={styles.voiceIcon}>{audioStatus.playing ? 'Ⅱ' : '▶'}</Text>
+                    <Text style={styles.voiceText}>
+                        {isPreparingVoice
+                            ? '음성 준비 중'
+                            : audioStatus.playing
+                                ? '음성 멈추기'
+                                : '음성 듣기'}
+                    </Text>
                 </Pressable>
+                {voiceError ? <Text style={styles.errorText}>{voiceError}</Text> : null}
                 {saveError ? <Text style={styles.errorText}>{saveError}</Text> : null}
             </View>
 

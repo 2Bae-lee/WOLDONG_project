@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../components/BackButton';
 import {
@@ -18,6 +19,8 @@ type Companion = {
     name: string;
     relation: string;
     phone: string;
+    intro: string;
+    profileImage: string;
     status: string;
     permissions: string[];
 };
@@ -30,6 +33,8 @@ const companions: Companion[] = [
         name: '박민지',
         relation: '담임 선생님',
         phone: '010-1234-5678',
+        intro: '',
+        profileImage: '',
         status: '아이 프로필 공유 완료',
         permissions: ['아이 프로필', '오늘 일정', '주의사항'],
     },
@@ -40,6 +45,8 @@ const companions: Companion[] = [
         name: '이하늘',
         relation: '활동지원사',
         phone: '010-2345-6789',
+        intro: '',
+        profileImage: '',
         status: '오늘 일정 확인 가능',
         permissions: ['오늘 일정', '공유 캘린더', '주의사항'],
     },
@@ -50,6 +57,8 @@ const companions: Companion[] = [
         name: '최서윤',
         relation: '치료사',
         phone: '010-3456-7890',
+        intro: '',
+        profileImage: '',
         status: '주의사항 공유 완료',
         permissions: ['아이 프로필', '공유 캘린더'],
     },
@@ -69,7 +78,7 @@ export default function Companions() {
     const [visibleCompanions, setVisibleCompanions] = useState<Companion[]>(companions);
     const [statusText, setStatusText] = useState('');
 
-    useEffect(() => {
+    useFocusEffect(useCallback(() => {
         let active = true;
 
         const mapLinkedCompanion = (companion: LinkedCompanion, targetChildId: string): Companion => ({
@@ -77,8 +86,10 @@ export default function Companions() {
             companionId: companion.companion_id,
             childId: targetChildId,
             name: companion.companion_name,
-            relation: companion.relation || '동행인',
-            phone: '연락처는 회원가입 정보에서 확인돼요',
+            relation: companion.companion_job || companion.companion_relation || companion.relation || '동행인',
+            phone: companion.companion_phone || '연락처는 회원가입 정보에서 확인돼요',
+            intro: companion.companion_intro || '',
+            profileImage: companion.companion_profile_image_url || '',
             permissions: companion.permissions?.length
                 ? companion.permissions
                 : ['아이 프로필', '오늘 일정', '공유 캘린더', '주의사항'],
@@ -101,6 +112,8 @@ export default function Companions() {
                 name: params.acceptedName,
                 relation: params.acceptedRelation || '동행인',
                 phone: params.acceptedPhone || '010-1234-5678',
+                intro: '',
+                profileImage: '',
                 permissions: params.acceptedPermissions
                     ? params.acceptedPermissions.split(',').filter(Boolean)
                     : ['아이 프로필'],
@@ -152,7 +165,7 @@ export default function Companions() {
         params.acceptedPhone,
         params.acceptedRelation,
         params.removedCompanionId,
-    ]);
+    ]));
 
     const openCompanionProfile = (companion: Companion) => {
         router.push({
@@ -163,6 +176,8 @@ export default function Companions() {
                 name: companion.name,
                 relation: companion.relation,
                 phone: companion.phone,
+                intro: companion.intro,
+                profileImage: companion.profileImage,
                 status: companion.status,
                 permissions: companion.permissions.join(','),
             },
@@ -202,9 +217,13 @@ export default function Companions() {
                     >
                         <View style={styles.avatarCircle}>
                             <Image
-                                source={require('../../assets/images/icon_companion.png')}
-                                style={styles.avatarImage}
-                                resizeMode="contain"
+                                source={
+                                    companion.profileImage
+                                        ? { uri: companion.profileImage }
+                                        : require('../../assets/images/icon_companion.png')
+                                }
+                                style={companion.profileImage ? styles.avatarImageFilled : styles.avatarImage}
+                                resizeMode={companion.profileImage ? 'cover' : 'contain'}
                             />
                         </View>
 
@@ -345,6 +364,12 @@ const styles = StyleSheet.create({
     avatarImage: {
         width: 40,
         height: 40,
+    },
+
+    avatarImageFilled: {
+        width: 58,
+        height: 58,
+        borderRadius: 29,
     },
 
     companionInfo: {

@@ -269,6 +269,17 @@ export type CompanionChild = {
     gender: string;
     birth_date: string;
     disability_type: string;
+    explanation_styles?: string[];
+    communication_styles?: string[];
+    caution_situations?: string[];
+    required_actions?: string;
+    difficult_environments?: string[];
+    difficult_places?: string[];
+    transition_difficulties?: string[];
+    notice_time?: string;
+    calming_methods?: string[];
+    avoid_behaviors?: string;
+    profile_image_url?: string | null;
     character_image_url?: CharacterImages | null;
     character_name?: string | null;
     character_tone?: CharacterTone | null;
@@ -313,6 +324,11 @@ export type LinkedCompanion = {
     request_id: string;
     companion_id: string;
     companion_name: string;
+    companion_phone?: string | null;
+    companion_intro?: string | null;
+    companion_relation?: string | null;
+    companion_job?: string | null;
+    companion_profile_image_url?: string | null;
     relation?: string | null;
     permissions?: string[];
     created_at: string;
@@ -615,10 +631,20 @@ export const login = async (body: {
         body.password === MOCK_PARENT_LOGIN.password;
 
     if (!isMockParent) {
-        const response = await apiRequest<AuthData>('/api/auth/login', {
-            method: 'POST',
-            body: JSON.stringify(body),
-        });
+        let response: ApiSuccess<AuthData>;
+
+        try {
+            response = await apiRequest<AuthData>('/api/auth/login', {
+                method: 'POST',
+                body: JSON.stringify(body),
+            });
+        } catch (error) {
+            if (error instanceof ApiError && error.status === 422) {
+                throw new ApiError('이메일 형식에 오류가 있어요.', error.status);
+            }
+
+            throw error;
+        }
 
         if (response.data?.token && response.data.user) {
             await setAuthSession(response.data.token, response.data.user);

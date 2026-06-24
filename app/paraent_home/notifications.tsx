@@ -13,11 +13,6 @@ import {
 } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
-import {
-    getCompanionRequestNotification,
-    isCompanionRequestNotificationApproved,
-    markParentNotificationsRead,
-} from '../../constants/NotificationState';
 
 type NotificationItem = {
     id: string;
@@ -31,34 +26,6 @@ type NotificationItem = {
     notificationId?: string;
     requestId?: string;
 };
-
-const notifications: NotificationItem[] = [
-    {
-        id: 'mock-companion-request',
-        title: '동행인 승인 요청',
-        message: '박민지님이 김월동 어린이의 동행인 권한을 요청했어요.',
-        time: '방금 전',
-        type: 'companion_request',
-        unread: true,
-        companionName: '박민지',
-    },
-    {
-        id: 'mock-schedule',
-        title: '오늘 일정 확인',
-        message: '병원 일정이 아직 남아 있어요.',
-        time: '20분 전',
-        type: 'schedule',
-        unread: false,
-    },
-    {
-        id: 'mock-handoff',
-        title: '주의사항',
-        message: '아이에게 전달할 자료를 다시 확인해주세요.',
-        time: '1시간 전',
-        type: 'handoff',
-        unread: false,
-    },
-];
 
 const formatTime = (value: string) => {
     const created = new Date(value).getTime();
@@ -109,14 +76,12 @@ const mapInviteRequest = (request: InviteRequest): NotificationItem => ({
 });
 
 export default function Notifications() {
-    const [visibleNotifications, setVisibleNotifications] = useState<NotificationItem[]>(notifications);
+    const [visibleNotifications, setVisibleNotifications] = useState<NotificationItem[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [loadError, setLoadError] = useState('');
 
     useFocusEffect(
         useCallback(() => {
-            markParentNotificationsRead();
-
             let active = true;
 
             const loadNotifications = async () => {
@@ -133,26 +98,12 @@ export default function Notifications() {
 
                     const apiNotifications = notificationResponse.data ?? [];
                     const apiRequests = requestResponse.data ?? [];
-                    const requestMap = new Map(apiRequests.map((request) => [
-                        `${request.companion_name}-${request.child_id}`,
-                        request,
-                    ]));
-                    const requestKeys = new Set(apiNotifications.map((notification) => (
-                        `${notification.sender_name}-${notification.child_id}`
-                    )));
-                    const requestNotifications = apiRequests
-                        .filter((request) => !requestKeys.has(`${request.companion_name}-${request.child_id}`))
-                        .map(mapInviteRequest);
+                    const requestNotifications = apiRequests.map(mapInviteRequest);
                     const nextNotifications = [
                         ...requestNotifications,
-                        ...apiNotifications.map((notification) => {
-                            const item = mapNotification(notification);
-                            const matchedRequest = requestMap.get(`${notification.sender_name}-${notification.child_id}`);
-
-                            return matchedRequest && notification.type === 'companion_request'
-                                ? { ...item, requestId: matchedRequest.request_id }
-                                : item;
-                        }),
+                        ...apiNotifications
+                            .filter((notification) => notification.type !== 'companion_request')
+                            .map(mapNotification),
                     ];
 
                     setVisibleNotifications(nextNotifications);
@@ -165,22 +116,7 @@ export default function Notifications() {
                 } catch (error) {
                     if (!active) return;
 
-                    const companionRequest = getCompanionRequestNotification();
-                    const currentNotifications = notifications.map((notification) => (
-                        notification.type === 'companion_request'
-                            ? {
-                                ...notification,
-                                message: `${companionRequest.companionName}님이 ${companionRequest.childName} 어린이의 동행인 권한을 요청했어요.`,
-                                companionName: companionRequest.companionName,
-                            }
-                            : notification
-                    )).filter((notification) => {
-                        if (notification.type !== 'companion_request') return true;
-
-                        return !isCompanionRequestNotificationApproved(notification.companionName ?? '');
-                    });
-
-                    setVisibleNotifications(currentNotifications);
+                    setVisibleNotifications([]);
                     setLoadError(error instanceof Error ? error.message : '알림을 불러오지 못했어요.');
                 } finally {
                     if (active) setIsLoading(false);
@@ -212,6 +148,7 @@ export default function Notifications() {
                     notificationId: notification.notificationId ?? '',
                     companionName: notification.companionName ?? '',
                     childId: notification.childId ?? '',
+                    requestMessage: notification.message,
                 },
             } as any);
         }
@@ -245,7 +182,7 @@ export default function Notifications() {
                     <Text style={styles.statusText}>알림을 불러오는 중이에요.</Text>
                 ) : null}
                 {loadError ? (
-                    <Text style={styles.statusText}>목데이터로 알림을 보여주고 있어요.</Text>
+                    <Text style={styles.statusText}>알림을 불러오지 못했어요. 잠시 후 다시 확인해주세요.</Text>
                 ) : null}
                 {visibleNotifications.map((notification) => (
                     <Pressable

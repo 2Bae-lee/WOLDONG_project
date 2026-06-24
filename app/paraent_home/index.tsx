@@ -30,7 +30,6 @@ import {
 } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
-import { hasUnreadParentNotifications } from '../../constants/NotificationState';
 import { RepeatDate, parseRepeatDates } from '../../constants/Recurrence';
 
 type ScheduleItem = {
@@ -281,9 +280,7 @@ export default function ParentHome() {
     const [editCompanion, setEditCompanion] = useState(companionOptions[0]);
     const [editTodos, setEditTodos] = useState<ScheduleTodo[]>([]);
     const [editTodoText, setEditTodoText] = useState('');
-    const [hasUnreadNotifications, setHasUnreadNotifications] = useState(() => (
-        hasUnreadParentNotifications()
-    ));
+    const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
     const selectedCalendarEvents = calendarEvents.filter((event) => (
         event.year === calendarYear &&
         event.month === calendarMonth &&
@@ -293,8 +290,6 @@ export default function ParentHome() {
 
     useFocusEffect(
         useCallback(() => {
-            setHasUnreadNotifications(hasUnreadParentNotifications());
-
             let active = true;
 
             const loadUnreadNotifications = async () => {
@@ -314,7 +309,7 @@ export default function ParentHome() {
                     setHasUnreadNotifications(hasUnreadApiNotifications || hasPendingRequests);
                 } catch {
                     if (active) {
-                        setHasUnreadNotifications(hasUnreadParentNotifications());
+                        setHasUnreadNotifications(false);
                     }
                 }
             };
@@ -1097,7 +1092,9 @@ export default function ParentHome() {
                                                     : '',
                                                 checkedItems: JSON.stringify([
                                                     `일정_${selectedStoryEvent.title}`,
-                                                    ...selectedStoryEvent.todos.map((todo) => `체크_${todo.text}`),
+                                                    ...selectedStoryEvent.todos
+                                                        .filter((todo) => !todo.done)
+                                                        .map((todo) => `체크_${todo.text}`),
                                                 ]),
                                             },
                                         } as any)

@@ -234,17 +234,29 @@ async def get_companions(child_id: str, user: User = Depends(parent_only)):
         CompanionRequest.status == RequestStatus.approved
     ).to_list()
 
-    return success([
-        {
+    result = []
+    for c in companions:
+        companion = None
+        try:
+            companion = await User.get(PydanticObjectId(c.companion_id))
+        except Exception:
+            companion = None
+
+        result.append({
             "request_id": str(c.id),
             "companion_id": c.companion_id,
-            "companion_name": c.companion_name,
-            "relation": c.relation,
+            "companion_name": companion.name if companion else c.companion_name,
+            "companion_phone": companion.phone if companion else None,
+            "companion_intro": companion.intro if companion else None,
+            "companion_relation": companion.relation if companion else None,
+            "companion_job": companion.job if companion else None,
+            "companion_profile_image_url": companion.profile_image_url if companion else None,
+            "relation": c.relation or (companion.job if companion else None) or (companion.relation if companion else None),
             "permissions": c.permissions,
             "created_at": str(c.created_at)
-        }
-        for c in companions
-    ])
+        })
+
+    return success(result)
 
 
 # DELETE /api/invite/companions/{child_id}/{companion_id} - 동행인 권한 철회 (부모 전용)

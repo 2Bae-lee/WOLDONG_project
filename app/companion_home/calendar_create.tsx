@@ -317,6 +317,7 @@ export default function CompanionHomeCalendarCreate() {
                                     month: selectedMonth,
                                     day: calendarDay.day,
                                 }));
+                                const highlighted = repeatOption !== 'custom' && selected;
 
                                 return (
                                     <Pressable
@@ -324,14 +325,14 @@ export default function CompanionHomeCalendarCreate() {
                                         style={[
                                             styles.dayCell,
                                             repeated && styles.dayCellRepeated,
-                                            selected && styles.dayCellSelected,
+                                            highlighted && styles.dayCellSelected,
                                         ]}
                                         onPress={() => selectCalendarDay(calendarDay)}
                                     >
                                         <Text style={[
                                             styles.dayText,
                                             muted && styles.dayTextMuted,
-                                            selected && styles.dayTextSelected,
+                                            highlighted && styles.dayTextSelected,
                                         ]}>
                                             {calendarDay.day}
                                         </Text>

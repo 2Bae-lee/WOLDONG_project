@@ -37,6 +37,8 @@ type ChildItem = {
     childId?: string;
     primaryScheduleId?: string;
     name: string;
+    profileImage?: string;
+    profileSections?: string;
     characterImages?: CompanionChild['character_image_url'];
     guardian: string;
     schedules: number;
@@ -80,6 +82,24 @@ const createNumericId = (value: string) => (
 const getSchedulePlace = (schedule: TodayScheduleSummary) => (
     schedule.destination || schedule.place_type || '장소 확인'
 );
+
+const splitRequiredActions = (value?: string) => (
+    value ? value.split(',').map((item) => item.trim()).filter(Boolean) : []
+);
+
+const serializeChildProfileSections = (child: CompanionChild) => JSON.stringify([
+    { id: 'info', title: '공유 정보', items: [child.disability_type].filter(Boolean) },
+    { id: 'guidance', title: '설명 방식', items: child.explanation_styles ?? [] },
+    { id: 'communication', title: '의사소통 방식', items: child.communication_styles ?? [] },
+    { id: 'danger', title: '외출 중 주의 상황', items: child.caution_situations ?? [] },
+    { id: 'companion', title: '동행인이 해야 할 행동', items: splitRequiredActions(child.required_actions) },
+    { id: 'sensory', title: '힘들어하는 환경', items: child.difficult_environments ?? [] },
+    { id: 'place', title: '힘들어하는 장소', items: child.difficult_places ?? [] },
+    { id: 'schedule', title: '어려운 일정 변화', items: child.transition_difficulties ?? [] },
+    { id: 'notice', title: '미리 알림 시간', items: child.notice_time ? [child.notice_time] : [] },
+    { id: 'calming', title: '도움이 되는 것', items: child.calming_methods ?? [] },
+    { id: 'avoid', title: '피해야 할 행동', items: child.avoid_behaviors ? [child.avoid_behaviors] : [] },
+]);
 
 const mapTodaySchedules = (
     schedules: TodayScheduleSummary[],
@@ -278,6 +298,8 @@ export default function CompanionChildren() {
                 childId: child.child_id,
                 primaryScheduleId: primaryScheduleByChildId.get(child.child_id),
                 name: child.name,
+                profileImage: child.profile_image_url ?? '',
+                profileSections: serializeChildProfileSections(child),
                 characterImages: child.character_image_url,
                 guardian: '연결된 보호자',
                 schedules: scheduleCountByChildId.get(child.child_id) ?? 0,
@@ -563,6 +585,8 @@ export default function CompanionChildren() {
                 childId: child.childId ?? child.id,
                 scheduleId: child.primaryScheduleId ?? '',
                 childName: child.name,
+                profileImage: child.profileImage ?? '',
+                profileSections: child.profileSections ?? '',
                 guardian: child.guardian,
                 characterImages: child.characterImages ? JSON.stringify(child.characterImages) : '',
             },
@@ -932,9 +956,13 @@ export default function CompanionChildren() {
                                         >
                                             <View style={styles.avatarCircle}>
                                                 <Image
-                                                    source={require('../../assets/images/icon_child.png')}
-                                                    style={styles.avatarImage}
-                                                    resizeMode="contain"
+                                                    source={
+                                                        child.profileImage
+                                                            ? { uri: child.profileImage }
+                                                            : require('../../assets/images/icon_child.png')
+                                                    }
+                                                    style={child.profileImage ? styles.avatarImageFilled : styles.avatarImage}
+                                                    resizeMode={child.profileImage ? 'cover' : 'contain'}
                                                 />
                                             </View>
 
@@ -1515,6 +1543,12 @@ const styles = StyleSheet.create({
     avatarImage: {
         width: 44,
         height: 44,
+    },
+
+    avatarImageFilled: {
+        width: 62,
+        height: 62,
+        borderRadius: 31,
     },
 
     childInfo: {

@@ -5,7 +5,13 @@ import BackButton from '../../components/BackButton';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 
-const profileSections = [
+type ProfileSection = {
+    id?: string;
+    title: string;
+    items: string[];
+};
+
+const fallbackProfileSections: ProfileSection[] = [
     {
         title: '설명 방식',
         items: ['짧고 쉬운 문장', '그림/사진 활용', '선택지 질문'],
@@ -32,9 +38,37 @@ const profileSections = [
     },
 ];
 
+const parseProfileSections = (value?: string): ProfileSection[] => {
+    if (!value) return fallbackProfileSections;
+
+    try {
+        const parsed = JSON.parse(value);
+        if (!Array.isArray(parsed)) return fallbackProfileSections;
+
+        const sections = parsed
+            .filter((section) => typeof section?.title === 'string' && Array.isArray(section?.items))
+            .map((section) => ({
+                id: typeof section.id === 'string' ? section.id : section.title,
+                title: section.title,
+                items: section.items.filter((item: unknown) => typeof item === 'string' && item.trim()),
+            }))
+            .filter((section) => section.items.length > 0);
+
+        return sections.length > 0 ? sections : fallbackProfileSections;
+    } catch {
+        return fallbackProfileSections;
+    }
+};
+
 export default function CompanionChildProfile() {
-    const params = useLocalSearchParams<{ childName?: string }>();
+    const params = useLocalSearchParams<{
+        childName?: string;
+        profileImage?: string;
+        profileSections?: string;
+    }>();
     const childName = params.childName || '김월동';
+    const profileImage = params.profileImage || '';
+    const profileSections = parseProfileSections(params.profileSections);
 
     return (
         <ScrollView
@@ -62,9 +96,13 @@ export default function CompanionChildProfile() {
             <View style={styles.profileCard}>
                 <View style={styles.avatarFrame}>
                     <Image
-                        source={require('../../assets/images/icon_child.png')}
-                        style={styles.defaultProfileImage}
-                        resizeMode="contain"
+                        source={
+                            profileImage
+                                ? { uri: profileImage }
+                                : require('../../assets/images/icon_child.png')
+                        }
+                        style={profileImage ? styles.profileImage : styles.defaultProfileImage}
+                        resizeMode={profileImage ? 'cover' : 'contain'}
                     />
                 </View>
                 <Text style={styles.childName}>{childName}</Text>
@@ -178,6 +216,12 @@ const styles = StyleSheet.create({
     defaultProfileImage: {
         width: 82,
         height: 82,
+    },
+
+    profileImage: {
+        width: 112,
+        height: 112,
+        borderRadius: 56,
     },
 
     childName: {

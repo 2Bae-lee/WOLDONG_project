@@ -3,6 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
+    Alert,
     Image,
     Keyboard,
     KeyboardAvoidingView,
@@ -18,9 +19,10 @@ import {
 } from 'react-native';
 import BackButton from '../../components/BackButton';
 import PrimaryButton from '../../components/PrimaryButton';
-import { getCompanionProfile, updateCompanionProfile } from '../../constants/Api';
+import { getCompanionProfile, logout, updateCompanionProfile } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
+import { toShareableImageUri } from '../../constants/ImagePicker';
 
 const jobOptions = [
     { label: '담임 선생님', description: '학교 일정과 생활 정보를 함께 확인해요.' },
@@ -88,10 +90,11 @@ export default function CompanionProfileSetup() {
             allowsEditing: true,
             aspect: [1, 1],
             quality: 0.8,
+            base64: true,
         });
 
         if (!result.canceled) {
-            setProfileImage(result.assets[0].uri);
+            setProfileImage(toShareableImageUri(result.assets[0]));
         }
     };
 
@@ -140,6 +143,25 @@ export default function CompanionProfileSetup() {
         } finally {
             setIsSaving(false);
         }
+    };
+
+    const performLogout = async () => {
+        try {
+            await logout();
+        } finally {
+            router.replace('/login' as any);
+        }
+    };
+
+    const confirmLogout = () => {
+        Alert.alert(
+            '로그아웃',
+            '정말 로그아웃할까요?',
+            [
+                { text: '취소', style: 'cancel' },
+                { text: '로그아웃', style: 'destructive', onPress: () => void performLogout() },
+            ]
+        );
     };
 
     return (
@@ -252,6 +274,9 @@ export default function CompanionProfileSetup() {
                             width="100%"
                             onPress={handleSave}
                         />
+                        <Pressable onPress={confirmLogout} hitSlop={10}>
+                            <Text style={styles.logoutText}>로그아웃</Text>
+                        </Pressable>
                     </View>
                 </ScrollView>
             </TouchableWithoutFeedback>
@@ -612,5 +637,14 @@ const styles = StyleSheet.create({
 
     buttonArea: {
         marginTop: 'auto',
+    },
+
+    logoutText: {
+        marginTop: 16,
+        fontFamily: Fonts.body,
+        fontSize: 12,
+        color: Colors.textShadow,
+        textAlign: 'center',
+        textDecorationLine: 'underline',
     },
 });

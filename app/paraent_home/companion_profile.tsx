@@ -1,9 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../components/BackButton';
-import { deleteLinkedCompanion } from '../../constants/Api';
+import { deleteLinkedCompanion, getLinkedCompanions } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 
@@ -25,19 +25,55 @@ export default function CompanionProfile() {
         name?: string;
         relation?: string;
         phone?: string;
+        intro?: string;
+        profileImage?: string;
         status?: string;
         permissions?: string;
     }>();
 
-    const name = params.name || '동행인';
-    const relation = params.relation || '동행인';
-    const phone = params.phone || '010-1234-5678';
     const status = params.status || '아이 정보를 함께 확인할 수 있어요.';
+    const [name, setName] = useState(params.name || '동행인');
+    const [relation, setRelation] = useState(params.relation || '동행인');
+    const [phone, setPhone] = useState(params.phone || '010-1234-5678');
+    const [intro, setIntro] = useState(params.intro || '');
+    const [profileImage, setProfileImage] = useState(params.profileImage || '');
     const [permissions, setPermissions] = useState(() => parsePermissions(params.permissions));
     const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
     const [draftPermissions, setDraftPermissions] = useState<string[]>(permissions);
     const [isDeleting, setIsDeleting] = useState(false);
     const [errorText, setErrorText] = useState('');
+
+    useEffect(() => {
+        let active = true;
+
+        const loadCompanionProfile = async () => {
+            if (!params.childId || !params.companionId || params.companionId.startsWith('mock-')) return;
+
+            try {
+                const response = await getLinkedCompanions(params.childId);
+                if (!active) return;
+
+                const companion = response.data?.find((item) => item.companion_id === params.companionId);
+                if (!companion) return;
+
+                setName(companion.companion_name || '동행인');
+                setRelation(companion.companion_job || companion.companion_relation || companion.relation || '동행인');
+                setPhone(companion.companion_phone || '');
+                setIntro(companion.companion_intro || '');
+                setProfileImage(companion.companion_profile_image_url || '');
+                setPermissions(companion.permissions ?? []);
+                setDraftPermissions(companion.permissions ?? []);
+            } catch {
+                // 상세 화면은 넘어온 값으로라도 보여줍니다.
+            }
+        };
+
+        loadCompanionProfile();
+
+        return () => {
+            active = false;
+        };
+    }, [params.childId, params.companionId]);
 
     const openPermissionModal = () => {
         setDraftPermissions(permissions);
@@ -108,9 +144,13 @@ export default function CompanionProfile() {
             <View style={styles.profileCard}>
                 <View style={styles.avatarCircle}>
                     <Image
-                        source={require('../../assets/images/icon_companion.png')}
-                        style={styles.avatarImage}
-                        resizeMode="contain"
+                        source={
+                            profileImage
+                                ? { uri: profileImage }
+                                : require('../../assets/images/icon_companion.png')
+                        }
+                        style={profileImage ? styles.avatarImageFilled : styles.avatarImage}
+                        resizeMode={profileImage ? 'cover' : 'contain'}
                     />
                 </View>
 
@@ -122,6 +162,12 @@ export default function CompanionProfile() {
                         <Ionicons name="call-outline" size={17} color={Colors.textShadow} />
                         <Text style={styles.infoText}>{phone}</Text>
                     </View>
+                    {intro ? (
+                        <View style={styles.infoRow}>
+                            <Ionicons name="chatbubble-ellipses-outline" size={17} color={Colors.textShadow} />
+                            <Text style={styles.infoText}>{intro}</Text>
+                        </View>
+                    ) : null}
                     <View style={styles.infoRow}>
                         <Ionicons name="checkmark-circle" size={17} color={Colors.highlight1} />
                         <Text style={styles.infoText}>{status}</Text>
@@ -300,6 +346,12 @@ const styles = StyleSheet.create({
     avatarImage: {
         width: 58,
         height: 58,
+    },
+
+    avatarImageFilled: {
+        width: 86,
+        height: 86,
+        borderRadius: 43,
     },
 
     name: {

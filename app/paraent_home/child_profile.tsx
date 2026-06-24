@@ -3,6 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
+    Alert,
     Image,
     Keyboard,
     Modal,
@@ -20,10 +21,12 @@ import {
     ChildProfileUpdatePayload,
     getChildProfile,
     getParentHome,
+    logout,
     updateChildProfile,
 } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
+import { toShareableImageUri } from '../../constants/ImagePicker';
 
 type ProfileSection = {
     id: string;
@@ -255,10 +258,11 @@ export default function ParentChildProfile() {
             allowsEditing: true,
             aspect: [1, 1],
             quality: 0.9,
+            base64: true,
         });
 
         if (!result.canceled && result.assets[0]?.uri) {
-            setProfileImage(result.assets[0].uri);
+            setProfileImage(toShareableImageUri(result.assets[0]));
         }
     };
 
@@ -367,6 +371,25 @@ export default function ParentChildProfile() {
         } as any);
     };
 
+    const performLogout = async () => {
+        try {
+            await logout();
+        } finally {
+            router.replace('/login' as any);
+        }
+    };
+
+    const confirmLogout = () => {
+        Alert.alert(
+            '로그아웃',
+            '정말 로그아웃할까요?',
+            [
+                { text: '취소', style: 'cancel' },
+                { text: '로그아웃', style: 'destructive', onPress: () => void performLogout() },
+            ]
+        );
+    };
+
     return (
         <ScrollView
             style={styles.scrollView}
@@ -441,6 +464,9 @@ export default function ParentChildProfile() {
                     width="100%"
                     onPress={handleComplete}
                 />
+                <Pressable onPress={confirmLogout} hitSlop={10}>
+                    <Text style={styles.logoutText}>로그아웃</Text>
+                </Pressable>
             </View>
 
             <Modal
@@ -845,5 +871,14 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '900',
         color: Colors.text,
+    },
+
+    logoutText: {
+        marginTop: 16,
+        fontFamily: Fonts.body,
+        fontSize: 12,
+        color: Colors.textShadow,
+        textAlign: 'center',
+        textDecorationLine: 'underline',
     },
 });

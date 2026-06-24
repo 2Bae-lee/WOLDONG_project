@@ -236,14 +236,22 @@ async def get_schedules(user: User = Depends(get_current_user)):
         companion_name = None
         if s.companion_id:
             try:
-                req = await CompanionRequest.find_one(
-                    CompanionRequest.companion_id == s.companion_id,
-                    CompanionRequest.child_id == s.child_id
-                )
-                if req:
-                    companion_name = req.companion_name
+                companion = await User.get(PydanticObjectId(s.companion_id))
+                if companion:
+                    companion_name = companion.name
             except Exception:
-                pass
+                companion_name = None
+
+            if not companion_name:
+                try:
+                    req = await CompanionRequest.find_one(
+                        CompanionRequest.companion_id == s.companion_id,
+                        CompanionRequest.child_id == s.child_id
+                    )
+                    if req:
+                        companion_name = req.companion_name
+                except Exception:
+                    pass
 
         result.append({
             "schedule_id": str(s.id),

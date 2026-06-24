@@ -41,6 +41,13 @@ const parseCheckedItems = (value?: string) => {
     }
 };
 
+const getInfoItemLabel = (value: string) => (
+    value
+        .replace(/^일정_/, '일정: ')
+        .replace(/^체크_/, '준비할 일: ')
+        .replace(/^아동_주의_/, '주의사항: ')
+);
+
 const fallbackCharacterImage = require('../assets/images/mock_character.png');
 
 const parseCharacterImages = (value?: string): CharacterImages | null => {
@@ -66,6 +73,13 @@ const toImageSource = (value?: string): ImageSourcePropType | null => {
     return { uri: toApiAssetUrl(value) };
 };
 
+const characterFrameKeys: Array<keyof Pick<CharacterImages, 'idle' | 'mouth_open' | 'mouth_wide' | 'blink'>> = [
+    'idle',
+    'mouth_open',
+    'mouth_wide',
+    'blink',
+];
+
 export default function SocialStoryScreen() {
     const params = useLocalSearchParams<{
         scheduleId?: string;
@@ -76,6 +90,7 @@ export default function SocialStoryScreen() {
         characterImages?: string;
     }>();
     const checkedItems = useMemo(() => parseCheckedItems(params.checkedItems), [params.checkedItems]);
+    const [selectedInfoItems, setSelectedInfoItems] = useState<string[]>(checkedItems);
     const [script, setScript] = useState(
         params.script || (params.title ? `오늘은 ${params.title} 일정이 있어요.` : '오늘은 병원에 가요.')
     );
@@ -89,17 +104,17 @@ export default function SocialStoryScreen() {
     const audioStatus = useAudioPlayerStatus(audioPlayer);
     const characterFrames = useMemo(() => {
         const parsedImages = parseCharacterImages(params.characterImages);
-        const frameSources = [
-            toImageSource(parsedImages?.idle),
-            toImageSource(parsedImages?.mouth_open),
-            toImageSource(parsedImages?.mouth_wide),
-            toImageSource(parsedImages?.smile),
-            toImageSource(parsedImages?.blink),
-        ].filter((source): source is ImageSourcePropType => Boolean(source));
+        const frameSources = characterFrameKeys
+            .map((key) => toImageSource(parsedImages?.[key]))
+            .filter((source): source is ImageSourcePropType => Boolean(source));
 
         return frameSources.length > 0 ? frameSources : [fallbackCharacterImage];
     }, [params.characterImages]);
     const activeCharacterFrame = characterFrames[speakingFrameIndex % characterFrames.length];
+
+    useEffect(() => {
+        setSelectedInfoItems(checkedItems);
+    }, [checkedItems]);
 
     useEffect(() => {
         setAudioModeAsync({
@@ -156,13 +171,14 @@ export default function SocialStoryScreen() {
         setError('');
 
         try {
-            const response = params.scheduleId
+            const hasSelectableInfo = checkedItems.length > 0;
+            const response = params.scheduleId && !hasSelectableInfo
                 ? await generateScheduleSocialStory(params.scheduleId, {
                     script: trimmedScript,
                 })
                 : await generateSocialStoryTts({
                     script: trimmedScript,
-                    checked_items: checkedItems,
+                    checked_items: selectedInfoItems,
                     threshold: 0.5,
                 });
 
@@ -175,6 +191,14 @@ export default function SocialStoryScreen() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const toggleInfoItem = (item: string) => {
+        setSelectedInfoItems((current) => (
+            current.includes(item)
+                ? current.filter((selectedItem) => selectedItem !== item)
+                : [...current, item]
+        ));
     };
 
     const toggleAudio = async () => {
@@ -252,10 +276,23 @@ export default function SocialStoryScreen() {
                         <Text style={styles.sectionTitle}>반영할 정보</Text>
                         <View style={styles.infoCard}>
                             {checkedItems.map((item) => (
-                                <View key={item} style={styles.infoRow}>
-                                    <Ionicons name="checkmark-circle" size={17} color={Colors.highlight1} />
-                                    <Text style={styles.infoText}>{item}</Text>
-                                </View>
+                                <Pressable
+                                    key={item}
+                                    style={styles.infoRow}
+                                    onPress={() => toggleInfoItem(item)}
+                                >
+                                    <Ionicons
+                                        name={selectedInfoItems.includes(item) ? 'checkmark-circle' : 'ellipse-outline'}
+                                        size={18}
+                                        color={selectedInfoItems.includes(item) ? Colors.highlight1 : Colors.textShadow}
+                                    />
+                                    <Text style={[
+                                        styles.infoText,
+                                        !selectedInfoItems.includes(item) && styles.infoTextMuted,
+                                    ]}>
+                                        {getInfoItemLabel(item)}
+                                    </Text>
+                                </Pressable>
                             ))}
                         </View>
                     </View>
@@ -276,10 +313,7 @@ export default function SocialStoryScreen() {
                         <View style={styles.characterStage}>
                             <Image
                                 source={activeCharacterFrame}
-                                style={[
-                                    styles.characterImage,
-                                    isSpeaking && speakingFrameIndex % 2 === 1 ? styles.characterImageSpeaking : null,
-                                ]}
+                                style={styles.characterImage}
                                 resizeMode="contain"
                             />
                         </View>
@@ -435,6 +469,10 @@ const styles = StyleSheet.create({
         color: Colors.text,
     },
 
+    infoTextMuted: {
+        color: Colors.textShadow,
+    },
+
     errorText: {
         fontFamily: Fonts.body,
         fontSize: 14,
@@ -471,13 +509,8 @@ const styles = StyleSheet.create({
     },
 
     characterImage: {
-        width: '86%',
-        height: '86%',
-    },
-
-    characterImageSpeaking: {
-        transform: [{ scale: 1.035 }],
-        opacity: 0.94,
+        width: 198,
+        height: 198,
     },
 
     resultScript: {

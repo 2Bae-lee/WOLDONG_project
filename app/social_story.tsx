@@ -95,18 +95,10 @@ export default function SocialStoryScreen() {
             toImageSource(parsedImages?.mouth_wide),
             toImageSource(parsedImages?.smile),
             toImageSource(parsedImages?.blink),
-<<<<<<< HEAD
         ].filter((source): source is ImageSourcePropType => Boolean(source));
 
         return frameSources.length > 0 ? frameSources : [fallbackCharacterImage];
     }, [params.characterImages]);
-=======
-            toImageSource(params.profileImage),
-        ].filter((source): source is ImageSourcePropType => Boolean(source));
-
-        return frameSources.length > 0 ? frameSources : [fallbackCharacterImage];
-    }, [params.characterImages, params.profileImage]);
->>>>>>> da7b275d55ecf9a8753643274a3d16dbe4758344
     const activeCharacterFrame = characterFrames[speakingFrameIndex % characterFrames.length];
 
     useEffect(() => {

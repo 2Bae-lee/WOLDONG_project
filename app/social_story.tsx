@@ -4,7 +4,6 @@ import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
     Image,
-    ImageSourcePropType,
     Keyboard,
     KeyboardAvoidingView,
     Platform,
@@ -19,7 +18,6 @@ import BackButton from '../components/BackButton';
 import PrimaryButton from '../components/PrimaryButton';
 import {
     ApiError,
-    CharacterImages,
     CharacterSpeed,
     CharacterTone,
     CharacterVoice,
@@ -51,126 +49,6 @@ const getInfoItemLabel = (value: string) => (
         .replace(/^아동_주의_/, '주의사항: ')
 );
 
-const fallbackCharacterImage = require('../assets/images/mock_character.png');
-
-const isRecord = (value: unknown): value is Record<string, unknown> => (
-    Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-);
-
-const getFrameValue = (value: unknown) => {
-    if (typeof value === 'string' && value.trim()) return value;
-    if (!isRecord(value)) return '';
-
-    const candidateKeys = [
-        'url',
-        'uri',
-        'image_url',
-        'imageUrl',
-        'frame_url',
-        'frameUrl',
-        'src',
-        'path',
-        'image',
-    ];
-
-    for (const key of candidateKeys) {
-        const candidate = value[key];
-        if (typeof candidate === 'string' && candidate.trim()) return candidate;
-    }
-
-    return '';
-};
-
-const normalizeCharacterImages = (payload: unknown): CharacterImages | null => {
-    if (Array.isArray(payload)) {
-        const frames = payload.map(getFrameValue).filter(Boolean);
-        if (!frames.length) return null;
-
-        const [idle, mouthOpen, mouthWide, blink, smile] = frames;
-
-        return {
-            idle,
-            mouth_open: mouthOpen,
-            mouth_wide: mouthWide,
-            blink,
-            smile,
-        };
-    }
-
-    if (!isRecord(payload)) return null;
-
-    const idle = getFrameValue(payload.idle ?? payload.default ?? payload.neutral ?? payload.frame_0 ?? payload.image_0);
-    const mouthOpen = getFrameValue(
-        payload.mouth_open ?? payload.mouthOpen ?? payload.open ?? payload.talking ?? payload.speaking ?? payload.frame_1 ?? payload.image_1
-    );
-    const mouthWide = getFrameValue(
-        payload.mouth_wide ?? payload.mouthWide ?? payload.wide ?? payload.talking_wide ?? payload.frame_2 ?? payload.image_2
-    );
-    const blink = getFrameValue(payload.blink ?? payload.blinking ?? payload.eyes_closed ?? payload.frame_3 ?? payload.image_3);
-    const smile = getFrameValue(payload.smile ?? payload.smiling ?? payload.happy ?? payload.frame_4 ?? payload.image_4);
-    const firstFrame = idle || mouthOpen || mouthWide || blink || smile;
-
-    if (firstFrame) {
-        return {
-            idle: idle || firstFrame,
-            mouth_open: mouthOpen,
-            mouth_wide: mouthWide,
-            blink,
-            smile,
-        };
-    }
-
-    const nestedKeys = [
-        'frames',
-        'frame_urls',
-        'frameUrls',
-        'images',
-        'image_urls',
-        'imageUrls',
-        'character_images',
-        'characterImages',
-        'character_frames',
-        'characterFrames',
-        'data',
-        'result',
-    ];
-
-    for (const key of nestedKeys) {
-        const nestedImages = normalizeCharacterImages(payload[key]);
-        if (nestedImages) return nestedImages;
-    }
-
-    return null;
-};
-
-const parseCharacterImages = (value?: string): CharacterImages | null => {
-    if (!value) return null;
-
-    try {
-        return normalizeCharacterImages(JSON.parse(value));
-    } catch {
-        return null;
-    }
-};
-
-const toImageSource = (value?: string): ImageSourcePropType | null => {
-    if (!value) return null;
-
-    if (/^(data:|https?:\/\/|file:\/\/)/.test(value)) {
-        return { uri: value };
-    }
-
-    return { uri: toApiAssetUrl(value) };
-};
-
-const characterFrameKeys: Array<keyof CharacterImages> = [
-    'idle',
-    'mouth_open',
-    'mouth_wide',
-    'blink',
-    'smile',
-];
-
 export default function SocialStoryScreen() {
     const params = useLocalSearchParams<{
         scheduleId?: string;
@@ -192,19 +70,9 @@ export default function SocialStoryScreen() {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
-    const [speakingFrameIndex, setSpeakingFrameIndex] = useState(0);
     const audioUrl = toApiAssetUrl(result?.audio_url);
     const audioPlayer = useAudioPlayer(null, { updateInterval: 250 });
     const audioStatus = useAudioPlayerStatus(audioPlayer);
-    const characterFrames = useMemo(() => {
-        const parsedImages = parseCharacterImages(params.characterImages);
-        const frameSources = characterFrameKeys
-            .map((key) => toImageSource(parsedImages?.[key]))
-            .filter((source): source is ImageSourcePropType => Boolean(source));
-
-        return frameSources.length > 0 ? frameSources : [fallbackCharacterImage];
-    }, [params.characterImages]);
-    const activeCharacterFrame = characterFrames[speakingFrameIndex % characterFrames.length];
 
     useEffect(() => {
         setSelectedInfoItems(checkedItems);
@@ -237,21 +105,6 @@ export default function SocialStoryScreen() {
             setIsSpeaking(false);
         }
     }, [audioStatus.didJustFinish, audioStatus.playing]);
-
-    useEffect(() => {
-        if (!isSpeaking) {
-            setSpeakingFrameIndex(0);
-            return undefined;
-        }
-
-        const frameTimer = setInterval(() => {
-            setSpeakingFrameIndex((current) => current + 1);
-        }, 220);
-
-        return () => {
-            clearInterval(frameTimer);
-        };
-    }, [isSpeaking]);
 
     const generateStory = async () => {
         const trimmedScript = script.trim();
@@ -410,13 +263,13 @@ export default function SocialStoryScreen() {
                     <View style={styles.resultCard}>
                         <Text style={styles.resultTitle}>완성된 이야기</Text>
 
-                        <View style={styles.characterStage}>
+                        {result.story_images?.[0] ? (
                             <Image
-                                source={activeCharacterFrame}
-                                style={styles.characterImage}
-                                resizeMode="contain"
+                                source={{ uri: toApiAssetUrl(result.story_images[0]) }}
+                                style={styles.storyImage}
+                                resizeMode="cover"
                             />
-                        </View>
+                        ) : null}
                         <Text style={styles.resultScript}>{result.converted_script}</Text>
 
                         {result.predicted_warnings?.length ? (
@@ -598,19 +451,12 @@ const styles = StyleSheet.create({
         marginBottom: 12,
     },
 
-    characterStage: {
-        height: 230,
+    storyImage: {
+        width: '100%',
+        aspectRatio: 1,
         borderRadius: 14,
         backgroundColor: Colors.pageBg,
-        alignItems: 'center',
-        justifyContent: 'center',
-        overflow: 'hidden',
         marginBottom: 16,
-    },
-
-    characterImage: {
-        width: 198,
-        height: 198,
     },
 
     resultScript: {

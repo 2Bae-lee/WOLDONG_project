@@ -142,6 +142,9 @@ export type TodayScheduleSummary = {
     preparations?: string[];
     status: 'upcoming' | 'ongoing' | 'done' | string;
     child_id: string;
+    companion_id?: string | null;
+    companion_name?: string | null;
+    checklist?: ScheduleChecklistItem[];
 };
 
 export type SchedulePayload = {
@@ -298,7 +301,7 @@ export type CompanionChild = {
 
 export type ParentNotification = {
     notification_id: string;
-    type: 'companion_request' | 'request_approved' | 'request_rejected' | 'emergency' | string;
+    type: 'companion_request' | 'request_approved' | 'request_rejected' | 'emergency' | 'journal' | string;
     message: string;
     sender_name: string;
     child_id: string;
@@ -310,7 +313,13 @@ export type ChildNotification = Omit<ParentNotification, 'child_id'>;
 
 export type InviteRequest = {
     request_id: string;
+    companion_id?: string;
     companion_name: string;
+    companion_phone?: string | null;
+    companion_intro?: string | null;
+    companion_relation?: string | null;
+    companion_job?: string | null;
+    companion_profile_image_url?: string | null;
     child_id: string;
     relation?: string | null;
     permissions?: string[];

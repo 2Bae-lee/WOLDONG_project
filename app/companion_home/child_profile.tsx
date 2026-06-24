@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../components/BackButton';
+import { normalizeChildProfileLabels } from '../../constants/ChildProfileLabels';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 
@@ -50,7 +51,9 @@ const parseProfileSections = (value?: string): ProfileSection[] => {
             .map((section) => ({
                 id: typeof section.id === 'string' ? section.id : section.title,
                 title: section.title,
-                items: section.items.filter((item: unknown) => typeof item === 'string' && item.trim()),
+                items: normalizeChildProfileLabels(
+                    section.items.filter((item: unknown) => typeof item === 'string' && item.trim())
+                ),
             }))
             .filter((section) => section.items.length > 0);
 

@@ -23,10 +23,17 @@ export default function NotificationRequest() {
         companionName?: string;
         childId?: string;
         requestMessage?: string;
+        companionPhone?: string;
+        companionIntro?: string;
+        companionRelation?: string;
+        companionProfileImage?: string;
     }>();
     const companionName = params.companionName || '동행인';
     const requestMessage = params.requestMessage || `${companionName}님이 아동 연결을 요청했어요.`;
-    const [selectedRelation, setSelectedRelation] = useState('담임 선생님');
+    const companionPhone = params.companionPhone || '연락처는 회원가입 정보에서 확인돼요';
+    const companionIntro = params.companionIntro || '';
+    const companionProfileImage = params.companionProfileImage || '';
+    const [selectedRelation, setSelectedRelation] = useState(params.companionRelation || '담임 선생님');
     const [selectedPermissions, setSelectedPermissions] = useState([
         '아이 프로필',
         '오늘 일정',
@@ -71,10 +78,7 @@ export default function NotificationRequest() {
             router.replace({
                 pathname: '/paraent_home/companions',
                 params: {
-                    acceptedName: companionName,
-                    acceptedRelation: selectedRelation,
-                    acceptedPhone: '010-1234-5678',
-                    acceptedPermissions: selectedPermissions.join(','),
+                    childId: params.childId ?? '',
                 },
             } as any);
         } catch (error) {
@@ -129,12 +133,17 @@ export default function NotificationRequest() {
 
                 <View style={styles.profileCard}>
                     <Image
-                        source={require('../../assets/images/icon_companion.png')}
-                        style={styles.profileImage}
-                        resizeMode="contain"
+                        source={
+                            companionProfileImage
+                                ? { uri: companionProfileImage }
+                                : require('../../assets/images/icon_companion.png')
+                        }
+                        style={companionProfileImage ? styles.profileImageFilled : styles.profileImage}
+                        resizeMode={companionProfileImage ? 'cover' : 'contain'}
                     />
                     <Text style={styles.name}>{companionName}</Text>
-                    <Text style={styles.info}>010-1234-5678</Text>
+                    <Text style={styles.info}>{companionPhone}</Text>
+                    {companionIntro ? <Text style={styles.intro}>{companionIntro}</Text> : null}
                     <Text style={styles.permissionText}>
                         승인 전 부모님이 이 동행인의 관계와 접근 권한을 정리할 수 있어요.
                     </Text>
@@ -289,6 +298,13 @@ const styles = StyleSheet.create({
         marginBottom: 14,
     },
 
+    profileImageFilled: {
+        width: 82,
+        height: 82,
+        borderRadius: 41,
+        marginBottom: 14,
+    },
+
     name: {
         fontFamily: Fonts.bodyBold,
         fontSize: 20,
@@ -347,6 +363,15 @@ const styles = StyleSheet.create({
         fontFamily: Fonts.body,
         fontSize: 14,
         color: Colors.textShadow,
+        marginBottom: 10,
+    },
+
+    intro: {
+        fontFamily: Fonts.body,
+        fontSize: 14,
+        lineHeight: 21,
+        color: Colors.text,
+        textAlign: 'center',
         marginBottom: 18,
     },
 

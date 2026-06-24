@@ -41,7 +41,7 @@ export default function MakeCharacterStory() {
         const trimmedStory = story.trim();
 
         if (!trimmedStory) {
-            setStoryError('아이에게 전하고 싶은 이야기를 입력해주세요.');
+            setStoryError('캐릭터 특징을 입력해주세요.');
             return;
         }
 
@@ -116,10 +116,10 @@ export default function MakeCharacterStory() {
 
                     <View style={styles.titleArea}>
                         <Text style={styles.title}>
-                            우리 아이에게 이야기를{'\n'}전달할 캐릭터를 만들어요!
+                            우리 아이에게 이야기를 전할{'\n'}캐릭터의 특징을 알려주세요!
                         </Text>
                         <Text style={styles.description}>
-                            우리 아이가 좋아하는 캐릭터가 어떤 말을 해주면 좋을까요?
+                            아이가 좋아할 캐릭터의 모습과 성격을 적어주세요.
                         </Text>
                     </View>
 
@@ -139,12 +139,12 @@ export default function MakeCharacterStory() {
                     </View>
 
                     <View style={styles.inputArea}>
-                        <Text style={styles.inputLabel}>전달할 이야기<RequiredMark /></Text>
+                        <Text style={styles.inputLabel}>캐릭터 특징<RequiredMark /></Text>
                         <TextInput
                             style={[styles.textArea, storyError ? styles.inputError : null]}
                             multiline
                             textAlignVertical="top"
-                            placeholder="ex) 지팡이를 든 공주"
+                            placeholder="ex) 지팡이를 든 다정한 공주, 천천히 웃으며 말해요"
                             placeholderTextColor={Colors.textShadow}
                             value={story}
                             onFocus={scrollToStoryInput}

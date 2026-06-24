@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
 import {
     Image,
     Keyboard,
@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import BackButton from '../../components/BackButton';
 import PrimaryButton from '../../components/PrimaryButton';
+import { LinkedCompanion, getLinkedCompanions, getParentHome } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 import {
@@ -27,6 +28,7 @@ import {
     scheduleFeatureTemplates,
     scheduleTypeFeatureMap,
 } from '../../constants/ScheduleFeatures';
+import { formatScheduleTimeInput, normalizeScheduleTimeInput } from '../../constants/ScheduleTimeInput';
 
 const scheduleTypes = [
     { label: '병원', description: '진료, 검사, 예방접종 일정' },
@@ -36,31 +38,19 @@ const scheduleTypes = [
     { label: '기타', description: '직접 정리해야 하는 일정' },
 ];
 
-const companions = [
-    {
-        name: '박민지',
-        relation: '담임 선생님',
-        description: '아이 프로필과 학교 관련 일정을 함께 확인해요.',
-    },
-    {
-        name: '이하늘',
-        relation: '활동지원사',
-        description: '외출 일정과 주의사항을 함께 확인해요.',
-    },
-    {
-        name: '최서윤',
-        relation: '치료사',
-        description: '치료 일정과 아이 반응 메모를 함께 확인해요.',
-    },
-];
-
 type SheetTarget = 'type' | 'companion' | null;
 
 export default function ScheduleAdd() {
+    const params = useLocalSearchParams<{
+        childId?: string;
+    }>();
     const today = useMemo(() => new Date(), []);
     const todayText = `${today.getMonth() + 1}월 ${today.getDate()}일`;
     const [selectedType, setSelectedType] = useState('');
     const [selectedCompanion, setSelectedCompanion] = useState('');
+    const [childId, setChildId] = useState(params.childId ?? '');
+    const [linkedCompanions, setLinkedCompanions] = useState<LinkedCompanion[]>([]);
+    const [startTime, setStartTime] = useState('00:00');
     const [scheduleTitle, setScheduleTitle] = useState('');
     const [memo, setMemo] = useState('');
     const [todos, setTodos] = useState<string[]>([]);
@@ -68,6 +58,7 @@ export default function ScheduleAdd() {
     const [selectedFeatureValues, setSelectedFeatureValues] = useState<string[]>([]);
     const [excludedFeatureValues, setExcludedFeatureValues] = useState<string[]>([]);
     const [error, setError] = useState('');
+    const [companionLoadError, setCompanionLoadError] = useState('');
     const [sheetTarget, setSheetTarget] = useState<SheetTarget>(null);
     const baseScheduleFeatureValues = useMemo(() => getUniqueScheduleFeatures(
         scheduleTypeFeatureMap[selectedType] ?? [],
@@ -79,6 +70,9 @@ export default function ScheduleAdd() {
     const selectedScheduleFeatureLabels = getScheduleFeatureLabels(selectedScheduleFeatureValues);
     const waitPossible = selectedScheduleFeatureValues.includes(SCHEDULE_FEATURE_WAIT);
     const crowdPossible = selectedScheduleFeatureValues.includes(SCHEDULE_FEATURE_CROWD);
+    const selectedCompanionOption = useMemo(() => (
+        linkedCompanions.find((companion) => companion.companion_id === selectedCompanion)
+    ), [linkedCompanions, selectedCompanion]);
 
     const clearError = () => {
         if (error) setError('');
@@ -96,14 +90,69 @@ export default function ScheduleAdd() {
     const sheetOptions = sheetTarget === 'type'
         ? scheduleTypes.map((option) => ({
             value: option.label,
+            label: option.label,
             description: option.description,
             badge: '',
+            profileImage: '',
         }))
-        : companions.map((option) => ({
-            value: option.name,
-            description: option.description,
-            badge: option.relation,
+        : linkedCompanions.map((option) => ({
+            value: option.companion_id,
+            label: option.companion_name,
+            description: option.permissions?.length
+                ? option.permissions.join(', ')
+                : '승인된 동행인이에요.',
+            badge: option.companion_job || option.companion_relation || option.relation || '승인됨',
+            profileImage: option.companion_profile_image_url || '',
         }));
+
+    useEffect(() => {
+        let active = true;
+
+        const loadLinkedCompanions = async () => {
+            setCompanionLoadError('');
+
+            try {
+                let nextChildId = params.childId ?? '';
+
+                if (!nextChildId) {
+                    const homeResponse = await getParentHome();
+                    nextChildId = homeResponse.data?.children?.[0]?.child_id ?? '';
+                }
+
+                if (!active) return;
+                setChildId(nextChildId);
+
+                if (!nextChildId) {
+                    setLinkedCompanions([]);
+                    setCompanionLoadError('아동 프로필을 먼저 등록해주세요.');
+                    return;
+                }
+
+                const companionsResponse = await getLinkedCompanions(nextChildId);
+                if (!active) return;
+
+                const nextCompanions = companionsResponse.data ?? [];
+                setLinkedCompanions(nextCompanions);
+                setSelectedCompanion((current) => (
+                    nextCompanions.some((companion) => companion.companion_id === current)
+                        ? current
+                        : ''
+                ));
+            } catch (loadError) {
+                if (!active) return;
+                setLinkedCompanions([]);
+                setCompanionLoadError(loadError instanceof Error
+                    ? loadError.message
+                    : '동행인 목록을 불러오지 못했어요.');
+            }
+        };
+
+        loadLinkedCompanions();
+
+        return () => {
+            active = false;
+        };
+    }, [params.childId]);
 
     const addTodo = () => {
         const trimmedText = todoText.trim();
@@ -158,8 +207,25 @@ export default function ScheduleAdd() {
     const handleSave = () => {
         const title = scheduleTitle.trim();
 
+        if (!childId) {
+            setError('아동 프로필을 먼저 등록해주세요.');
+            return;
+        }
+
         if (!selectedType || !selectedCompanion || !title) {
             setError('일정 종류, 동행인, 일정 이름을 모두 입력해주세요.');
+            return;
+        }
+
+        if (!selectedCompanionOption) {
+            setError('승인된 동행인을 다시 선택해주세요.');
+            return;
+        }
+
+        const normalizedStartTime = normalizeScheduleTimeInput(startTime);
+
+        if (!/^\d{2}:\d{2}$/.test(normalizedStartTime)) {
+            setError('출발 시간은 00:00처럼 HH:MM 형식으로 입력해주세요.');
             return;
         }
 
@@ -170,7 +236,9 @@ export default function ScheduleAdd() {
                 tab: 'today',
                 addedScheduleId: String(Date.now()),
                 addedScheduleTitle: title,
-                addedScheduleCompanion: selectedCompanion,
+                addedScheduleCompanionId: selectedCompanion,
+                addedScheduleCompanion: selectedCompanionOption.companion_name,
+                addedScheduleStartTime: normalizedStartTime,
                 addedScheduleTodos: JSON.stringify(todos),
                 addedScheduleFeatures: JSON.stringify(selectedScheduleFeatureValues),
             },
@@ -238,10 +306,14 @@ export default function ScheduleAdd() {
                     <Text style={styles.sectionTitle}>동행인 선택</Text>
                     <Pressable style={styles.selectField} onPress={() => setSheetTarget('companion')}>
                         <View style={styles.selectFieldLeft}>
-                            {selectedCompanion ? (
+                            {selectedCompanionOption ? (
                                 <View style={styles.companionAvatarSmall}>
                                     <Image
-                                        source={require('../../assets/images/icon_companion.png')}
+                                        source={
+                                            selectedCompanionOption.companion_profile_image_url
+                                                ? { uri: selectedCompanionOption.companion_profile_image_url }
+                                                : require('../../assets/images/icon_companion.png')
+                                        }
                                         style={styles.companionImageSmall}
                                         resizeMode="contain"
                                     />
@@ -251,11 +323,14 @@ export default function ScheduleAdd() {
                                 styles.selectFieldText,
                                 !selectedCompanion && styles.selectFieldPlaceholder,
                             ]}>
-                                {selectedCompanion || '동행인을 선택해주세요'}
+                                {selectedCompanionOption?.companion_name || '동행인을 선택해주세요'}
                             </Text>
                         </View>
                         <Ionicons name="chevron-down" size={20} color={Colors.textShadow} />
                     </Pressable>
+                    {companionLoadError ? (
+                        <Text style={styles.helperErrorText}>{companionLoadError}</Text>
+                    ) : null}
                 </View>
 
                 <View style={styles.section}>
@@ -270,6 +345,24 @@ export default function ScheduleAdd() {
                             clearError();
                         }}
                         returnKeyType="done"
+                    />
+                </View>
+
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>출발 시간</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="00:00"
+                        placeholderTextColor={Colors.textShadow}
+                        value={startTime}
+                        onChangeText={(text) => {
+                            setStartTime(formatScheduleTimeInput(text));
+                            clearError();
+                        }}
+                        onBlur={() => setStartTime(normalizeScheduleTimeInput(startTime))}
+                        keyboardType="number-pad"
+                        maxLength={5}
+                        selectTextOnFocus
                     />
                 </View>
 
@@ -441,7 +534,7 @@ export default function ScheduleAdd() {
                                 ? '오늘 일정의 종류를 골라주세요.'
                                 : '이 일정을 함께 확인할 동행인을 골라주세요.'}
                         </Text>
-                        {sheetOptions.map((option) => {
+                        {sheetOptions.length > 0 ? sheetOptions.map((option) => {
                             const selected = (sheetTarget === 'type' && selectedType === option.value) ||
                                 (sheetTarget === 'companion' && selectedCompanion === option.value);
 
@@ -462,7 +555,11 @@ export default function ScheduleAdd() {
                                     {sheetTarget === 'companion' ? (
                                         <View style={styles.sheetCompanionAvatar}>
                                             <Image
-                                                source={require('../../assets/images/icon_companion.png')}
+                                                source={
+                                                    option.profileImage
+                                                        ? { uri: option.profileImage }
+                                                        : require('../../assets/images/icon_companion.png')
+                                                }
                                                 style={styles.sheetCompanionImage}
                                                 resizeMode="contain"
                                             />
@@ -475,7 +572,7 @@ export default function ScheduleAdd() {
 
                                     <View style={styles.sheetOptionTextArea}>
                                         <View style={styles.sheetOptionTitleRow}>
-                                            <Text style={styles.sheetOptionText}>{option.value}</Text>
+                                            <Text style={styles.sheetOptionText}>{option.label}</Text>
                                             {option.badge ? (
                                                 <Text style={styles.sheetOptionBadge}>{option.badge}</Text>
                                             ) : null}
@@ -488,7 +585,13 @@ export default function ScheduleAdd() {
                                     ) : null}
                                 </Pressable>
                             );
-                        })}
+                        }) : (
+                            <Text style={styles.emptySheetText}>
+                                {sheetTarget === 'companion'
+                                    ? '연결된 동행인이 없어요.'
+                                    : '선택할 항목이 없어요.'}
+                            </Text>
+                        )}
                     </Pressable>
                 </Pressable>
             </Modal>
@@ -891,6 +994,13 @@ const styles = StyleSheet.create({
         color: '#D85C46',
     },
 
+    helperErrorText: {
+        marginTop: 8,
+        fontFamily: Fonts.body,
+        fontSize: 12,
+        color: '#D85C46',
+    },
+
     buttonArea: {
         width: '100%',
         marginTop: 2,
@@ -948,6 +1058,14 @@ const styles = StyleSheet.create({
         paddingHorizontal: 14,
         paddingVertical: 12,
         marginBottom: 10,
+    },
+
+    emptySheetText: {
+        minHeight: 48,
+        textAlignVertical: 'center',
+        fontFamily: Fonts.body,
+        fontSize: 14,
+        color: Colors.textShadow,
     },
 
     sheetOptionSelected: {

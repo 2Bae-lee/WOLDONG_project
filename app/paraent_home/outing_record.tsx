@@ -18,13 +18,24 @@ import {
     getSchedule,
     getSchedules,
 } from '../../constants/Api';
+import { normalizeChildProfileLabel, normalizeChildProfileLabels } from '../../constants/ChildProfileLabels';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 
 const formatDate = (date: string) => date.replaceAll('-', '.');
 
 const listOrEmpty = (items?: string[]) => (
-    items?.filter((item) => item.trim()) ?? []
+    normalizeChildProfileLabels(items?.filter((item) => item.trim()) ?? [])
+);
+
+const normalizeTraitText = (value?: string) => (
+    value
+        ? value
+            .split(/\n|,/)
+            .map((item) => normalizeChildProfileLabel(item.trim()))
+            .filter(Boolean)
+            .join(', ')
+        : ''
 );
 
 type DayOuting = {
@@ -380,11 +391,11 @@ export default function OutingRecordScreen() {
                         <ItemList
                             items={[
                                 ...listOrEmpty(childTraits?.caution_situations),
-                                childTraits?.required_actions ? `필수 행동: ${childTraits.required_actions}` : '',
+                                childTraits?.required_actions ? `필수 행동: ${normalizeTraitText(childTraits.required_actions)}` : '',
                                 ...listOrEmpty(childTraits?.calming_methods).map((item) => `진정법: ${item}`),
-                                childTraits?.avoid_behaviors ? `피해야 할 행동: ${childTraits.avoid_behaviors}` : '',
+                                childTraits?.avoid_behaviors ? `피해야 할 행동: ${normalizeTraitText(childTraits.avoid_behaviors)}` : '',
                                 ...listOrEmpty(childTraits?.difficult_environments).map((item) => `힘든 환경: ${item}`),
-                                childTraits?.notice_time ? `예고 시간: ${childTraits.notice_time}` : '',
+                                childTraits?.notice_time ? `예고 시간: ${normalizeTraitText(childTraits.notice_time)}` : '',
                             ].filter(Boolean)}
                             emptyText="아동 특성 정보가 아직 없어요."
                         />

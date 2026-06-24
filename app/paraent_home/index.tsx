@@ -21,9 +21,11 @@ import {
     CharacterSpeed,
     CharacterTone,
     CharacterVoice,
+    LinkedCompanion,
     TodayScheduleSummary,
     deleteSchedule,
     getInviteRequests,
+    getLinkedCompanions,
     getNotifications,
     getParentHome,
     getSchedule,
@@ -31,6 +33,7 @@ import {
     getTodaySchedules,
     updateSchedule,
 } from '../../constants/Api';
+import { getGeneratedCharacterImages, saveGeneratedCharacterImages } from '../../constants/CharacterImageStore';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 import { RepeatDate, parseRepeatDates } from '../../constants/Recurrence';
@@ -40,6 +43,7 @@ type ScheduleItem = {
     scheduleId?: string;
     text: string;
     done: boolean;
+    companionId?: string;
     companion: string;
     todos: ScheduleTodo[];
 };
@@ -64,6 +68,7 @@ type CalendarEvent = {
     month: number;
     day: number;
     title: string;
+    companionId?: string;
     companion: string;
     todos: ScheduleTodo[];
     features?: string[];
@@ -83,30 +88,6 @@ type EditTarget =
     | { type: 'calendar'; item: CalendarEvent }
     | null;
 
-const initialSchedules: ScheduleItem[] = [
-    {
-        id: 1,
-        text: '병원 진료',
-        done: false,
-        companion: '박민지',
-        todos: [
-            { id: 11, text: '병원 갈 준비', done: false },
-            { id: 12, text: '병원으로 이동', done: true },
-            { id: 13, text: '진료 보기', done: true },
-        ],
-    },
-    {
-        id: 2,
-        text: '치료실 방문',
-        done: true,
-        companion: '최서윤',
-        todos: [
-            { id: 21, text: '치료 도구 챙기기', done: true },
-            { id: 22, text: '치료 후 쉬는 시간 갖기', done: true },
-        ],
-    },
-];
-
 const initialHandoffs: HandoffItem[] = [
     { id: 1, text: '병원에 가기 전 아이가 긴장할 수 있어요.' },
     { id: 2, text: '진료실에 들어가기 전 짧게 예고해주세요.' },
@@ -114,7 +95,6 @@ const initialHandoffs: HandoffItem[] = [
 ];
 
 const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
-const companionOptions = ['박민지', '이하늘', '최서윤'];
 
 function getTodayTitle() {
     const today = new Date();
@@ -134,15 +114,30 @@ const mapScheduleTodos = (schedule: TodayScheduleSummary, baseId: number): Sched
         schedule.destination || schedule.place_type || '',
         schedule.transport_type ? `${schedule.transport_type} 이동` : '',
     ].filter(Boolean);
-
-    return details.map((text, index) => ({
+    const detailTodos = details.map((text, index) => ({
         id: baseId + index + 1,
         text,
         done: schedule.status === 'done',
     }));
+    const checklistTodos = schedule.checklist?.map((todo, index) => ({
+        id: toNumericId(todo.item_id || `${schedule.schedule_id}-${index}`) || baseId + details.length + index + 1,
+        text: todo.content,
+        done: todo.is_checked,
+    })) ?? [];
+
+    return [...detailTodos, ...checklistTodos];
 };
 
-const mapTodaySchedule = (schedule: TodayScheduleSummary): ScheduleItem => {
+const resolveScheduleCompanionName = (
+    schedule: TodayScheduleSummary,
+    companions: LinkedCompanion[] = []
+) => (
+    schedule.companion_name ||
+    companions.find((companion) => companion.companion_id === schedule.companion_id)?.companion_name ||
+    ''
+);
+
+const mapTodaySchedule = (schedule: TodayScheduleSummary, companions: LinkedCompanion[] = []): ScheduleItem => {
     const id = toNumericId(schedule.schedule_id);
 
     return {
@@ -150,12 +145,56 @@ const mapTodaySchedule = (schedule: TodayScheduleSummary): ScheduleItem => {
         scheduleId: schedule.schedule_id,
         text: schedule.title,
         done: schedule.status === 'done',
-        companion: '동행인 미정',
+        companionId: schedule.companion_id ?? undefined,
+        companion: resolveScheduleCompanionName(schedule, companions),
         todos: mapScheduleTodos(schedule, id),
     };
 };
 
-const mapCalendarEvent = (schedule: TodayScheduleSummary): CalendarEvent | null => {
+const isSameSchedule = (
+    left: { id: number; scheduleId?: string },
+    right: { id: number; scheduleId?: string }
+) => (
+    left.scheduleId && right.scheduleId
+        ? left.scheduleId === right.scheduleId
+        : left.id === right.id
+);
+
+const isTodayEvent = (event: CalendarEvent, todayYear: number, todayMonth: number, todayDate: number) => (
+    event.year === todayYear && event.month === todayMonth && event.day === todayDate
+);
+
+const calendarEventToSchedule = (event: CalendarEvent): ScheduleItem => ({
+    id: event.id,
+    scheduleId: event.scheduleId,
+    text: event.title,
+    done: event.todos.length > 0 && event.todos.every((todo) => todo.done),
+    companionId: event.companionId,
+    companion: event.companion,
+    todos: event.todos,
+});
+
+const scheduleToCalendarEvent = (
+    schedule: ScheduleItem,
+    year: number,
+    month: number,
+    day: number
+): CalendarEvent => ({
+    id: schedule.id,
+    scheduleId: schedule.scheduleId,
+    year,
+    month,
+    day,
+    title: schedule.text,
+    companionId: schedule.companionId,
+    companion: schedule.companion,
+    todos: schedule.todos,
+});
+
+const mapCalendarEvent = (
+    schedule: TodayScheduleSummary,
+    companions: LinkedCompanion[] = []
+): CalendarEvent | null => {
     const [year, month, day] = schedule.date.split('-').map(Number);
     const id = toNumericId(schedule.schedule_id);
 
@@ -168,7 +207,8 @@ const mapCalendarEvent = (schedule: TodayScheduleSummary): CalendarEvent | null 
         month,
         day,
         title: schedule.title,
-        companion: '동행인 미정',
+        companionId: schedule.companion_id ?? undefined,
+        companion: resolveScheduleCompanionName(schedule, companions),
         features: schedule.schedule_features ?? [],
         preparations: schedule.preparations ?? [],
         todos: mapScheduleTodos(schedule, id),
@@ -179,23 +219,30 @@ export default function ParentHome() {
     const params = useLocalSearchParams<{
         tab?: string;
         addedEventId?: string;
+        addedEventIds?: string;
         addedEventYear?: string;
         addedEventMonth?: string;
         addedEventDay?: string;
         addedEventTitle?: string;
+        addedEventCompanionId?: string;
         addedEventCompanion?: string;
+        addedEventStartTime?: string;
         addedEventTodos?: string;
         addedEventDates?: string;
         addedEventFeatures?: string;
         addedScheduleId?: string;
         addedScheduleTitle?: string;
+        addedScheduleCompanionId?: string;
         addedScheduleCompanion?: string;
+        addedScheduleStartTime?: string;
         addedScheduleTodos?: string;
+        addedScheduleFeatures?: string;
         updatedChildId?: string;
         updatedChildName?: string;
         updatedProfileImage?: string;
         updatedProfileSections?: string;
         updatedCharacterImages?: string;
+        updatedCharacterImageKey?: string;
         updatedCharacterTone?: CharacterTone;
         updatedCharacterSpeed?: CharacterSpeed;
         updatedCharacterVoice?: CharacterVoice;
@@ -247,52 +294,18 @@ export default function ParentHome() {
     const [childCharacterTone, setChildCharacterTone] = useState<CharacterTone | undefined>();
     const [childCharacterSpeed, setChildCharacterSpeed] = useState<CharacterSpeed | undefined>();
     const [childCharacterVoice, setChildCharacterVoice] = useState<CharacterVoice | undefined>();
+    const [linkedCompanions, setLinkedCompanions] = useState<LinkedCompanion[]>([]);
     const [selectedCalendarDay, setSelectedCalendarDay] = useState(todayDay);
-    const [schedules, setSchedules] = useState(initialSchedules);
+    const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
     const [handoffs, setHandoffs] = useState(initialHandoffs);
-    const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([
-        {
-            id: 1,
-            year: currentYear,
-            month: currentMonth,
-            day: todayDay,
-            title: '병원 진료',
-            companion: '박민지',
-            todos: [
-                { id: 101, text: '진료 접수하기', done: false },
-                { id: 102, text: '진료 후 쉬는 시간 갖기', done: false },
-            ],
-        },
-        {
-            id: 2,
-            year: currentYear,
-            month: currentMonth,
-            day: todayDay,
-            title: '진료 후 쉬는 시간',
-            companion: '이하늘',
-            todos: [
-                { id: 201, text: '조용한 장소 찾기', done: true },
-            ],
-        },
-        {
-            id: 3,
-            year: currentYear,
-            month: currentMonth,
-            day: Math.min(todayDay + 3, new Date(currentYear, currentMonth, 0).getDate()),
-            title: '언어 치료',
-            companion: '최서윤',
-            todos: [
-                { id: 301, text: '치료 카드 챙기기', done: false },
-            ],
-        },
-    ]);
+    const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
     const [isScheduleInputOpen, setIsScheduleInputOpen] = useState(false);
     const [isHandoffInputOpen, setIsHandoffInputOpen] = useState(false);
     const [scheduleText, setScheduleText] = useState('');
     const [handoffText, setHandoffText] = useState('');
     const [editTarget, setEditTarget] = useState<EditTarget>(null);
     const [editText, setEditText] = useState('');
-    const [editCompanion, setEditCompanion] = useState(companionOptions[0]);
+    const [editCompanionId, setEditCompanionId] = useState('');
     const [editTodos, setEditTodos] = useState<ScheduleTodo[]>([]);
     const [editTodoText, setEditTodoText] = useState('');
     const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
@@ -302,6 +315,16 @@ export default function ParentHome() {
         event.day === selectedCalendarDay
     ));
     const selectedStoryEvent = selectedCalendarEvents[0];
+    const getCompanionName = (companionId?: string, fallback = '') => (
+        companionId
+            ? linkedCompanions.find((companion) => companion.companion_id === companionId)?.companion_name ?? fallback
+            : fallback
+    );
+    const getCharacterImageRouteParams = () => {
+        if (!childCharacterImages) return { characterImages: '' };
+
+        return { characterImageKey: saveGeneratedCharacterImages(childCharacterImages) };
+    };
 
     useFocusEffect(
         useCallback(() => {
@@ -366,18 +389,33 @@ export default function ParentHome() {
                 setChildCharacterTone(firstChild?.character_tone ?? undefined);
                 setChildCharacterSpeed(firstChild?.character_speed ?? undefined);
                 setChildCharacterVoice(firstChild?.character_voice ?? undefined);
+                let nextLinkedCompanions: LinkedCompanion[] = [];
+                if (firstChild?.child_id) {
+                    try {
+                        const companionsResponse = await getLinkedCompanions(firstChild.child_id);
+                        nextLinkedCompanions = companionsResponse.data ?? [];
+                        if (!cancelled) setLinkedCompanions(nextLinkedCompanions);
+                    } catch {
+                        if (!cancelled) setLinkedCompanions([]);
+                    }
+                }
 
                 const apiSchedules = todaySchedulesResponse.data?.length
                     ? todaySchedulesResponse.data
                     : homeResponse.data?.today_schedules ?? [];
 
-                setSchedules(apiSchedules.map(mapTodaySchedule));
+                setSchedules(apiSchedules.map((schedule) => mapTodaySchedule(schedule, nextLinkedCompanions)));
                 const allSchedules = schedulesResponse.data ?? apiSchedules;
-                setCalendarEvents(allSchedules.map(mapCalendarEvent).filter((event): event is CalendarEvent => (
+                setCalendarEvents(allSchedules.map((schedule) => (
+                    mapCalendarEvent(schedule, nextLinkedCompanions)
+                )).filter((event): event is CalendarEvent => (
                     event !== null
                 )));
             } catch {
-                // 목 로그인이나 로컬 서버 미실행 상태에서는 기존 목데이터 홈을 유지합니다.
+                if (!cancelled) {
+                    setSchedules([]);
+                    setCalendarEvents([]);
+                }
             }
         };
 
@@ -420,6 +458,13 @@ export default function ParentHome() {
             }
         }
 
+        if (typeof params.updatedCharacterImageKey === 'string' && params.updatedCharacterImageKey) {
+            const storedCharacterImages = getGeneratedCharacterImages(params.updatedCharacterImageKey);
+            if (storedCharacterImages) {
+                setChildCharacterImages(storedCharacterImages);
+            }
+        }
+
         if (params.updatedCharacterTone) {
             setChildCharacterTone(params.updatedCharacterTone);
         }
@@ -435,41 +480,78 @@ export default function ParentHome() {
         const addedScheduleId = params.addedScheduleId;
         const addedScheduleTitle = params.addedScheduleTitle;
         const addedScheduleCompanion = params.addedScheduleCompanion;
+        const addedScheduleCompanionId = params.addedScheduleCompanionId;
+        const addedScheduleStartTime = params.addedScheduleStartTime || '00:00';
 
         if (addedScheduleId && addedScheduleTitle && addedScheduleCompanion) {
             const scheduleId = Number(addedScheduleId);
             let parsedTodos: ScheduleTodo[] = [];
+            let parsedFeatures: string[] = [];
 
             try {
                 const parsed = params.addedScheduleTodos ? JSON.parse(params.addedScheduleTodos) : [];
-                parsedTodos = Array.isArray(parsed)
+                const userTodos = Array.isArray(parsed)
                     ? parsed
                         .filter((item) => typeof item === 'string' && item.trim())
                         .map((item, index) => ({
-                            id: scheduleId + index + 1,
+                            id: scheduleId + index + 2,
                             text: item.trim(),
                             done: false,
                         }))
                     : [];
+                parsedTodos = [
+                    {
+                        id: scheduleId + 1,
+                        text: `${addedScheduleStartTime} 시작`,
+                        done: false,
+                    },
+                    ...userTodos,
+                ];
             } catch {
-                parsedTodos = [];
+                parsedTodos = [
+                    {
+                        id: scheduleId + 1,
+                        text: `${addedScheduleStartTime} 시작`,
+                        done: false,
+                    },
+                ];
+            }
+
+            try {
+                const parsed = params.addedScheduleFeatures ? JSON.parse(params.addedScheduleFeatures) : [];
+                parsedFeatures = Array.isArray(parsed)
+                    ? parsed.filter((item) => typeof item === 'string' && item.trim())
+                    : [];
+            } catch {
+                parsedFeatures = [];
             }
 
             if (!Number.isNaN(scheduleId)) {
+                const nextSchedule: ScheduleItem = {
+                    id: scheduleId,
+                    scheduleId: addedScheduleId,
+                    text: addedScheduleTitle,
+                    done: false,
+                    companionId: addedScheduleCompanionId,
+                    companion: addedScheduleCompanion,
+                    todos: parsedTodos,
+                };
+                const nextEvent: CalendarEvent = {
+                    ...scheduleToCalendarEvent(nextSchedule, currentYear, currentMonth, todayDay),
+                    features: parsedFeatures,
+                    preparations: [],
+                };
+
                 setActiveTab('today');
                 setSchedules((current) => (
-                    current.some((schedule) => schedule.id === scheduleId)
+                    current.some((schedule) => isSameSchedule(schedule, nextSchedule))
                         ? current
-                        : [
-                            ...current,
-                            {
-                                id: scheduleId,
-                                text: addedScheduleTitle,
-                                done: false,
-                                companion: addedScheduleCompanion,
-                                todos: parsedTodos,
-                            },
-                        ]
+                        : [...current, nextSchedule]
+                ));
+                setCalendarEvents((current) => (
+                    current.some((event) => isSameSchedule(event, nextEvent))
+                        ? current
+                        : [...current, nextEvent]
                 ));
             }
         }
@@ -486,7 +568,9 @@ export default function ParentHome() {
         }
 
         const eventTitle = params.addedEventTitle;
+        const eventCompanionId = params.addedEventCompanionId;
         const eventCompanion = params.addedEventCompanion;
+        const eventStartTime = params.addedEventStartTime || '00:00';
         const eventId = Number(params.addedEventId);
         const fallbackEventId = params.addedEventId ? toNumericId(params.addedEventId) : Date.now();
         const numericEventId = Number.isNaN(eventId) ? fallbackEventId : eventId;
@@ -495,17 +579,31 @@ export default function ParentHome() {
 
         try {
             const parsed = params.addedEventTodos ? JSON.parse(params.addedEventTodos) : [];
-            parsedTodos = Array.isArray(parsed)
+            const userTodos = Array.isArray(parsed)
                 ? parsed
                     .filter((item) => typeof item === 'string' && item.trim())
                     .map((item, index) => ({
-                        id: numericEventId + index + 1,
+                        id: numericEventId + index + 2,
                         text: item.trim(),
                         done: false,
                     }))
                 : [];
+            parsedTodos = [
+                {
+                    id: numericEventId + 1,
+                    text: `${eventStartTime} 시작`,
+                    done: false,
+                },
+                ...userTodos,
+            ];
         } catch {
-            parsedTodos = [];
+            parsedTodos = [
+                {
+                    id: numericEventId + 1,
+                    text: `${eventStartTime} 시작`,
+                    done: false,
+                },
+            ];
         }
 
         try {
@@ -523,21 +621,38 @@ export default function ParentHome() {
             day: Number(params.addedEventDay),
         };
         const eventDates = parseRepeatDates(params.addedEventDates);
-        const nextEvents = (eventDates.length > 0 ? eventDates : [fallbackDate]).map((date, index) => ({
-            id: numericEventId + index,
-            scheduleId: params.addedEventId,
-            year: date.year,
-            month: date.month,
-            day: date.day,
-            title: eventTitle,
-            companion: eventCompanion,
-            features: parsedFeatures,
-            preparations: [],
-            todos: parsedTodos.map((todo) => ({
-                ...todo,
-                id: todo.id + index * 1000,
-            })),
-        }));
+        let eventScheduleIds: string[] = [];
+
+        try {
+            const parsed = params.addedEventIds ? JSON.parse(params.addedEventIds) : [];
+            eventScheduleIds = Array.isArray(parsed)
+                ? parsed.filter((item) => typeof item === 'string' && item.trim())
+                : [];
+        } catch {
+            eventScheduleIds = [];
+        }
+
+        const nextEvents = (eventDates.length > 0 ? eventDates : [fallbackDate]).map((date, index) => {
+            const scheduleId = eventScheduleIds[index] || params.addedEventId;
+            const eventBaseId = scheduleId ? toNumericId(scheduleId) : numericEventId + index;
+
+            return {
+                id: eventBaseId,
+                scheduleId,
+                year: date.year,
+                month: date.month,
+                day: date.day,
+                title: eventTitle,
+                companionId: eventCompanionId,
+                companion: eventCompanion,
+                features: parsedFeatures,
+                preparations: [],
+                todos: parsedTodos.map((todo) => ({
+                    ...todo,
+                    id: todo.id + index * 1000,
+                })),
+            };
+        });
         const firstEvent = nextEvents[0];
 
         if (
@@ -556,28 +671,45 @@ export default function ParentHome() {
         setCalendarMonth(firstEvent.month);
         setSelectedCalendarDay(firstEvent.day);
         setCalendarEvents((current) => (
-            current.some((event) => event.id === firstEvent.id)
+            current.some((event) => isSameSchedule(event, firstEvent))
                 ? current
                 : [...current, ...nextEvents]
         ));
+        setSchedules((current) => {
+            const todayEvents = nextEvents.filter((event) => (
+                isTodayEvent(event, currentYear, currentMonth, todayDay)
+            ));
+            const nextSchedules = todayEvents
+                .map(calendarEventToSchedule)
+                .filter((schedule) => !current.some((item) => isSameSchedule(item, schedule)));
+
+            return nextSchedules.length > 0 ? [...current, ...nextSchedules] : current;
+        });
     }, [
         params.addedEventCompanion,
+        params.addedEventCompanionId,
         params.addedEventDates,
         params.addedEventDay,
         params.addedEventFeatures,
         params.addedEventId,
+        params.addedEventIds,
         params.addedEventMonth,
+        params.addedEventStartTime,
         params.addedEventTitle,
         params.addedEventTodos,
         params.addedEventYear,
         params.addedScheduleCompanion,
+        params.addedScheduleCompanionId,
+        params.addedScheduleFeatures,
         params.addedScheduleId,
+        params.addedScheduleStartTime,
         params.addedScheduleTitle,
         params.addedScheduleTodos,
         params.tab,
         params.updatedChildId,
         params.updatedChildName,
         params.updatedCharacterImages,
+        params.updatedCharacterImageKey,
         params.updatedCharacterSpeed,
         params.updatedCharacterTone,
         params.updatedCharacterVoice,
@@ -612,6 +744,7 @@ export default function ParentHome() {
 
     const toggleSchedule = (id: number) => {
         const target = schedules.find((item) => item.id === id);
+        const nextDone = !target?.done;
         if (target?.scheduleId) {
             void updateSchedule(target.scheduleId, {
                 status: target.done ? 'upcoming' : 'done',
@@ -623,21 +756,36 @@ export default function ParentHome() {
         setSchedules((current) => current.map((item) => (
             item.id === id ? { ...item, done: !item.done } : item
         )));
+        if (target) {
+            setCalendarEvents((current) => current.map((event) => (
+                isSameSchedule(event, target)
+                    ? {
+                        ...event,
+                        todos: event.todos.map((todo) => ({ ...todo, done: nextDone })),
+                    }
+                    : event
+            )));
+        }
     };
 
     const addSchedule = () => {
         const trimmedText = scheduleText.trim();
         if (!trimmedText) return;
 
-        setSchedules((current) => [
+        const defaultCompanion = linkedCompanions[0];
+        const nextSchedule: ScheduleItem = {
+            id: Date.now(),
+            text: trimmedText,
+            done: false,
+            companionId: defaultCompanion?.companion_id,
+            companion: defaultCompanion?.companion_name || '',
+            todos: [],
+        };
+
+        setSchedules((current) => [...current, nextSchedule]);
+        setCalendarEvents((current) => [
             ...current,
-            {
-                id: Date.now(),
-                text: trimmedText,
-                done: false,
-                companion: companionOptions[0],
-                todos: [],
-            },
+            scheduleToCalendarEvent(nextSchedule, currentYear, currentMonth, todayDay),
         ]);
         setScheduleText('');
         setIsScheduleInputOpen(false);
@@ -664,7 +812,7 @@ export default function ParentHome() {
         cancelAddInputs();
         setEditTarget({ type: 'schedule', item });
         setEditText(item.text);
-        setEditCompanion(item.companion);
+        setEditCompanionId(item.companionId || '');
         setEditTodos(item.todos);
         setEditTodoText('');
         if (item.scheduleId) {
@@ -695,7 +843,7 @@ export default function ParentHome() {
         cancelAddInputs();
         setEditTarget({ type: 'calendar', item });
         setEditText(item.title);
-        setEditCompanion(item.companion);
+        setEditCompanionId(item.companionId || '');
         setEditTodos(item.todos);
         setEditTodoText('');
         if (item.scheduleId) {
@@ -706,7 +854,7 @@ export default function ParentHome() {
     const closeEditor = () => {
         setEditTarget(null);
         setEditText('');
-        setEditCompanion(companionOptions[0]);
+        setEditCompanionId('');
         setEditTodos([]);
         setEditTodoText('');
         Keyboard.dismiss();
@@ -744,6 +892,7 @@ export default function ParentHome() {
             try {
                 await updateSchedule(editTarget.item.scheduleId, {
                     title: trimmedText,
+                    companion_id: editCompanionId || undefined,
                     checklist: editTodos.map((todo) => todo.text),
                 });
             } catch {
@@ -751,28 +900,64 @@ export default function ParentHome() {
             }
         }
 
+        const nextCompanionName = getCompanionName(
+            editCompanionId,
+            editTarget.type === 'schedule' || editTarget.type === 'calendar'
+                ? editTarget.item.companion
+                : ''
+        );
+
         if (editTarget.type === 'schedule') {
+            const updatedSchedule: ScheduleItem = {
+                ...editTarget.item,
+                text: trimmedText,
+                companionId: editCompanionId || editTarget.item.companionId,
+                companion: nextCompanionName,
+                todos: editTodos,
+            };
+
             setSchedules((current) => current.map((item) => (
-                item.id === editTarget.item.id
+                isSameSchedule(item, updatedSchedule)
+                    ? updatedSchedule
+                    : item
+            )));
+            setCalendarEvents((current) => current.map((item) => (
+                isSameSchedule(item, updatedSchedule)
                     ? {
                         ...item,
-                        text: trimmedText,
-                        companion: editCompanion,
+                        title: trimmedText,
+                        companionId: updatedSchedule.companionId,
+                        companion: nextCompanionName,
                         todos: editTodos,
                     }
                     : item
             )));
         } else if (editTarget.type === 'calendar') {
+            const updatedEvent: CalendarEvent = {
+                ...editTarget.item,
+                title: trimmedText,
+                companionId: editCompanionId || editTarget.item.companionId,
+                companion: nextCompanionName,
+                todos: editTodos,
+            };
+
             setCalendarEvents((current) => current.map((item) => (
-                item.id === editTarget.item.id
-                    ? {
-                        ...item,
-                        title: trimmedText,
-                        companion: editCompanion,
-                        todos: editTodos,
-                    }
+                isSameSchedule(item, updatedEvent)
+                    ? updatedEvent
                     : item
             )));
+            setSchedules((current) => {
+                if (!isTodayEvent(updatedEvent, currentYear, currentMonth, todayDay)) {
+                    return current;
+                }
+
+                const updatedSchedule = calendarEventToSchedule(updatedEvent);
+                return current.some((item) => isSameSchedule(item, updatedSchedule))
+                    ? current.map((item) => (
+                        isSameSchedule(item, updatedSchedule) ? updatedSchedule : item
+                    ))
+                    : [...current, updatedSchedule];
+            });
         } else {
             setHandoffs((current) => current.map((item) => (
                 item.id === editTarget.item.id ? { ...item, text: trimmedText } : item
@@ -797,9 +982,11 @@ export default function ParentHome() {
         }
 
         if (editTarget.type === 'schedule') {
-            setSchedules((current) => current.filter((item) => item.id !== editTarget.item.id));
+            setSchedules((current) => current.filter((item) => !isSameSchedule(item, editTarget.item)));
+            setCalendarEvents((current) => current.filter((item) => !isSameSchedule(item, editTarget.item)));
         } else if (editTarget.type === 'calendar') {
-            setCalendarEvents((current) => current.filter((item) => item.id !== editTarget.item.id));
+            setCalendarEvents((current) => current.filter((item) => !isSameSchedule(item, editTarget.item)));
+            setSchedules((current) => current.filter((item) => !isSameSchedule(item, editTarget.item)));
         } else {
             setHandoffs((current) => current.filter((item) => item.id !== editTarget.item.id));
         }
@@ -914,12 +1101,14 @@ export default function ParentHome() {
                                                 ]} numberOfLines={1}>
                                                     {item.text}
                                                 </Text>
-                                                <View style={styles.scheduleMetaPill}>
-                                                    <Ionicons name="person-outline" size={13} color={Colors.textShadow} />
-                                                    <Text style={styles.scheduleMetaText} numberOfLines={1}>
-                                                        {item.companion}와 함께
-                                                    </Text>
-                                                </View>
+                                                {item.companion ? (
+                                                    <View style={styles.scheduleMetaPill}>
+                                                        <Ionicons name="person-outline" size={13} color={Colors.textShadow} />
+                                                        <Text style={styles.scheduleMetaText} numberOfLines={1}>
+                                                            {item.companion}와 함께
+                                                        </Text>
+                                                    </View>
+                                                ) : null}
                                             </View>
                                             {item.todos.length > 0 ? (
                                                 <View style={styles.scheduleTodoPreview}>
@@ -1102,7 +1291,9 @@ export default function ParentHome() {
                                         </View>
                                         <View style={styles.calendarEventTextArea}>
                                             <Text style={styles.calendarEventName}>{event.title}</Text>
-                                            <Text style={styles.calendarEventCompanion}>{event.companion}와 공유 중</Text>
+                                            {event.companion ? (
+                                                <Text style={styles.calendarEventCompanion}>{event.companion}와 공유 중</Text>
+                                            ) : null}
                                             {event.todos.length > 0 ? (
                                                 <View style={styles.calendarTodoPreview}>
                                                     {event.todos.slice(0, 2).map((todo) => (
@@ -1142,12 +1333,11 @@ export default function ParentHome() {
                                             pathname: '/social_story',
                                             params: {
                                                 scheduleId: selectedStoryEvent.scheduleId ?? '',
+                                                childId,
                                                 childName,
                                                 title: selectedStoryEvent.title,
                                                 script: `오늘은 ${selectedStoryEvent.title} 일정이 있어요.`,
-                                                characterImages: childCharacterImages
-                                                    ? JSON.stringify(childCharacterImages)
-                                                    : '',
+                                                ...getCharacterImageRouteParams(),
                                                 characterTone: childCharacterTone ?? '',
                                                 characterSpeed: childCharacterSpeed ?? '',
                                                 characterVoice: childCharacterVoice ?? '',
@@ -1287,24 +1477,26 @@ export default function ParentHome() {
                                 <>
                                     <Text style={styles.modalSubTitle}>함께 가는 동행인</Text>
                                     <View style={styles.modalChipRow}>
-                                        {companionOptions.map((companion) => {
-                                            const selected = editCompanion === companion;
+                                        {linkedCompanions.length > 0 ? linkedCompanions.map((companion) => {
+                                            const selected = editCompanionId === companion.companion_id;
 
                                             return (
                                                 <Pressable
-                                                    key={companion}
+                                                    key={companion.companion_id}
                                                     style={[styles.modalChip, selected && styles.modalChipSelected]}
-                                                    onPress={() => setEditCompanion(companion)}
+                                                    onPress={() => setEditCompanionId(companion.companion_id)}
                                                 >
                                                     <Text style={[
                                                         styles.modalChipText,
                                                         selected && styles.modalChipTextSelected,
                                                     ]}>
-                                                        {companion}
+                                                        {companion.companion_name}
                                                     </Text>
                                                 </Pressable>
                                             );
-                                        })}
+                                        }) : (
+                                            <Text style={styles.emptyScheduleText}>연결된 동행인이 없어요.</Text>
+                                        )}
                                     </View>
 
                                     <Text style={styles.modalSubTitle}>세부 Todo</Text>

@@ -5,6 +5,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -185,6 +186,14 @@ export default function Login() {
                         <Text style={styles.policyBoldText}>개인정보 처리방침</Text>에{'\n'}
                         동의하는 것으로 간주됩니다.
                     </Text>
+                    <Pressable
+                        style={styles.signupLink}
+                        onPress={() => router.push('/signup/signuprole')}
+                    >
+                        <Text style={styles.signupText}>
+                            계정이 없나요? <Text style={styles.signupBoldText}>회원가입</Text>
+                        </Text>
+                    </Pressable>
                     </ScrollView>
             </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
@@ -300,6 +309,23 @@ const styles = StyleSheet.create({
         color: Colors.textShadow,
         textAlign: 'center',
       },
+    signupLink: {
+        marginTop: 18,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+    },
+    signupText: {
+        fontFamily: Fonts.body,
+        fontSize: 14,
+        color: Colors.textShadow,
+        textAlign: 'center',
+    },
+    signupBoldText: {
+        fontFamily: Fonts.bodyBold,
+        fontWeight: '900',
+        color: Colors.text,
+        textDecorationLine: 'underline',
+    },
     inputError: {
         borderColor: Colors.highlight3,
       },

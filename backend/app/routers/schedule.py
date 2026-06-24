@@ -10,6 +10,7 @@ import httpx
 from app.models.user import User
 from app.models.child import Child
 from app.models.invite import CompanionRequest, RequestStatus
+from app.models.notification import Notification, NotificationType
 from app.models.schedule import Schedule, ScheduleStatus, ChecklistItem
 from app.middleware.auth import companion_only, get_current_user
 from app.utils.response import success, error
@@ -299,8 +300,29 @@ async def get_today_schedules(user: User = Depends(get_current_user)):
             Schedule.date == today
         ).to_list()
 
-    return success([
-        {
+    result = []
+    for s in schedules:
+        companion_name = None
+        if s.companion_id:
+            try:
+                companion = await User.get(PydanticObjectId(s.companion_id))
+                if companion:
+                    companion_name = companion.name
+            except Exception:
+                companion_name = None
+
+            if not companion_name:
+                try:
+                    req = await CompanionRequest.find_one(
+                        CompanionRequest.companion_id == s.companion_id,
+                        CompanionRequest.child_id == s.child_id
+                    )
+                    if req:
+                        companion_name = req.companion_name
+                except Exception:
+                    pass
+
+        result.append({
             "schedule_id": str(s.id),
             "title": s.title,
             "date": s.date,
@@ -314,9 +336,19 @@ async def get_today_schedules(user: User = Depends(get_current_user)):
             "preparations": s.preparations,
             "status": s.status,
             "child_id": s.child_id,
-        }
-        for s in schedules
-    ])
+            "companion_id": s.companion_id,
+            "companion_name": companion_name,
+            "checklist": [
+                {
+                    "item_id": c.item_id,
+                    "content": c.content,
+                    "is_checked": c.is_checked
+                }
+                for c in s.checklist
+            ],
+        })
+
+    return success(result)
 
 
 # GET /api/schedules/{schedule_id}/warnings - 일정/장소 맞춤형 아동 특이사항 핵심 카드 조회
@@ -607,5 +639,21 @@ async def create_journal(schedule_id: str, body: JournalCreateRequest, user: Use
         "status": ScheduleStatus.done,
         "updated_at": datetime.utcnow()
     })
+
+    child_name = ""
+    try:
+        child = await Child.get(PydanticObjectId(schedule.child_id))
+        child_name = child.name if child else ""
+    except Exception:
+        child_name = ""
+
+    target_name = f"{child_name} 아동의 " if child_name else ""
+    await Notification(
+        recipient_id=schedule.guardian_id,
+        sender_name=user.name,
+        type=NotificationType.journal,
+        message=f"{user.name}님이 {target_name}{schedule.title} 외출 일지를 작성했습니다.",
+        child_id=schedule.child_id,
+    ).insert()
 
     return success(None, "동행일지가 등록되었습니다")

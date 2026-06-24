@@ -5,23 +5,22 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import BackButton from '../../components/BackButton';
 import {
+    CharacterImages,
     ChildNotification,
     TodayScheduleSummary,
     getChildNotifications,
     getSchedules,
     getScheduleWarnings,
+    getTodaySchedules,
     markNotificationRead,
+    updateSchedule,
+    updateScheduleChecklist,
 } from '../../constants/Api';
+import { saveGeneratedCharacterImages } from '../../constants/CharacterImageStore';
 import { Colors } from '../../constants/Colors';
-import {
-    CompanionTodaySchedule,
-    getCompanionTodaySchedulesForChild,
-    subscribeCompanionTodaySchedules,
-    toggleCompanionTodaySchedule,
-    toggleCompanionTodayTodo,
-} from '../../constants/CompanionTodayState';
 import { Fonts } from '../../constants/Fonts';
 import { RepeatDate, parseRepeatDates } from '../../constants/Recurrence';
+import { formatRelativeTime } from '../../constants/Time';
 
 type ActiveTab = 'today' | 'calendar';
 
@@ -29,8 +28,19 @@ const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
 
 type ScheduleTodo = {
     id: number;
+    itemId?: string;
     text: string;
     done: boolean;
+};
+
+type CompanionTodaySchedule = {
+    id: number;
+    scheduleId?: string;
+    childName: string;
+    title: string;
+    guardian: string;
+    done: boolean;
+    todos: ScheduleTodo[];
 };
 
 type CalendarEvent = {
@@ -62,6 +72,45 @@ const getSchedulePlace = (schedule: TodayScheduleSummary) => (
     schedule.destination || schedule.place_type || '장소 확인'
 );
 
+const mapScheduleTodos = (schedule: TodayScheduleSummary, baseId: number): ScheduleTodo[] => {
+    const details = [
+        schedule.start_time ? `${schedule.start_time} 출발` : '',
+        getSchedulePlace(schedule),
+        schedule.transport_type ? `${schedule.transport_type} 이동` : '',
+    ].filter(Boolean);
+    const detailTodos = details.map((text, index) => ({
+        id: baseId + index + 1,
+        text,
+        done: schedule.status === 'done',
+    }));
+    const checklistTodos = schedule.checklist?.map((todo, index) => ({
+        id: createNumericId(todo.item_id || `${schedule.schedule_id}-${index}`) || baseId + details.length + index + 1,
+        itemId: todo.item_id,
+        text: todo.content,
+        done: todo.is_checked,
+    })) ?? [];
+
+    return [...detailTodos, ...checklistTodos];
+};
+
+const mapScheduleToTodaySchedule = (
+    schedule: TodayScheduleSummary,
+    childName: string,
+    guardian: string
+): CompanionTodaySchedule => {
+    const scheduleId = createNumericId(schedule.schedule_id);
+
+    return {
+        id: scheduleId,
+        scheduleId: schedule.schedule_id,
+        childName,
+        title: schedule.title,
+        guardian,
+        done: schedule.status === 'done',
+        todos: mapScheduleTodos(schedule, scheduleId),
+    };
+};
+
 const mapScheduleToCalendarEvent = (
     schedule: TodayScheduleSummary,
     guardian: string
@@ -71,12 +120,6 @@ const mapScheduleToCalendarEvent = (
     if (!year || !month || !day) return null;
 
     const eventId = createNumericId(schedule.schedule_id);
-    const place = getSchedulePlace(schedule);
-    const todoTexts = [
-        schedule.start_time ? `${schedule.start_time} 출발` : '',
-        place,
-        schedule.transport_type ? `${schedule.transport_type} 이동` : '',
-    ].filter(Boolean);
 
     return {
         id: eventId,
@@ -88,78 +131,15 @@ const mapScheduleToCalendarEvent = (
         guardian,
         features: schedule.schedule_features ?? [],
         preparations: schedule.preparations ?? [],
-        todos: todoTexts.map((text, index) => ({
-            id: eventId + index + 1,
-            text,
-            done: schedule.status === 'done',
-        })),
+        todos: mapScheduleTodos(schedule, eventId),
     };
 };
-
-const createInitialEvents = (
-    currentYear: number,
-    currentMonth: number,
-    todayDay: number,
-    guardian: string
-): CalendarEvent[] => [
-    {
-        id: 1,
-        year: currentYear,
-        month: currentMonth,
-        day: todayDay,
-        title: '병원 진료',
-        guardian,
-        todos: [
-            { id: 11, text: '병원 접수하기', done: false },
-            { id: 12, text: '진료 전 짧게 설명하기', done: true },
-            { id: 13, text: '진료 후 조용한 곳에서 쉬기', done: false },
-        ],
-    },
-    {
-        id: 2,
-        year: currentYear,
-        month: currentMonth,
-        day: todayDay,
-        title: '귀가 준비',
-        guardian,
-        todos: [
-            { id: 21, text: '가방 챙기기', done: false },
-            { id: 22, text: '집에 간다고 미리 알려주기', done: false },
-        ],
-    },
-    {
-        id: 3,
-        year: currentYear,
-        month: currentMonth,
-        day: Math.min(todayDay + 3, new Date(currentYear, currentMonth, 0).getDate()),
-        title: '언어 치료',
-        guardian,
-        todos: [
-            { id: 31, text: '치료 카드 챙기기', done: false },
-        ],
-    },
-];
 
 const handoffs = [
     '병원 대기 시간이 길면 아이가 힘들어할 수 있어요.',
     '큰 소리가 나는 공간에서는 잠깐 밖에서 쉬면 좋아요.',
     '선택지를 두 개 정도로 짧게 제시해주세요.',
 ];
-
-const formatTime = (value: string) => {
-    const created = new Date(value).getTime();
-    if (Number.isNaN(created)) return '방금 전';
-
-    const diffMinutes = Math.max(0, Math.floor((Date.now() - created) / 60000));
-    if (diffMinutes < 1) return '방금 전';
-    if (diffMinutes < 60) return `${diffMinutes}분 전`;
-
-    const diffHours = Math.floor(diffMinutes / 60);
-    if (diffHours < 24) return `${diffHours}시간 전`;
-
-    const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays}일 전`;
-};
 
 const getNotificationTitle = (type: string) => {
     if (type === 'request_approved') return '승인 완료';
@@ -207,6 +187,20 @@ export default function CompanionChildHome() {
     const childName = params.childName || '김월동';
     const profileImage = params.profileImage || '';
     const guardian = params.guardian || '김보호자';
+    const getCharacterImageRouteParams = () => {
+        if (!params.characterImages) return { characterImages: '' };
+
+        try {
+            const characterImages = JSON.parse(params.characterImages) as CharacterImages;
+            if (characterImages && typeof characterImages === 'object') {
+                return { characterImageKey: saveGeneratedCharacterImages(characterImages) };
+            }
+        } catch {
+            // URL 문자열이면 그대로 넘깁니다.
+        }
+
+        return { characterImages: params.characterImages };
+    };
     const today = useMemo(() => new Date(), []);
     const currentYear = today.getFullYear();
     const currentMonth = today.getMonth() + 1;
@@ -215,12 +209,8 @@ export default function CompanionChildHome() {
     const [calendarYear, setCalendarYear] = useState(currentYear);
     const [calendarMonth, setCalendarMonth] = useState(currentMonth);
     const [selectedDay, setSelectedDay] = useState(todayDay);
-    const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(() => (
-        createInitialEvents(currentYear, currentMonth, todayDay, guardian)
-    ));
-    const [todayEvents, setTodayEvents] = useState<CompanionTodaySchedule[]>(() => (
-        getCompanionTodaySchedulesForChild(childName)
-    ));
+    const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+    const [todayEvents, setTodayEvents] = useState<CompanionTodaySchedule[]>([]);
     const [childNotifications, setChildNotifications] = useState<ChildNotification[]>([]);
     const [isNotificationOpen, setIsNotificationOpen] = useState(false);
     const [notificationError, setNotificationError] = useState('');
@@ -288,10 +278,6 @@ export default function CompanionChildHome() {
 
     useFocusEffect(
         useCallback(() => {
-            setTodayEvents(getCompanionTodaySchedulesForChild(childName));
-            const unsubscribe = subscribeCompanionTodaySchedules(() => {
-                setTodayEvents(getCompanionTodaySchedulesForChild(childName));
-            });
             let active = true;
 
             const loadChildNotifications = async () => {
@@ -337,47 +323,108 @@ export default function CompanionChildHome() {
                 }
             };
 
-            const loadCalendarSchedules = async () => {
+            const loadSchedules = async () => {
                 if (!childId) {
                     if (active) {
-                        setCalendarEvents(createInitialEvents(currentYear, currentMonth, todayDay, guardian));
+                        setTodayEvents([]);
+                        setCalendarEvents([]);
                     }
                     return;
                 }
 
                 try {
-                    const response = await getSchedules();
+                    const [todayResponse, allResponse] = await Promise.all([
+                        getTodaySchedules(),
+                        getSchedules(),
+                    ]);
                     if (!active) return;
 
-                    const nextEvents = (response.data ?? [])
-                        .filter((schedule) => schedule.child_id === childId)
+                    const childTodaySchedules = (todayResponse.data ?? [])
+                        .filter((schedule) => schedule.child_id === childId);
+                    const childAllSchedules = (allResponse.data ?? [])
+                        .filter((schedule) => schedule.child_id === childId);
+                    const effectiveTodaySchedules = childTodaySchedules.length > 0
+                        ? childTodaySchedules
+                        : childAllSchedules;
+                    const todaySchedules = effectiveTodaySchedules
+                        .map((schedule) => mapScheduleToTodaySchedule(schedule, childName, guardian));
+                    const nextEvents = childAllSchedules
                         .map((schedule) => mapScheduleToCalendarEvent(schedule, guardian))
                         .filter((event): event is CalendarEvent => event !== null);
 
+                    setTodayEvents(todaySchedules);
                     setCalendarEvents(nextEvents);
                 } catch {
                     if (!active) return;
-                    setCalendarEvents((current) => current);
+                    setTodayEvents([]);
+                    setCalendarEvents([]);
                 }
             };
 
             loadChildNotifications();
             loadScheduleWarnings();
-            loadCalendarSchedules();
+            loadSchedules();
 
             return () => {
                 active = false;
-                unsubscribe();
             };
         }, [childId, childName, currentMonth, currentYear, guardian, scheduleId, todayDay])
     );
 
     const toggleTodayTodo = (scheduleId: number, todoId: number) => {
-        toggleCompanionTodayTodo(scheduleId, todoId);
+        const targetSchedule = todayEvents.find((schedule) => schedule.id === scheduleId);
+        const targetTodo = targetSchedule?.todos.find((todo) => todo.id === todoId);
+        if (!targetSchedule || !targetTodo) return;
+
+        const nextDone = !targetTodo.done;
+        setTodayEvents((current) => current.map((schedule) => (
+            schedule.id === scheduleId
+                ? {
+                    ...schedule,
+                    todos: schedule.todos.map((todo) => (
+                        todo.id === todoId ? { ...todo, done: nextDone } : todo
+                    )),
+                }
+                : schedule
+        )));
+        setCalendarEvents((current) => current.map((event) => (
+            event.scheduleId && event.scheduleId === targetSchedule.scheduleId
+                ? {
+                    ...event,
+                    todos: event.todos.map((todo) => (
+                        todo.id === todoId ? { ...todo, done: nextDone } : todo
+                    )),
+                }
+                : event
+        )));
+
+        if (targetSchedule.scheduleId && targetTodo.itemId) {
+            void updateScheduleChecklist(targetSchedule.scheduleId, targetTodo.itemId, nextDone).catch(() => undefined);
+        }
     };
 
     const toggleTodaySchedule = (scheduleId: number) => {
-        toggleCompanionTodaySchedule(scheduleId);
+        const targetSchedule = todayEvents.find((schedule) => schedule.id === scheduleId);
+        if (!targetSchedule) return;
+
+        const nextDone = !targetSchedule.done;
+        setTodayEvents((current) => current.map((schedule) => (
+            schedule.id === scheduleId ? { ...schedule, done: nextDone } : schedule
+        )));
+        setCalendarEvents((current) => current.map((event) => (
+            event.scheduleId && event.scheduleId === targetSchedule.scheduleId
+                ? {
+                    ...event,
+                    todos: event.todos.map((todo) => ({ ...todo, done: nextDone })),
+                }
+                : event
+        )));
+
+        if (targetSchedule.scheduleId) {
+            void updateSchedule(targetSchedule.scheduleId, {
+                status: nextDone ? 'done' : 'upcoming',
+            }).catch(() => undefined);
+        }
     };
 
     useEffect(() => {
@@ -478,6 +525,30 @@ export default function CompanionChildHome() {
                 ? current
                 : [...current, ...nextEvents]
         ));
+        setTodayEvents((current) => {
+            const todaySchedules = nextEvents
+                .filter((event) => (
+                    event.year === currentYear &&
+                    event.month === currentMonth &&
+                    event.day === todayDay
+                ))
+                .map((event) => ({
+                    id: event.id,
+                    scheduleId: event.scheduleId,
+                    childName,
+                    title: event.title,
+                    guardian: event.guardian,
+                    done: event.todos.length > 0 && event.todos.every((todo) => todo.done),
+                    todos: event.todos,
+                }))
+                .filter((schedule) => !current.some((item) => (
+                    item.scheduleId && schedule.scheduleId
+                        ? item.scheduleId === schedule.scheduleId
+                        : item.id === schedule.id
+                )));
+
+            return todaySchedules.length > 0 ? [...current, ...todaySchedules] : current;
+        });
     }, [
         params.addedEventDates,
         params.addedEventDay,
@@ -489,6 +560,10 @@ export default function CompanionChildHome() {
         params.addedEventTodos,
         params.addedEventYear,
         params.tab,
+        childName,
+        currentMonth,
+        currentYear,
+        todayDay,
     ]);
 
     const moveCalendarMonth = (monthOffset: number) => {
@@ -593,7 +668,7 @@ export default function CompanionChildHome() {
                         <View style={styles.section}>
                             <Text style={styles.sectionTitle}>{currentMonth}월 {todayDay}일 오늘의 일정</Text>
                             <View style={styles.scheduleCard}>
-                                {todayEvents.map((schedule) => (
+                                {todayEvents.length > 0 ? todayEvents.map((schedule) => (
                                     <View key={schedule.id} style={styles.scheduleBlock}>
                                         <View style={styles.scheduleTitleRow}>
                                             <Pressable
@@ -645,7 +720,9 @@ export default function CompanionChildHome() {
                                             ))}
                                         </View>
                                     </View>
-                                ))}
+                                )) : (
+                                    <Text style={styles.emptyText}>오늘 담당한 일정이 없어요.</Text>
+                                )}
                             </View>
                         </View>
 
@@ -792,7 +869,8 @@ export default function CompanionChildHome() {
                                 title: storySource?.title ?? '',
                                 script: storyScript,
                                 scheduleId,
-                                characterImages: params.characterImages ?? '',
+                                childId,
+                                ...getCharacterImageRouteParams(),
                                 characterTone: params.characterTone ?? '',
                                 characterSpeed: params.characterSpeed ?? '',
                                 characterVoice: params.characterVoice ?? '',
@@ -880,7 +958,7 @@ export default function CompanionChildHome() {
                                                     {getNotificationTitle(notification.type)}
                                                 </Text>
                                                 <Text style={styles.notificationTime}>
-                                                    {formatTime(notification.created_at)}
+                                                    {formatRelativeTime(notification.created_at)}
                                                 </Text>
                                             </View>
                                             <Text style={styles.notificationMessage}>{notification.message}</Text>

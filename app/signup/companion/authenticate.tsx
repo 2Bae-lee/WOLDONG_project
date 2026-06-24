@@ -106,7 +106,12 @@ export default function CompanionSignupCodeScreen() {
     }
   };
   const handleGoBack = () => {
-    router.replace('/signup/companion/email' as any);
+    router.replace({
+      pathname: '/signup/companion/email',
+      params: {
+        name: params.name ?? '',
+      },
+    } as any);
   };
 
   return (
@@ -167,6 +172,7 @@ export default function CompanionSignupCodeScreen() {
 
         <SmallButton
                   label={isVerifying ? '확인 중' : '계속'}
+                  width="100%"
                   onPress={handleSubmit}
                 />
         </View>
@@ -239,16 +245,18 @@ const styles = StyleSheet.create({
 
   codeRow: {
     flexDirection: 'row',
-    gap: 16,
+    columnGap: 8,
+    width: '100%',
     marginBottom: 18,
   },
 
   codeInput: {
-    width: 64,
-    height: 73,
+    flex: 1,
+    maxWidth: 52,
+    height: 62,
     borderRadius: 8,
     backgroundColor: Colors.white,
-    fontSize: 80,
+    fontSize: 62,
     fontFamily: Fonts.title
   },
 

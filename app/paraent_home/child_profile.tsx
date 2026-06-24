@@ -24,6 +24,7 @@ import {
     logout,
     updateChildProfile,
 } from '../../constants/Api';
+import { normalizeChildProfileLabels } from '../../constants/ChildProfileLabels';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 import { toShareableImageUri } from '../../constants/ImagePicker';
@@ -145,21 +146,21 @@ const parseSections = (value?: string) => {
 };
 
 const splitRequiredActions = (value?: string) => (
-    value ? value.split(',').map((item) => item.trim()).filter(Boolean) : []
+    normalizeChildProfileLabels(value ? value.split(',').map((item) => item.trim()).filter(Boolean) : [])
 );
 
 const sectionsFromDetail = (detail: ChildProfileDetail): ProfileSection[] => (
     initialSections.map((section) => {
         const itemsById: Record<string, string[]> = {
             info: detail.disability_type ? [detail.disability_type] : [],
-            guidance: detail.explanation_styles ?? [],
-            communication: detail.communication_styles ?? [],
-            danger: detail.caution_situations ?? [],
+            guidance: normalizeChildProfileLabels(detail.explanation_styles ?? []),
+            communication: normalizeChildProfileLabels(detail.communication_styles ?? []),
+            danger: normalizeChildProfileLabels(detail.caution_situations ?? []),
             companion: splitRequiredActions(detail.required_actions),
-            sensory: detail.difficult_environments ?? [],
-            place: detail.difficult_places ?? [],
-            schedule: detail.transition_difficulties ?? [],
-            notice: detail.notice_time ? [detail.notice_time] : [],
+            sensory: normalizeChildProfileLabels(detail.difficult_environments ?? []),
+            place: normalizeChildProfileLabels(detail.difficult_places ?? []),
+            schedule: normalizeChildProfileLabels(detail.transition_difficulties ?? []),
+            notice: detail.notice_time ? normalizeChildProfileLabels([detail.notice_time]) : [],
         };
 
         return { ...section, items: itemsById[section.id] ?? [] };

@@ -13,6 +13,7 @@ import {
 } from '../../constants/Api';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
+import { formatRelativeTime } from '../../constants/Time';
 
 type NotificationItem = {
     id: string;
@@ -25,26 +26,16 @@ type NotificationItem = {
     childId?: string;
     notificationId?: string;
     requestId?: string;
-};
-
-const formatTime = (value: string) => {
-    const created = new Date(value).getTime();
-    if (Number.isNaN(created)) return '방금 전';
-
-    const diffMinutes = Math.max(0, Math.floor((Date.now() - created) / 60000));
-    if (diffMinutes < 1) return '방금 전';
-    if (diffMinutes < 60) return `${diffMinutes}분 전`;
-
-    const diffHours = Math.floor(diffMinutes / 60);
-    if (diffHours < 24) return `${diffHours}시간 전`;
-
-    const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays}일 전`;
+    companionPhone?: string;
+    companionIntro?: string;
+    companionRelation?: string;
+    companionProfileImage?: string;
 };
 
 const getNotificationTitle = (type: string) => {
     if (type === 'companion_request') return '동행인 승인 요청';
     if (type === 'emergency') return '돌발상황 알림';
+    if (type === 'journal') return '외출 일지 도착';
     if (type === 'request_approved') return '승인 완료';
     if (type === 'request_rejected') return '승인 거절';
 
@@ -56,7 +47,7 @@ const mapNotification = (notification: ParentNotification): NotificationItem => 
     notificationId: notification.notification_id,
     title: getNotificationTitle(notification.type),
     message: notification.message,
-    time: formatTime(notification.created_at),
+    time: formatRelativeTime(notification.created_at),
     type: notification.type,
     unread: !notification.is_read,
     companionName: notification.sender_name,
@@ -68,11 +59,15 @@ const mapInviteRequest = (request: InviteRequest): NotificationItem => ({
     requestId: request.request_id,
     title: '동행인 승인 요청',
     message: `${request.companion_name}님이 아동 연결을 요청했어요.`,
-    time: formatTime(request.created_at),
+    time: formatRelativeTime(request.created_at),
     type: 'companion_request',
     unread: true,
     companionName: request.companion_name,
     childId: request.child_id,
+    companionPhone: request.companion_phone ?? '',
+    companionIntro: request.companion_intro ?? '',
+    companionRelation: request.companion_job || request.companion_relation || request.relation || '',
+    companionProfileImage: request.companion_profile_image_url ?? '',
 });
 
 export default function Notifications() {
@@ -149,6 +144,10 @@ export default function Notifications() {
                     companionName: notification.companionName ?? '',
                     childId: notification.childId ?? '',
                     requestMessage: notification.message,
+                    companionPhone: notification.companionPhone ?? '',
+                    companionIntro: notification.companionIntro ?? '',
+                    companionRelation: notification.companionRelation ?? '',
+                    companionProfileImage: notification.companionProfileImage ?? '',
                 },
             } as any);
         }
@@ -195,7 +194,11 @@ export default function Notifications() {
                             notification.unread && styles.iconCircleUnread,
                         ]}>
                             <Ionicons
-                                name={notification.type === 'companion_request' ? 'person-add-outline' : 'notifications-outline'}
+                                name={notification.type === 'companion_request'
+                                    ? 'person-add-outline'
+                                    : notification.type === 'journal'
+                                        ? 'document-text-outline'
+                                        : 'notifications-outline'}
                                 size={22}
                                 color={Colors.text}
                             />

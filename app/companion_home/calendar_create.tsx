@@ -203,7 +203,7 @@ export default function CompanionHomeCalendarCreate() {
                 child_id: selectedChild.child_id,
                 title,
                 date: formatDate(date),
-                start_time: '09:00',
+                start_time: '00:00',
                 place_type: selectedType,
                 transport_type: '기타',
                 activities: memo.trim() ? [memo.trim()] : [],

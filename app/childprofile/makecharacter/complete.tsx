@@ -181,9 +181,7 @@ export default function MakeCharacterComplete() {
                     updatedChildName: childName,
                     updatedProfileImage: params.profileImage ?? '',
                     updatedProfileSections: params.profileSections ?? '',
-                    updatedCharacterImages: characterImages
-                        ? JSON.stringify(characterImages)
-                        : '',
+                    updatedCharacterImageKey: params.characterImageKey ?? '',
                     updatedCharacterTone: params.tone ?? 'kind',
                     updatedCharacterSpeed: speedMap[params.speed ?? '중간'] ?? 'normal',
                     updatedCharacterVoice: params.gender ?? 'female',

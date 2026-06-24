@@ -19,6 +19,7 @@ import {
     ScheduleJournal,
     updateChildProfile,
 } from '../../constants/Api';
+import { normalizeChildProfileLabel, normalizeChildProfileLabels } from '../../constants/ChildProfileLabels';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 
@@ -41,7 +42,15 @@ const parseJson = <T,>(value: string | undefined, fallback: T): T => {
     }
 };
 
-const toLines = (items?: string[]) => items?.join('\n') ?? '';
+const toLines = (items?: string[]) => normalizeChildProfileLabels(items ?? []).join('\n');
+
+const normalizeDelimitedText = (value?: string) => (
+    normalizeChildProfileLabels(
+        value
+            ? value.split(/\n|,/).map((item) => item.trim()).filter(Boolean)
+            : []
+    ).join('\n')
+);
 
 const parseLines = (value: string) => (
     value
@@ -61,11 +70,11 @@ export default function ChildCommentEditScreen() {
     const traits = useMemo(() => parseJson<ChildTraits>(params.traits, {}), [params.traits]);
     const journal = useMemo(() => parseJson<ScheduleJournal | null>(params.journal, null), [params.journal]);
     const [cautionSituations, setCautionSituations] = useState(toLines(traits.caution_situations));
-    const [requiredActions, setRequiredActions] = useState(traits.required_actions ?? '');
+    const [requiredActions, setRequiredActions] = useState(normalizeDelimitedText(traits.required_actions));
     const [calmingMethods, setCalmingMethods] = useState(toLines(traits.calming_methods));
-    const [avoidBehaviors, setAvoidBehaviors] = useState(traits.avoid_behaviors ?? '');
+    const [avoidBehaviors, setAvoidBehaviors] = useState(normalizeDelimitedText(traits.avoid_behaviors));
     const [difficultEnvironments, setDifficultEnvironments] = useState(toLines(traits.difficult_environments));
-    const [noticeTime, setNoticeTime] = useState(traits.notice_time ?? '');
+    const [noticeTime, setNoticeTime] = useState(normalizeChildProfileLabel(traits.notice_time ?? ''));
     const [error, setError] = useState('');
     const [saving, setSaving] = useState(false);
 

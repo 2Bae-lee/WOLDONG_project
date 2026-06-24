@@ -27,6 +27,7 @@ import {
     getSchedules,
     getTodaySchedules,
 } from '../../constants/Api';
+import { normalizeChildProfileLabels } from '../../constants/ChildProfileLabels';
 import { Colors } from '../../constants/Colors';
 import { CompanionTodaySchedule } from '../../constants/CompanionTodayState';
 import { Fonts } from '../../constants/Fonts';
@@ -90,21 +91,21 @@ const getSchedulePlace = (schedule: TodayScheduleSummary) => (
 );
 
 const splitRequiredActions = (value?: string) => (
-    value ? value.split(',').map((item) => item.trim()).filter(Boolean) : []
+    normalizeChildProfileLabels(value ? value.split(',').map((item) => item.trim()).filter(Boolean) : [])
 );
 
 const serializeChildProfileSections = (child: CompanionChild) => JSON.stringify([
-    { id: 'info', title: '공유 정보', items: [child.disability_type].filter(Boolean) },
-    { id: 'guidance', title: '설명 방식', items: child.explanation_styles ?? [] },
-    { id: 'communication', title: '의사소통 방식', items: child.communication_styles ?? [] },
-    { id: 'danger', title: '외출 중 주의 상황', items: child.caution_situations ?? [] },
+    { id: 'info', title: '공유 정보', items: normalizeChildProfileLabels([child.disability_type].filter(Boolean)) },
+    { id: 'guidance', title: '설명 방식', items: normalizeChildProfileLabels(child.explanation_styles ?? []) },
+    { id: 'communication', title: '의사소통 방식', items: normalizeChildProfileLabels(child.communication_styles ?? []) },
+    { id: 'danger', title: '외출 중 주의 상황', items: normalizeChildProfileLabels(child.caution_situations ?? []) },
     { id: 'companion', title: '동행인이 해야 할 행동', items: splitRequiredActions(child.required_actions) },
-    { id: 'sensory', title: '힘들어하는 환경', items: child.difficult_environments ?? [] },
-    { id: 'place', title: '힘들어하는 장소', items: child.difficult_places ?? [] },
-    { id: 'schedule', title: '어려운 일정 변화', items: child.transition_difficulties ?? [] },
-    { id: 'notice', title: '미리 알림 시간', items: child.notice_time ? [child.notice_time] : [] },
-    { id: 'calming', title: '도움이 되는 것', items: child.calming_methods ?? [] },
-    { id: 'avoid', title: '피해야 할 행동', items: child.avoid_behaviors ? [child.avoid_behaviors] : [] },
+    { id: 'sensory', title: '힘들어하는 환경', items: normalizeChildProfileLabels(child.difficult_environments ?? []) },
+    { id: 'place', title: '힘들어하는 장소', items: normalizeChildProfileLabels(child.difficult_places ?? []) },
+    { id: 'schedule', title: '어려운 일정 변화', items: normalizeChildProfileLabels(child.transition_difficulties ?? []) },
+    { id: 'notice', title: '미리 알림 시간', items: child.notice_time ? normalizeChildProfileLabels([child.notice_time]) : [] },
+    { id: 'calming', title: '도움이 되는 것', items: normalizeChildProfileLabels(child.calming_methods ?? []) },
+    { id: 'avoid', title: '피해야 할 행동', items: child.avoid_behaviors ? normalizeChildProfileLabels([child.avoid_behaviors]) : [] },
 ]);
 
 const mapTodaySchedules = (
@@ -249,12 +250,31 @@ export default function CompanionChildren() {
 
             const companionProfile = profileResponse.data;
             const assignedChildren = childrenResponse.data ?? [];
-            const todaySchedules = todaySchedulesResponse.data ?? [];
-            const allSchedules = allSchedulesResponse.data ?? [];
+            const companionId = companionProfile?.id ?? '';
+            const filterOwnSchedules = (schedules: TodayScheduleSummary[]) => (
+                companionId
+                    ? schedules.filter((schedule) => schedule.companion_id === companionId)
+                    : []
+            );
+            const childById = new Map(assignedChildren.map((child) => [child.child_id, child]));
+            const todaySchedules = (todaySchedulesResponse.data ?? [])
+                .filter((schedule) => childById.has(schedule.child_id));
+            const allSchedules = filterOwnSchedules(allSchedulesResponse.data ?? []);
+            const effectiveSchedules = allSchedules.filter((schedule) => {
+                if (!childById.has(schedule.child_id)) return false;
+
+                const childTodaySchedules = todaySchedules.filter((todaySchedule) => (
+                    todaySchedule.child_id === schedule.child_id
+                ));
+
+                return childTodaySchedules.length > 0
+                    ? childTodaySchedules.some((todaySchedule) => todaySchedule.schedule_id === schedule.schedule_id)
+                    : true;
+            });
             const scheduleCountByChildId = new Map<string, number>();
             const primaryScheduleByChildId = new Map<string, string>();
 
-            allSchedules.forEach((schedule) => {
+            effectiveSchedules.forEach((schedule) => {
                 scheduleCountByChildId.set(
                     schedule.child_id,
                     (scheduleCountByChildId.get(schedule.child_id) ?? 0) + 1
@@ -264,7 +284,6 @@ export default function CompanionChildren() {
                 }
             });
 
-            const childById = new Map(assignedChildren.map((child) => [child.child_id, child]));
             const nextConnectedChildren: ChildItem[] = assignedChildren.map((child) => ({
                 id: child.child_id,
                 childId: child.child_id,
@@ -290,7 +309,7 @@ export default function CompanionChildren() {
             setApiCompanionJob(companionProfile?.job || companionProfile?.relation || '');
             setApiCompanionIntro(companionProfile?.intro ?? '');
             setApiCompanionProfileImage(companionProfile?.profile_image_url ?? '');
-            setTodayTodos(mapTodaySchedules(todaySchedules, childById));
+            setTodayTodos(mapTodaySchedules(effectiveSchedules, childById));
             setCalendarEvents(mapCalendarSchedules(allSchedules, childById));
             setChildren((current) => [
                 ...nextConnectedChildren,
@@ -961,7 +980,7 @@ export default function CompanionChildren() {
                                                         <Text style={styles.metaText}>
                                                             {child.status === 'pending'
                                                                 ? '승인 대기'
-                                                                : `오늘 일정 ${child.schedules}개`}
+                                                                : `담당 일정 ${child.schedules}개`}
                                                         </Text>
                                                     </View>
                                                 </View>

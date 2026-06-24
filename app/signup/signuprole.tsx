@@ -43,7 +43,7 @@ export default function SignupRole() {
 
         <Pressable
           style={[styles.roleCard, styles.companionCard]}
-          onPress={() => router.push('/signup/companion/email')}
+          onPress={() => router.push('/signup/companion/name')}
         >
           <View style={styles.iconCircle}>
           <Image

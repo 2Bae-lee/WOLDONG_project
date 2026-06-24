@@ -22,12 +22,15 @@ import {
     CharacterSpeed,
     CharacterTone,
     CharacterVoice,
+    CharacterImages,
     SocialStoryResponse,
     generateScheduleSocialStory,
     generateSocialStoryTts,
+    getChildProfile,
     toApiAssetUrl,
 } from '../constants/Api';
 import { Colors } from '../constants/Colors';
+import { getGeneratedCharacterImages } from '../constants/CharacterImageStore';
 import { Fonts } from '../constants/Fonts';
 
 const parseCheckedItems = (value?: string) => {
@@ -50,15 +53,15 @@ const getInfoItemLabel = (value: string) => (
         .replace(/^아동_주의_/, '주의사항: ')
 );
 
-const fallbackCharacterImage = require('../assets/images/mock_character.png');
+const characterFrameOrder: (keyof CharacterImages)[] = ['idle', 'mouth_open', 'mouth_wide', 'blink', 'smile'];
 
-const findIdleImage = (value: unknown): string => {
+const findImageValue = (value: unknown): string => {
     if (typeof value === 'string') return value.trim();
     if (!value || typeof value !== 'object') return '';
 
     if (Array.isArray(value)) {
         for (const item of value) {
-            const image = findIdleImage(item);
+            const image = findImageValue(item);
             if (image) return image;
         }
         return '';
@@ -68,55 +71,80 @@ const findIdleImage = (value: unknown): string => {
     const directKeys = ['idle', 'default', 'neutral', 'url', 'uri', 'image_url', 'imageUrl', 'src', 'path', 'image'];
 
     for (const key of directKeys) {
-        const image = findIdleImage(record[key]);
+        const image = findImageValue(record[key]);
         if (image) return image;
     }
 
     const nestedKeys = ['frames', 'images', 'character_images', 'characterImages', 'data', 'result'];
 
     for (const key of nestedKeys) {
-        const image = findIdleImage(record[key]);
+        const image = findImageValue(record[key]);
         if (image) return image;
     }
 
     return '';
 };
 
-const parseIdleImage = (value?: string) => {
-    if (!value) return '';
+const normalizeCharacterImageSource = (value: string) => (
+    /^(data:image\/|https?:\/\/|file:\/\/)/.test(value) ? value : toApiAssetUrl(value)
+);
+
+const parseCharacterFrames = (value?: string) => {
+    if (!value) return [];
+
+    const normalizeRecord = (payload: unknown): string[] => {
+        if (!payload) return [];
+
+        if (Array.isArray(payload)) {
+            return payload
+                .map(findImageValue)
+                .filter((image, index, images) => image && images.indexOf(image) === index);
+        }
+
+        if (typeof payload === 'string') {
+            const image = payload.trim();
+            return image ? [image] : [];
+        }
+
+        if (typeof payload !== 'object') return [];
+
+        const record = payload as Record<string, unknown>;
+        const orderedFrames = characterFrameOrder
+            .map((key) => findImageValue(record[key]))
+            .filter(Boolean);
+
+        if (orderedFrames.length > 0) {
+            return orderedFrames.filter((image, index, images) => images.indexOf(image) === index);
+        }
+
+        const nestedKeys = ['frames', 'images', 'character_images', 'characterImages', 'data', 'result'];
+        for (const key of nestedKeys) {
+            const frames = normalizeRecord(record[key]);
+            if (frames.length > 0) return frames;
+        }
+
+        const image = findImageValue(record);
+        return image ? [image] : [];
+    };
 
     try {
-        return findIdleImage(JSON.parse(value));
+        return normalizeRecord(JSON.parse(value));
     } catch {
-        return value.trim();
+        const image = value.trim();
+        return image ? [image] : [];
     }
 };
-
-const getStoryImageUrl = (result?: SocialStoryResponse | null) => {
-    const imageUrl = result?.story_images?.find((url) => typeof url === 'string' && url.trim())
-        || result?.story_image
-        || '';
-
-    if (!imageUrl) return '';
-    if (/^(data:image\/|https?:\/\/|file:\/\/)/.test(imageUrl)) return imageUrl;
-
-    return toApiAssetUrl(imageUrl);
-};
-
-const getImageHeaders = (imageUrl: string) => (
-    imageUrl.includes('ngrok')
-        ? { 'ngrok-skip-browser-warning': 'true' }
-        : undefined
-);
 
 export default function SocialStoryScreen() {
     const params = useLocalSearchParams<{
         scheduleId?: string;
         title?: string;
+        childId?: string;
         childName?: string;
         script?: string;
         checkedItems?: string;
         characterImages?: string;
+        characterImageKey?: string;
         characterTone?: CharacterTone;
         characterSpeed?: CharacterSpeed;
         characterVoice?: CharacterVoice;
@@ -130,17 +158,27 @@ export default function SocialStoryScreen() {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
-    const [storyImageLoadFailed, setStoryImageLoadFailed] = useState(false);
+    const [characterFrameIndex, setCharacterFrameIndex] = useState(0);
+    const [profileCharacterImages, setProfileCharacterImages] = useState<CharacterImages | null>(null);
     const floatY = useRef(new Animated.Value(0)).current;
     const audioUrl = toApiAssetUrl(result?.audio_url);
-    const storyImageUrl = getStoryImageUrl(result);
-    const idleImageUrl = useMemo(
-        () => parseIdleImage(params.characterImages),
-        [params.characterImages]
+    const storedCharacterImages = useMemo(
+        () => getGeneratedCharacterImages(params.characterImageKey),
+        [params.characterImageKey]
     );
-    const characterSource = idleImageUrl
-        ? { uri: toApiAssetUrl(idleImageUrl) }
-        : fallbackCharacterImage;
+    const characterFrames = useMemo(() => (
+        storedCharacterImages
+            ? parseCharacterFrames(JSON.stringify(storedCharacterImages))
+            : profileCharacterImages
+                ? parseCharacterFrames(JSON.stringify(profileCharacterImages))
+                : parseCharacterFrames(params.characterImages)
+    ), [params.characterImages, profileCharacterImages, storedCharacterImages]);
+    const activeCharacterFrame = characterFrames.length > 0
+        ? characterFrames[characterFrameIndex % characterFrames.length]
+        : '';
+    const characterSource = activeCharacterFrame
+        ? { uri: normalizeCharacterImageSource(activeCharacterFrame) }
+        : null;
     const audioPlayer = useAudioPlayer(null, { updateInterval: 250 });
     const audioStatus = useAudioPlayerStatus(audioPlayer);
 
@@ -153,6 +191,29 @@ export default function SocialStoryScreen() {
             playsInSilentMode: true,
         }).catch(() => undefined);
     }, []);
+
+    useEffect(() => {
+        if (storedCharacterImages || params.characterImages || !params.childId) return;
+
+        let active = true;
+        const nextChildId = params.childId;
+
+        const loadCharacterImages = async () => {
+            try {
+                const response = await getChildProfile(nextChildId);
+                if (!active) return;
+                setProfileCharacterImages(response.data?.character_image_url ?? null);
+            } catch {
+                if (active) setProfileCharacterImages(null);
+            }
+        };
+
+        loadCharacterImages();
+
+        return () => {
+            active = false;
+        };
+    }, [params.characterImages, params.childId, storedCharacterImages]);
 
     useEffect(() => {
         const floatingAnimation = Animated.loop(
@@ -179,10 +240,6 @@ export default function SocialStoryScreen() {
     }, [floatY]);
 
     useEffect(() => {
-        setStoryImageLoadFailed(false);
-    }, [storyImageUrl]);
-
-    useEffect(() => {
         if (!audioUrl) {
             audioPlayer.pause();
             setIsSpeaking(false);
@@ -192,6 +249,24 @@ export default function SocialStoryScreen() {
         audioPlayer.replace({ uri: audioUrl });
         setIsSpeaking(false);
     }, [audioPlayer, audioUrl]);
+
+    useEffect(() => {
+        if (characterFrames.length <= 1) {
+            setCharacterFrameIndex(0);
+            return;
+        }
+
+        if (!isSpeaking) {
+            setCharacterFrameIndex(0);
+            return;
+        }
+
+        const frameTimer = setInterval(() => {
+            setCharacterFrameIndex((current) => (current + 1) % characterFrames.length);
+        }, 180);
+
+        return () => clearInterval(frameTimer);
+    }, [characterFrames.length, isSpeaking]);
 
     useEffect(() => {
         if (audioStatus.playing) {
@@ -361,18 +436,8 @@ export default function SocialStoryScreen() {
                     <View style={styles.resultCard}>
                         <Text style={styles.resultTitle}>완성된 이야기</Text>
 
-                        {storyImageUrl && !storyImageLoadFailed ? (
-                            <Image
-                                source={{
-                                    uri: storyImageUrl,
-                                    headers: getImageHeaders(storyImageUrl),
-                                }}
-                                style={styles.storyImage}
-                                resizeMode="cover"
-                                onError={() => setStoryImageLoadFailed(true)}
-                            />
-                        ) : (
-                            <View style={styles.characterStage}>
+                        <View style={styles.characterStage}>
+                            {characterSource ? (
                                 <Animated.Image
                                     source={characterSource}
                                     style={[
@@ -381,8 +446,12 @@ export default function SocialStoryScreen() {
                                     ]}
                                     resizeMode="contain"
                                 />
-                            </View>
-                        )}
+                            ) : (
+                                <Text style={styles.characterMissingText}>
+                                    캐릭터 이미지를 불러오지 못했어요.
+                                </Text>
+                            )}
+                        </View>
                         <Text style={styles.resultScript}>{result.converted_script}</Text>
 
                         {result.predicted_warnings?.length ? (
@@ -574,18 +643,19 @@ const styles = StyleSheet.create({
         marginBottom: 16,
     },
 
-    storyImage: {
-        width: '100%',
-        aspectRatio: 1,
-        borderRadius: 14,
-        backgroundColor: Colors.pageBg,
-        marginBottom: 16,
-    },
-
     characterImage: {
         width: 198,
         height: 198,
         borderRadius: 18,
+    },
+
+    characterMissingText: {
+        paddingHorizontal: 18,
+        textAlign: 'center',
+        fontFamily: Fonts.body,
+        fontSize: 14,
+        lineHeight: 20,
+        color: Colors.textShadow,
     },
 
     resultScript: {

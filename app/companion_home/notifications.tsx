@@ -7,6 +7,7 @@ import { ParentNotification, getNotifications, markNotificationRead } from '../.
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 import { markCompanionNotificationsRead } from '../../constants/NotificationState';
+import { formatRelativeTime } from '../../constants/Time';
 
 type NotificationItem = {
     id: string;
@@ -16,21 +17,6 @@ type NotificationItem = {
     type: 'request_approved' | 'request_rejected' | 'emergency' | 'schedule' | string;
     unread: boolean;
     notificationId?: string;
-};
-
-const formatTime = (value: string) => {
-    const created = new Date(value).getTime();
-    if (Number.isNaN(created)) return '방금 전';
-
-    const diffMinutes = Math.max(0, Math.floor((Date.now() - created) / 60000));
-    if (diffMinutes < 1) return '방금 전';
-    if (diffMinutes < 60) return `${diffMinutes}분 전`;
-
-    const diffHours = Math.floor(diffMinutes / 60);
-    if (diffHours < 24) return `${diffHours}시간 전`;
-
-    const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays}일 전`;
 };
 
 const getNotificationTitle = (type: string) => {
@@ -47,7 +33,7 @@ const mapNotification = (notification: ParentNotification): NotificationItem => 
     notificationId: notification.notification_id,
     title: getNotificationTitle(notification.type),
     message: notification.message,
-    time: formatTime(notification.created_at),
+    time: formatRelativeTime(notification.created_at),
     type: notification.type,
     unread: !notification.is_read,
 });

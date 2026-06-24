@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Image, StyleSheet, Text, TextInput, View } from 'react-native';
 import SmallButton from '../../../components/SmallButton';
@@ -7,9 +7,10 @@ import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
 
 export default function CompanionSignupEmail() {
-    const [name, setName] = useState('');
+    const params = useLocalSearchParams<{
+      name?: string;
+    }>();
     const [email, setEmail] = useState('');
-    const [nameError, setNameError] = useState('');
     const [emailError, setEmailError] = useState('');
     const [isSending, setIsSending] = useState(false);
   
@@ -17,12 +18,7 @@ export default function CompanionSignupEmail() {
     const handleNext = async () => {
       if (isSending) return;
 
-      const trimmedName = name.trim();
       const trimmedEmail = email.trim();
-      if (trimmedName === '') {
-        setNameError('이름을 입력해 주세요.');
-        return;
-      }
       if (trimmedEmail === '') {
         setEmailError('이메일을 입력해 주세요.');
         return;
@@ -34,7 +30,6 @@ export default function CompanionSignupEmail() {
         return ;
       }
 
-      setNameError('');
       setEmailError('');
       setIsSending(true);
 
@@ -50,7 +45,7 @@ export default function CompanionSignupEmail() {
       router.push({
         pathname: '/signup/companion/authenticate',
         params: {
-          name: trimmedName,
+          name: params.name ?? '',
           email: trimmedEmail,
         },
       } as any);
@@ -74,25 +69,6 @@ export default function CompanionSignupEmail() {
         <Text style={styles.description}>
           이 앱에 가입하려면 이메일을 입력하세요
         </Text>
-
-        <TextInput
-            style={[
-                    styles.input,
-                    nameError ? styles.inputError : null,
-            ]}
-            placeholder="이름"
-            placeholderTextColor={Colors.textShadow}
-            value={name}
-            onChangeText={(text) => {
-                setName(text);
-                if (nameError) {
-                    setNameError('');
-                }
-            }}
-        />
-        {nameError ? (
-             <Text style={styles.errorText}>{nameError}</Text>
-        ) : null}
 
         <TextInput
             style={[

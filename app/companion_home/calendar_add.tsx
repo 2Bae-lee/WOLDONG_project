@@ -38,6 +38,7 @@ import {
     scheduleTypeFeatureMap,
     transportFeatureMap,
 } from '../../constants/ScheduleFeatures';
+import { formatScheduleTimeInput, normalizeScheduleTimeInput } from '../../constants/ScheduleTimeInput';
 
 const scheduleTypes = [
     { label: '병원', description: '진료, 검사, 예방접종 일정' },
@@ -76,7 +77,7 @@ export default function CompanionCalendarAdd() {
     const [selectedDay, setSelectedDay] = useState(initialDay);
     const [selectedType, setSelectedType] = useState('');
     const [selectedTransport, setSelectedTransport] = useState('');
-    const [startTime, setStartTime] = useState('10:00');
+    const [startTime, setStartTime] = useState('00:00');
     const [scheduleTitle, setScheduleTitle] = useState('');
     const [memo, setMemo] = useState('');
     const [todos, setTodos] = useState<string[]>([]);
@@ -250,8 +251,10 @@ export default function CompanionCalendarAdd() {
             return;
         }
 
-        if (!/^\d{2}:\d{2}$/.test(startTime.trim())) {
-            setError('출발 시간은 10:00처럼 HH:MM 형식으로 입력해주세요.');
+        const normalizedStartTime = normalizeScheduleTimeInput(startTime);
+
+        if (!/^\d{2}:\d{2}$/.test(normalizedStartTime)) {
+            setError('출발 시간은 00:00처럼 HH:MM 형식으로 입력해주세요.');
             return;
         }
 
@@ -269,7 +272,7 @@ export default function CompanionCalendarAdd() {
                 child_id: childId,
                 title,
                 date: formatDate(date),
-                start_time: startTime.trim(),
+                start_time: normalizedStartTime,
                 place_type: selectedType,
                 transport_type: selectedTransport,
                 activities: getUniqueScheduleFeatures(
@@ -465,15 +468,17 @@ export default function CompanionCalendarAdd() {
                     <Text style={styles.sectionTitle}>출발 시간</Text>
                     <TextInput
                         style={styles.input}
-                        placeholder="ex) 10:00"
+                        placeholder="00:00"
                         placeholderTextColor={Colors.textShadow}
                         value={startTime}
                         onChangeText={(text) => {
-                            setStartTime(text);
+                            setStartTime(formatScheduleTimeInput(text));
                             clearError();
                         }}
-                        keyboardType="numbers-and-punctuation"
+                        onBlur={() => setStartTime(normalizeScheduleTimeInput(startTime))}
+                        keyboardType="number-pad"
                         maxLength={5}
+                        selectTextOnFocus
                     />
                 </View>
 

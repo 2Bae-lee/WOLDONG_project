@@ -172,6 +172,7 @@ export default function ParentSignupCodeScreen() {
 
         <SmallButton
                   label={isVerifying ? '확인 중' : '계속'}
+                  width="100%"
                   onPress={handleSubmit}
                 />
         </View>
@@ -244,16 +245,18 @@ const styles = StyleSheet.create({
 
   codeRow: {
     flexDirection: 'row',
-    gap: 8,
+    columnGap: 8,
+    width: '100%',
     marginBottom: 18,
   },
 
   codeInput: {
-    width: 46,
-    height: 58,
+    flex: 1,
+    maxWidth: 52,
+    height: 62,
     borderRadius: 8,
     backgroundColor: Colors.white,
-    fontSize: 58,
+    fontSize: 62,
     fontFamily: Fonts.title
   },
 

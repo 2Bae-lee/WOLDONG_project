@@ -1,13 +1,20 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Image, StyleSheet, Text, TextInput, View } from 'react-native';
 import SmallButton from '../../../components/SmallButton';
+import { signupParent } from '../../../constants/Api';
 import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
 
 export default function ParentSignupPhoneNumber() {
+    const params = useLocalSearchParams<{
+        name?: string;
+        email?: string;
+        password?: string;
+    }>();
     const [phoneNumber, setPhoneNumber] = useState('');
     const [phoneError, setPhoneError] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const formatPhoneNumber = (text: string) => {
         const numbersOnly = text.replace(/[^0-9]/g, '');
@@ -32,11 +39,18 @@ export default function ParentSignupPhoneNumber() {
         }
     };
 
-    const handleNext = () => {
-        console.log('전화번호 계속 버튼 눌림');
-        console.log('현재 전화번호:', phoneNumber);
+    const handleNext = async () => {
+        if (isSubmitting) return;
     
         const phoneRegex = /^010-\d{4}-\d{4}$/;
+        const name = params.name?.trim() ?? '';
+        const email = params.email?.trim() ?? '';
+        const password = params.password?.trim() ?? '';
+
+        if (!name || !email || !password) {
+        setPhoneError('회원가입 정보가 부족해요. 처음부터 다시 진행해주세요.');
+        return;
+        }
     
         if (phoneNumber.trim() === '') {
         setPhoneError('전화번호를 입력해 주세요.');
@@ -50,7 +64,30 @@ export default function ParentSignupPhoneNumber() {
         }
     
         setPhoneError('');
-        router.push('/signup/parent/signupsuccess' as any);
+        setIsSubmitting(true);
+
+        try {
+            await signupParent({
+                name,
+                email,
+                password,
+                phone: phoneNumber,
+            });
+        } catch (error) {
+            setPhoneError(error instanceof Error ? error.message : '회원가입에 실패했어요.');
+            setIsSubmitting(false);
+            return;
+        }
+
+        setIsSubmitting(false);
+        router.push({
+            pathname: '/signup/parent/signupsuccess',
+            params: {
+                name,
+                email,
+                phone: phoneNumber,
+            },
+        } as any);
     };
     
 
@@ -91,7 +128,7 @@ export default function ParentSignupPhoneNumber() {
             ) : null}
 
             <SmallButton
-            label="계속"
+            label={isSubmitting ? '가입 중' : '계속'}
             onPress={handleNext}
             />
         </View>

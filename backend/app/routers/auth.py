@@ -28,6 +28,10 @@ class CheckEmailRequest(BaseModel):
 class UpdateMeRequest(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
+    relation: Optional[str] = None
+    job: Optional[str] = None
+    intro: Optional[str] = None
+    profile_image_url: Optional[str] = None
 
 class VerifyCodeRequest(BaseModel):
     email: EmailStr
@@ -106,6 +110,10 @@ async def get_me(user: User = Depends(get_current_user)):
         "email": user.email,
         "role": user.role,
         "phone": user.phone,
+        "relation": user.relation,
+        "job": user.job,
+        "intro": user.intro,
+        "profile_image_url": user.profile_image_url,
         "created_at": str(user.created_at)
     })
 
@@ -117,13 +125,25 @@ async def update_me(body: UpdateMeRequest, user: User = Depends(get_current_user
         user.name = body.name
     if body.phone:
         user.phone = body.phone
+    if body.relation is not None:
+        user.relation = body.relation
+    if body.job is not None:
+        user.job = body.job
+    if body.intro is not None:
+        user.intro = body.intro
+    if body.profile_image_url is not None:
+        user.profile_image_url = body.profile_image_url
     await user.save()
     return success({
         "id": str(user.id),
         "name": user.name,
         "email": user.email,
         "role": user.role,
-        "phone": user.phone
+        "phone": user.phone,
+        "relation": user.relation,
+        "job": user.job,
+        "intro": user.intro,
+        "profile_image_url": user.profile_image_url
     }, "정보가 수정되었습니다")
 
 # POST /api/auth/logout - 로그아웃

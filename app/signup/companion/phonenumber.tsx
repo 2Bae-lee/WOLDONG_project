@@ -1,13 +1,20 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Image, StyleSheet, Text, TextInput, View } from 'react-native';
 import SmallButton from '../../../components/SmallButton';
+import { signupCompanion } from '../../../constants/Api';
 import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
 
 export default function CompanionSignupPhoneNumber() {
+    const params = useLocalSearchParams<{
+        name?: string;
+        email?: string;
+        password?: string;
+    }>();
     const [phoneNumber, setPhoneNumber] = useState('');
     const [phoneError, setPhoneError] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const formatPhoneNumber = (text: string) => {
         const numbersOnly = text.replace(/[^0-9]/g, '');
@@ -32,10 +39,18 @@ export default function CompanionSignupPhoneNumber() {
         }
     };
 
-    const handleNext = () => {
-        console.log('현재 전화번호:', phoneNumber);
+    const handleNext = async () => {
+        if (isSubmitting) return;
     
         const phoneRegex = /^010-\d{4}-\d{4}$/;
+        const name = params.name?.trim() ?? '';
+        const email = params.email?.trim() ?? '';
+        const password = params.password?.trim() ?? '';
+
+        if (!name || !email || !password) {
+        setPhoneError('회원가입 정보가 부족해요. 처음부터 다시 진행해주세요.');
+        return;
+        }
     
         if (phoneNumber.trim() === '') {
         setPhoneError('전화번호를 입력해 주세요.');
@@ -48,7 +63,30 @@ export default function CompanionSignupPhoneNumber() {
         }
     
         setPhoneError('');
-        router.push('/signup/companion/signupsuccess' as any);
+        setIsSubmitting(true);
+
+        try {
+            await signupCompanion({
+                name,
+                email,
+                password,
+                phone: phoneNumber,
+            });
+        } catch (error) {
+            setPhoneError(error instanceof Error ? error.message : '회원가입에 실패했어요.');
+            setIsSubmitting(false);
+            return;
+        }
+
+        setIsSubmitting(false);
+        router.push({
+            pathname: '/signup/companion/signupsuccess',
+            params: {
+                name,
+                email,
+                phone: phoneNumber,
+            },
+        } as any);
     };
     
 
@@ -89,7 +127,7 @@ export default function CompanionSignupPhoneNumber() {
             ) : null}
 
             <SmallButton
-            label="계속"
+            label={isSubmitting ? '가입 중' : '계속'}
             onPress={handleNext}
             />
         </View>

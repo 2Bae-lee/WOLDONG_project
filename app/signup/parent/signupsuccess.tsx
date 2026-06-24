@@ -15,13 +15,13 @@ export default function OnboardingOne() {
         <Text style={styles.title}>월동</Text>
         <Text style={styles.description}>
         <Text style={styles.boldText}>회원가입이 완료되었습니다.</Text>{'\n'}
-          로그인 화면으로 이동합니다. {'\n'}
+          아이 프로필 설정으로 이동합니다. {'\n'}
         </Text>
       </View>
 
       <PrimaryButton
-        label="이동"
-        onPress={() => router.push('/login')}
+        label="프로필 설정하기"
+        onPress={() => router.replace('/childprofile/childname' as any)}
       />
     </View>
   );

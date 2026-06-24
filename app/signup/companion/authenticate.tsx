@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useRef, useState } from 'react';
 import {
   Image,
@@ -11,15 +11,21 @@ import {
   View,
 } from 'react-native';
 import SmallButton from '../../../components/SmallButton';
+import { sendSignupCode, verifySignupCode } from '../../../constants/Api';
 import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
 
-const CODE_LENGTH = 4;
-const MOCK_AUTH_CODE = '0618';
+const CODE_LENGTH = 6;
 
 export default function CompanionSignupCodeScreen() {
-  const [code, setCode] = useState(['', '', '', '']);
+  const params = useLocalSearchParams<{
+    name?: string;
+    email?: string;
+  }>();
+  const [code, setCode] = useState(Array.from({ length: CODE_LENGTH }, () => ''));
   const [error, setError] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isResending, setIsResending] = useState(false);
 
   const inputRefs = useRef<Array<TextInput | null>>([]);
 
@@ -42,7 +48,9 @@ export default function CompanionSignupCodeScreen() {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (isVerifying) return;
+
     const fullCode = code.join('');
 
     if (fullCode.length < CODE_LENGTH) {
@@ -50,28 +58,60 @@ export default function CompanionSignupCodeScreen() {
       return;
     }
 
-    if (fullCode != MOCK_AUTH_CODE){
-        setError('인증번호가 일치하지 않습니다.');
-        return;
+    if (!params.email) {
+      setError('이메일 정보가 없어요. 다시 입력해주세요.');
+      return;
     }
 
     setError('');
-    router.push('/signup/companion/password' as any);
+    setIsVerifying(true);
+
+    try {
+      await verifySignupCode(params.email, fullCode);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : '인증번호 확인에 실패했어요.');
+      setIsVerifying(false);
+      return;
+    }
+
+    setIsVerifying(false);
+    router.push({
+      pathname: '/signup/companion/password',
+      params: {
+        name: params.name ?? '',
+        email: params.email ?? '',
+      },
+    } as any);
   };
 
-    // TODO: 여기서 백엔드 인증번호 확인 API 연결
-    // 예: await verifyCode(fullCode)
+  const handleResend = async () => {
+    if (isResending) return;
 
+    if (!params.email) {
+      setError('이메일 정보가 없어요. 다시 입력해주세요.');
+      return;
+    }
 
-
-  const handleResend = () => {
-    // TODO: 인증번호 재전송 API 연결
-    setCode(['', '', '', '']);
+    setIsResending(true);
+    setCode(Array.from({ length: CODE_LENGTH }, () => ''));
     setError('');
-    inputRefs.current[0]?.focus();
+
+    try {
+      await sendSignupCode(params.email);
+      inputRefs.current[0]?.focus();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : '인증번호 재전송에 실패했어요.');
+    } finally {
+      setIsResending(false);
+    }
   };
   const handleGoBack = () => {
-    router.replace('/signup/companion/email' as any);
+    router.replace({
+      pathname: '/signup/companion/email',
+      params: {
+        name: params.name ?? '',
+      },
+    } as any);
   };
 
   return (
@@ -127,11 +167,12 @@ export default function CompanionSignupCodeScreen() {
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         <Pressable onPress={handleResend} style={styles.resendButton}>
-          <Text style={styles.resendText}>재전송</Text>
+          <Text style={styles.resendText}>{isResending ? '재전송 중' : '재전송'}</Text>
         </Pressable>
 
         <SmallButton
-                  label="계속"
+                  label={isVerifying ? '확인 중' : '계속'}
+                  width="100%"
                   onPress={handleSubmit}
                 />
         </View>
@@ -204,16 +245,18 @@ const styles = StyleSheet.create({
 
   codeRow: {
     flexDirection: 'row',
-    gap: 16,
+    columnGap: 8,
+    width: '100%',
     marginBottom: 18,
   },
 
   codeInput: {
-    width: 64,
-    height: 73,
+    flex: 1,
+    maxWidth: 52,
+    height: 62,
     borderRadius: 8,
     backgroundColor: Colors.white,
-    fontSize: 80,
+    fontSize: 62,
     fontFamily: Fonts.title
   },
 

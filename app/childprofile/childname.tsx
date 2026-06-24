@@ -14,9 +14,11 @@ import {
     TouchableWithoutFeedback,
     View
 } from 'react-native';
+import BackButton from '../../components/BackButton';
 import PrimaryButton from '../../components/PrimaryButton';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
+import { toShareableImageUri } from '../../constants/ImagePicker';
 
 export default function SignupRole() {
     const [name, setName] = useState('');
@@ -90,6 +92,9 @@ export default function SignupRole() {
             params: {
                 name: trimmedname,                        
                 profileImage: profileImage ?? '',
+                gender,
+                birth,
+                relationship,
             
               }, 
             } as any);
@@ -109,10 +114,11 @@ export default function SignupRole() {
               allowsEditing: true,
               aspect: [1, 1],
               quality: 0.8,
+              base64: true,
             });
           
             if (!result.canceled) {
-              setProfileImage(result.assets[0].uri);
+              setProfileImage(toShareableImageUri(result.assets[0]));
             }
           
     }
@@ -133,6 +139,7 @@ export default function SignupRole() {
                     <View style={styles.container}>
                         <View style={styles.logoArea}>
                             <View style={styles.logoRow}>
+                                <BackButton />
                                 <Text style={styles.logoTitle}>월동</Text>
                                 <Image
                                     source={require('../../assets/images/canola_flower_small.png')}

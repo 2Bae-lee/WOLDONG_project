@@ -7,17 +7,39 @@ import {
   Text,
   View,
 } from 'react-native';
+import BackButton from '../../components/BackButton';
 import PrimaryButton from '../../components/PrimaryButton';
 import { Colors } from '../../constants/Colors';
 import { Fonts } from '../../constants/Fonts';
 
+type DisabilityType = 'intellectual' | 'autism';
+
+const disabilityLabels: Record<DisabilityType, string> = {
+    intellectual: '지적장애',
+    autism: '자폐스펙트럼',
+};
+
+const toDisabilityType = (value?: string): DisabilityType | null => {
+    if (value === 'intellectual' || value === 'autism') {
+        return value;
+    }
+
+    return null;
+};
+
 export default function SignupRole() {
-    const [typeofdisability, setTypeOfDisabilty] = useState<'intellectual' | 'autism' | null>(null);
-    const [typeofdisabilityError, setTypeOfDisabiltyError] = useState('');
     const params = useLocalSearchParams<{
         name?: string;
         profileImage?: string;
+        gender?: string;
+        birth?: string;
+        relationship?: string;
+        typeofdisability?: string;
       }>();
+    const [typeofdisability, setTypeOfDisabilty] = useState<DisabilityType | null>(() => (
+        toDisabilityType(params.typeofdisability)
+    ));
+    const [typeofdisabilityError, setTypeOfDisabiltyError] = useState('');
       const childName = params.name ?? '김월동';
       const profileImage = params.profileImage ?? '';
       
@@ -29,10 +51,13 @@ export default function SignupRole() {
         }
 
         router.push({
-            pathname: '/childprofile/intellectual/howtointeracte',        
+            pathname: '/childprofile/characteristics/howtointeracte',        
             params: {        
               name: childName,        
               profileImage,        
+              gender: params.gender ?? '',
+              birth: params.birth ?? '',
+              relationship: params.relationship ?? '',
               typeofdisability,       
             },
         
@@ -46,6 +71,7 @@ export default function SignupRole() {
         <View style={styles.container}>
             <View style={styles.logoArea}>
                 <View style={styles.logoRow}>
+                    <BackButton />
                     <Text style={styles.logoTitle}>월동</Text>
                     <Image
                         source={require('../../assets/images/canola_flower_small.png')}
@@ -80,31 +106,30 @@ export default function SignupRole() {
                     </Text>
 
                     <View style={styles.row}>
-                        <Pressable
-                        style={[
-                            styles.selectButton,
-                            typeofdisability === 'intellectual' && styles.selectButtonSelected,
-                        ]}
-                        onPress={() => {
-                            setTypeOfDisabilty('intellectual');
-                            setTypeOfDisabiltyError('');
-                        }}
-                        >
-                            <Text style={styles.selectButtonText}>지적장애</Text>
-                        </Pressable>
+                        {(Object.keys(disabilityLabels) as DisabilityType[]).map((type) => {
+                            const selected = typeofdisability === type;
 
-                        <Pressable
-                        style={[
-                            styles.selectButton,
-                            typeofdisability === 'autism' && styles.selectButtonSelected,
-                        ]}
-                        onPress={() => {
-                            setTypeOfDisabilty('autism');
-                            setTypeOfDisabiltyError('');
-                        }}
-                        >
-                            <Text style={styles.selectButtonText}>자폐스퍽트럼</Text>
-                        </Pressable>
+                            return (
+                                <Pressable
+                                    key={type}
+                                    style={[
+                                        styles.selectButton,
+                                        selected && styles.selectButtonSelected,
+                                    ]}
+                                    onPress={() => {
+                                        setTypeOfDisabilty(type);
+                                        setTypeOfDisabiltyError('');
+                                    }}
+                                >
+                                    <Text style={[
+                                        styles.selectButtonText,
+                                        selected && styles.selectButtonTextSelected,
+                                    ]}>
+                                        {disabilityLabels[type]}
+                                    </Text>
+                                </Pressable>
+                            );
+                        })}
                     </View>
 
                     {typeofdisabilityError ? <Text style={styles.errorText}>{typeofdisabilityError}</Text> : null}
@@ -265,6 +290,10 @@ const styles = StyleSheet.create({
       fontFamily: Fonts.bodyBold,
       fontSize: 15,
       fontWeight: '900',
+      color: Colors.text,
+    },
+
+    selectButtonTextSelected: {
       color: Colors.text,
     },
       

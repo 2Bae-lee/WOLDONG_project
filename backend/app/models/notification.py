@@ -9,6 +9,7 @@ class NotificationType(str, Enum):
     request_approved = "request_approved"     # 승인 완료 (동행인한테)
     request_rejected = "request_rejected"     # 거절 (동행인한테)
     emergency = "emergency"                   # 돌발상황 (부모한테)
+    journal = "journal"                       # 동행일지 등록 (부모한테)
 
 
 class Notification(Document):

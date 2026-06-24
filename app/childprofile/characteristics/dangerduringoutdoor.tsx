@@ -5,9 +5,9 @@ import {
     ScrollView,
     StyleSheet,
     Text,
-    TextInput,
     View
 } from 'react-native';
+import BackButton from '../../../components/BackButton';
 import DangerOptionCard from '../../../components/DangerOptionCard';
 import PrimaryButton from '../../../components/PrimaryButton';
 import { Colors } from '../../../constants/Colors';
@@ -52,6 +52,39 @@ const dangerSituationOptions: Option[] = [
     },
 ];
 
+const companionActionOptions: Option[] = [
+    {
+        icon: '🤝',
+        label: '손을 꼭 잡고 이동해주세요',
+        value: 'hold_hands',
+    },
+    {
+        icon: '🚦',
+        label: '횡단보도 앞에서는 멈춰서 설명해주세요',
+        value: 'explain_before_crossing',
+    },
+    {
+        icon: '👀',
+        label: '사람 많은 곳에서는 가까이 있어주세요',
+        value: 'stay_close',
+    },
+    {
+        icon: '🗣️',
+        label: '갑자기 뛰면 이름을 부르고 천천히 멈춰주세요',
+        value: 'call_name_and_stop',
+    },
+    {
+        icon: '🧸',
+        label: '불안해하면 조용한 곳에서 쉬게 해주세요',
+        value: 'quiet_break',
+    },
+    {
+        icon: '🛑',
+        label: '위험한 물건은 먼저 치워주세요',
+        value: 'remove_dangerous_items',
+    },
+];
+
 
 export default function DangerProfile() {
     const params = useLocalSearchParams<{
@@ -66,7 +99,7 @@ export default function DangerProfile() {
     }>();
 
     const [selectedDangerSituations, setSelectedDangerSituations]= useState<string[]>([]);
-    const [companionAction, setCompanionAction]= useState('');
+    const [selectedCompanionActions, setSelectedCompanionActions]= useState<string[]>([]);
     const [optionError, setOptionError] = useState('');
 
     const toggleItem = (
@@ -87,13 +120,13 @@ export default function DangerProfile() {
     };
 
     const handleNext = () => {
-        if (selectedDangerSituations.length === 0 && companionAction.length === 0) {
-        setOptionError('주의가 필요한 상황 또는 동행인이 반드시 해야할 행동을 작성해주세요.');
+        if (selectedDangerSituations.length === 0 && selectedCompanionActions.length === 0) {
+        setOptionError('주의가 필요한 상황 또는 동행인이 반드시 해야할 행동을 선택해주세요.');
         return;
     }
 
     router.push({
-        pathname: '/childprofile/intellectual/environment',
+        pathname: '/childprofile/characteristics/environment',
         params: {
             name: params.name ?? '',
             profileImage: params.profileImage ?? '',
@@ -104,7 +137,7 @@ export default function DangerProfile() {
             guidanceOptions: params.guidanceOptions ?? '',
             communicationOptions: params.communicationOptions ?? '',
             dangerSituations: JSON.stringify(selectedDangerSituations),
-            companionAction: companionAction,
+            companionAction: JSON.stringify(selectedCompanionActions),
         },
         } as any);
     };
@@ -118,9 +151,10 @@ export default function DangerProfile() {
         <View style={styles.container}>
             <View style={styles.logoArea}>
             <View style={styles.logoRow}>
+                <BackButton />
                 <Text style={styles.logoTitle}>월동</Text>
                 <Image
-                source={require('../../assets/images/canola_flower_small.png')}
+                source={require('../../../assets/images/canola_flower_small.png')}
                 style={styles.logoFlower}
                 resizeMode="contain"
                 />
@@ -174,16 +208,28 @@ export default function DangerProfile() {
                 <Text style={styles.sectionTitle}>
                     동행인이 반드시 해야 할 행동이 있나요? 
                 </Text>
-                <TextInput
-                    style={styles.textArea}
-                    multiline
-                    placeholder={
-                        '예) 손을 꼭 잡고 이동해주세요\n횡단보도 전 반드시 멈춰 설명해주세요'
-                    }
-                    value={companionAction}
-                    onChangeText={setCompanionAction}
+                <View style={styles.optionGrid}>
+                    {companionActionOptions.map((option) => {
+                        const selected =
+                        selectedCompanionActions.includes(option.value);
 
-                    />
+                        return (
+                        <DangerOptionCard
+                            key={option.value}
+                            icon={option.icon}
+                            label={option.label}
+                            selected={selected}
+                            onPress={() =>
+                            toggleItem(
+                                option.value,
+                                selectedCompanionActions,
+                                setSelectedCompanionActions
+                            )
+                            }
+                        />
+                        );
+                    })}
+                </View>
             
             </View>
 
@@ -373,18 +419,4 @@ export default function DangerProfile() {
         marginTop: 'auto',
         marginBottom: 44,
     },
-    
-    textArea: {
-        minHeight: 140,
-        borderWidth: 1,
-        borderColor: Colors.pageBg3,
-        borderRadius: 16,
-        backgroundColor: Colors.pageBg,
-        padding: 16,
-        textAlignVertical: 'top',
-
-        fontFamily: Fonts.body,
-        fontSize: 15,
-        color: Colors.text,
-},
 });

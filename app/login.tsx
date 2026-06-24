@@ -5,6 +5,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,8 +14,12 @@ import {
   View,
 } from 'react-native';
 import PrimaryButton from '../components/PrimaryButton';
+import { login } from '../constants/Api';
 import { Colors } from '../constants/Colors';
 import { Fonts } from '../constants/Fonts';
+
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const mockLoginEmail = 'woldong';
 
 export default function Login() {
     const [id, setId] = useState('');
@@ -23,16 +28,20 @@ export default function Login() {
     const [passwordError, setPasswordError] = useState('');
     const [passwordMatchError, setPasswordMatchError] = useState('');
     const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const mockid = 'woldong'
-    const mockpw = 'wd1!'
+    const handleNext = async () => {
+        if (isSubmitting) return;
 
-    const handleNext = () => {
         const trimmedid = id.trim();
         const trimmedpassword = password.trim();
 
         if (trimmedid === '') {
-            setIdError('아이디를 입력해주세요.');
+            setIdError('이메일을 입력해주세요.');
+            return;
+        }
+        if (trimmedid !== mockLoginEmail && !emailRegex.test(trimmedid)) {
+            setIdError('이메일 형식에 오류가 있어요.');
             return;
         }
         if (trimmedpassword === '') {
@@ -40,20 +49,34 @@ export default function Login() {
             return;
         }
 
-        if (trimmedid !== mockid) {
-            setIdError('아이디를 재확인하세요.');
-            return;
-        }
-
-        if (trimmedid == mockid  && trimmedpassword !== mockpw){
-            setPasswordMatchError('비밀번호를 재확인하세요');
-            return;
-        }
-
         setIdError('');
         setPasswordError('');
-        
-        router.push('childprofile/childname' as any);
+        setPasswordMatchError('');
+        setIsSubmitting(true);
+
+        try {
+            const response = await login({
+                email: trimmedid,
+                password: trimmedpassword,
+            });
+            const role = response.data?.user.role;
+
+            if (role === 'parent') {
+                router.replace('/paraent_home' as any);
+                return;
+            }
+
+            if (role === 'companion') {
+                router.replace('/companion_home' as any);
+                return;
+            }
+
+            setPasswordMatchError('계정 역할을 확인할 수 없어요.');
+        } catch (error) {
+            setPasswordMatchError(error instanceof Error ? error.message : '로그인에 실패했어요.');
+        } finally {
+            setIsSubmitting(false);
+        }
         }
     
     return (
@@ -95,6 +118,8 @@ export default function Login() {
                             <TextInput
                                 style={styles.idInput}
                                 autoCapitalize="none"
+                                keyboardType="email-address"
+                                textContentType="emailAddress"
                                 value={id}
                                 onChangeText={(text) => {
                                 setId(text);
@@ -153,7 +178,7 @@ export default function Login() {
                         ) : null}
                     </View>
                     <View style={styles.buttonArea}>
-                        <PrimaryButton label="계속" onPress={handleNext} />
+                        <PrimaryButton label={isSubmitting ? '로그인 중' : '계속'} onPress={handleNext} />
                     </View>
                     <Text style={styles.policyText}>
                         계속을 클릭하면 당사의{' '}
@@ -161,6 +186,14 @@ export default function Login() {
                         <Text style={styles.policyBoldText}>개인정보 처리방침</Text>에{'\n'}
                         동의하는 것으로 간주됩니다.
                     </Text>
+                    <Pressable
+                        style={styles.signupLink}
+                        onPress={() => router.push('/signup/signuprole')}
+                    >
+                        <Text style={styles.signupText}>
+                            계정이 없나요? <Text style={styles.signupBoldText}>회원가입</Text>
+                        </Text>
+                    </Pressable>
                     </ScrollView>
             </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
@@ -276,6 +309,23 @@ const styles = StyleSheet.create({
         color: Colors.textShadow,
         textAlign: 'center',
       },
+    signupLink: {
+        marginTop: 18,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+    },
+    signupText: {
+        fontFamily: Fonts.body,
+        fontSize: 14,
+        color: Colors.textShadow,
+        textAlign: 'center',
+    },
+    signupBoldText: {
+        fontFamily: Fonts.bodyBold,
+        fontWeight: '900',
+        color: Colors.text,
+        textDecorationLine: 'underline',
+    },
     inputError: {
         borderColor: Colors.highlight3,
       },

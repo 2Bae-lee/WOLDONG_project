@@ -1,16 +1,23 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Image, StyleSheet, Text, TextInput, View } from 'react-native';
 import SmallButton from '../../../components/SmallButton';
+import { sendSignupCode } from '../../../constants/Api';
 import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
 
 export default function ParentSignupEmail() {
+    const params = useLocalSearchParams<{
+      name?: string;
+    }>();
     const [email, setEmail] = useState('');
     const [emailError, setEmailError] = useState('');
+    const [isSending, setIsSending] = useState(false);
   
 
-    const handleNext = () => {
+    const handleNext = async () => {
+      if (isSending) return;
+
       const trimmedEmail = email.trim();
       if (trimmedEmail === '') {
         setEmailError('이메일을 입력해 주세요.');
@@ -24,7 +31,24 @@ export default function ParentSignupEmail() {
       }
 
       setEmailError('');
-      router.push('/signup/parent/authenticate' as any);
+      setIsSending(true);
+
+      try {
+        await sendSignupCode(trimmedEmail);
+      } catch (error) {
+        setEmailError(error instanceof Error ? error.message : '인증번호 발송에 실패했어요.');
+        setIsSending(false);
+        return;
+      }
+
+      setIsSending(false);
+      router.push({
+        pathname: '/signup/parent/authenticate',
+        params: {
+          name: params.name ?? '',
+          email: trimmedEmail,
+        },
+      } as any);
     }
 
   return (
@@ -68,7 +92,7 @@ export default function ParentSignupEmail() {
         ) : null}
 
         <SmallButton
-          label="계속"
+          label={isSending ? '전송 중' : '계속'}
           onPress={handleNext}
         />
       </View>

@@ -14,6 +14,10 @@ class User(Document):
     password: str            # 해시된 비밀번호
     role: Role
     phone: Optional[str] = None
+    relation: Optional[str] = None
+    job: Optional[str] = None
+    intro: Optional[str] = None
+    profile_image_url: Optional[str] = None
     created_at: datetime = datetime.now()
 
     class Settings:

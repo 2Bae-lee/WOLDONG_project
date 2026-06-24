@@ -7,8 +7,9 @@ class Settings(BaseSettings):
     PORT: int = 8000
     EMAIL_USER: str
     EMAIL_PASS: str
+    AI_SERVER_URL: str = "https://sheath-crushed-sixteen.ngrok-free.dev"
 
     class Config:
-        env_file = ".env"
+        env_file = (".env", "../.env")
 
 settings = Settings()

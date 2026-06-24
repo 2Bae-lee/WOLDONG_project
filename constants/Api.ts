@@ -22,6 +22,7 @@ function getApiBaseUrl() {
 export const API_BASE_URL = getApiBaseUrl();
 const AUTH_TOKEN_KEY = 'woldong.authToken';
 const AUTH_USER_KEY = 'woldong.authUser';
+const AUTH_EXPIRED_MESSAGE = '로그인이 만료됐어요. 다시 로그인해주세요.';
 
 type ApiSuccess<T> = {
     success: true;
@@ -413,15 +414,28 @@ export const restoreAuthToken = async () => {
     return token;
 };
 
+const getRequestAuthToken = async () => authToken ?? await restoreAuthToken();
+
+const isAuthRequest = (path: string) => path.startsWith('/api/auth/');
+
+const handleUnauthorized = async (path: string, token: string | null) => {
+    if (!token || isAuthRequest(path)) return null;
+
+    await clearAuthSession();
+    return new ApiError(AUTH_EXPIRED_MESSAGE, 401);
+};
+
 export const apiRequest = async <T>(
     path: string,
     options: RequestInit = {}
 ): Promise<ApiSuccess<T>> => {
+    const token = await getRequestAuthToken();
+
     const response = await fetch(`${API_BASE_URL}${path}`, {
         ...options,
         headers: {
             'Content-Type': 'application/json',
-            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
             ...options.headers,
         },
     });
@@ -435,6 +449,13 @@ export const apiRequest = async <T>(
         throw new ApiError('서버 응답을 확인할 수 없어요.', response.status);
     }
 
+    const unauthorizedError = response.status === 401
+        ? await handleUnauthorized(path, token)
+        : null;
+    if (unauthorizedError) {
+        throw unauthorizedError;
+    }
+
     if (!response.ok || !body?.success) {
         throw new ApiError(body?.message ?? '서버 요청에 실패했어요.', response.status);
     }
@@ -446,11 +467,13 @@ const apiRawJsonRequest = async <T>(
     path: string,
     options: RequestInit = {}
 ): Promise<T> => {
+    const token = await getRequestAuthToken();
+
     const response = await fetch(`${API_BASE_URL}${path}`, {
         ...options,
         headers: {
             'Content-Type': 'application/json',
-            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
             ...options.headers,
         },
     });
@@ -462,6 +485,13 @@ const apiRawJsonRequest = async <T>(
         body = responseText ? JSON.parse(responseText) as ApiResponse<T> | T : null;
     } catch {
         throw new ApiError('서버 응답을 확인할 수 없어요.', response.status);
+    }
+
+    const unauthorizedError = response.status === 401
+        ? await handleUnauthorized(path, token)
+        : null;
+    if (unauthorizedError) {
+        throw unauthorizedError;
     }
 
     if (!response.ok) {
@@ -805,15 +835,24 @@ export const generateScheduleSocialStory = (
 };
 
 export const generateCharacterImage = async (traits: string) => {
+    const token = await getRequestAuthToken();
+
     const response = await fetch(`${API_BASE_URL}/api/ai/generate-character`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             Accept: 'image/png',
-            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ traits }),
     });
+
+    const unauthorizedError = response.status === 401
+        ? await handleUnauthorized('/api/ai/generate-character', token)
+        : null;
+    if (unauthorizedError) {
+        throw unauthorizedError;
+    }
 
     if (!response.ok) {
         const responseText = await response.text();

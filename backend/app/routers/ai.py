@@ -6,10 +6,11 @@ import httpx
 from app.models.user import User
 from app.middleware.auth import get_current_user
 from app.utils.response import success, error
+from config.settings import settings
 
 router = APIRouter(prefix="/api/ai", tags=["AI 연동"])
 
-AI_SERVER_URL = "https://sheath-crushed-sixteen.ngrok-free.dev"
+AI_SERVER_URL = settings.AI_SERVER_URL.rstrip("/")
 
 
 # ─── 요청 스키마 ────────────────────────────────────────

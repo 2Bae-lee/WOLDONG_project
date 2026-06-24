@@ -29,6 +29,15 @@ def normalize_ai_asset_urls(payload: dict) -> dict:
             for url in story_images
         ]
 
+    character_images = normalized.get("character_images")
+    if isinstance(character_images, dict):
+        normalized["character_images"] = {
+            name: f"{AI_SERVER_URL}{url}"
+            if isinstance(url, str) and url.startswith("/")
+            else url
+            for name, url in character_images.items()
+        }
+
     return normalized
 
 
@@ -131,14 +140,20 @@ async def generate_character_frames(body: GenerateCharacterRequest, user: User =
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{AI_SERVER_URL}/generate-character-frames",
+                headers=AI_SERVER_HEADERS,
                 json={"traits": body.traits},
-                timeout=60.0
+                timeout=600.0,
             )
-        return success(response.json(), "캐릭터 프레임 생성 완료")
+        response.raise_for_status()
+        return success(normalize_ai_asset_urls(response.json()), "캐릭터 프레임 생성 완료")
     except httpx.ConnectError:
         return error("AI 서버에 연결할 수 없습니다", 503)
-    except Exception as e:
-        return error(f"AI 서버 오류: {str(e)}", 500)
+    except httpx.TimeoutException:
+        return error("캐릭터 이미지 생성 시간이 초과되었습니다", 504)
+    except httpx.HTTPStatusError as exc:
+        return error(f"AI 서버 오류: {exc.response.status_code}", exc.response.status_code)
+    except Exception as exc:
+        return error(f"AI 서버 오류: {str(exc)}", 500)
 
 
 # POST /api/ai/social-story/tts - 소셜 스토리 생성 + TTS

@@ -14,7 +14,6 @@ class SocialStoryResponse(BaseModel):
     original_script: str
     converted_script: str
     audio_url: str
-    story_images: list[str] = Field(default_factory=list)
     story_category: str = "general"
     story_difficulty: str = "low"
     predicted_warnings: list[str] = Field(default_factory=list)

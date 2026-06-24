@@ -236,7 +236,6 @@ export type SocialStoryResponse = {
     original_script: string;
     converted_script: string;
     audio_url?: string;
-    story_images?: string[];
     story_category?: string;
     story_difficulty?: string;
     predicted_warnings?: string[];

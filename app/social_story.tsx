@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+    Animated,
     Image,
     Keyboard,
     KeyboardAvoidingView,
@@ -49,6 +50,48 @@ const getInfoItemLabel = (value: string) => (
         .replace(/^아동_주의_/, '주의사항: ')
 );
 
+const fallbackCharacterImage = require('../assets/images/mock_character.png');
+
+const findIdleImage = (value: unknown): string => {
+    if (typeof value === 'string') return value.trim();
+    if (!value || typeof value !== 'object') return '';
+
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const image = findIdleImage(item);
+            if (image) return image;
+        }
+        return '';
+    }
+
+    const record = value as Record<string, unknown>;
+    const directKeys = ['idle', 'default', 'neutral', 'url', 'uri', 'image_url', 'imageUrl', 'src', 'path', 'image'];
+
+    for (const key of directKeys) {
+        const image = findIdleImage(record[key]);
+        if (image) return image;
+    }
+
+    const nestedKeys = ['frames', 'images', 'character_images', 'characterImages', 'data', 'result'];
+
+    for (const key of nestedKeys) {
+        const image = findIdleImage(record[key]);
+        if (image) return image;
+    }
+
+    return '';
+};
+
+const parseIdleImage = (value?: string) => {
+    if (!value) return '';
+
+    try {
+        return findIdleImage(JSON.parse(value));
+    } catch {
+        return value.trim();
+    }
+};
+
 export default function SocialStoryScreen() {
     const params = useLocalSearchParams<{
         scheduleId?: string;
@@ -70,7 +113,15 @@ export default function SocialStoryScreen() {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
+    const floatY = useRef(new Animated.Value(0)).current;
     const audioUrl = toApiAssetUrl(result?.audio_url);
+    const idleImageUrl = useMemo(
+        () => parseIdleImage(params.characterImages),
+        [params.characterImages]
+    );
+    const characterSource = idleImageUrl
+        ? { uri: toApiAssetUrl(idleImageUrl) }
+        : fallbackCharacterImage;
     const audioPlayer = useAudioPlayer(null, { updateInterval: 250 });
     const audioStatus = useAudioPlayerStatus(audioPlayer);
 
@@ -83,6 +134,30 @@ export default function SocialStoryScreen() {
             playsInSilentMode: true,
         }).catch(() => undefined);
     }, []);
+
+    useEffect(() => {
+        const floatingAnimation = Animated.loop(
+            Animated.sequence([
+                Animated.timing(floatY, {
+                    toValue: -10,
+                    duration: 1200,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(floatY, {
+                    toValue: 0,
+                    duration: 1200,
+                    useNativeDriver: true,
+                }),
+            ])
+        );
+
+        floatingAnimation.start();
+
+        return () => {
+            floatingAnimation.stop();
+            floatY.setValue(0);
+        };
+    }, [floatY]);
 
     useEffect(() => {
         if (!audioUrl) {
@@ -263,13 +338,16 @@ export default function SocialStoryScreen() {
                     <View style={styles.resultCard}>
                         <Text style={styles.resultTitle}>완성된 이야기</Text>
 
-                        {result.story_images?.[0] ? (
-                            <Image
-                                source={{ uri: toApiAssetUrl(result.story_images[0]) }}
-                                style={styles.storyImage}
-                                resizeMode="cover"
+                        <View style={styles.characterStage}>
+                            <Animated.Image
+                                source={characterSource}
+                                style={[
+                                    styles.characterImage,
+                                    { transform: [{ translateY: floatY }] },
+                                ]}
+                                resizeMode="contain"
                             />
-                        ) : null}
+                        </View>
                         <Text style={styles.resultScript}>{result.converted_script}</Text>
 
                         {result.predicted_warnings?.length ? (
@@ -451,12 +529,20 @@ const styles = StyleSheet.create({
         marginBottom: 12,
     },
 
-    storyImage: {
-        width: '100%',
-        aspectRatio: 1,
+    characterStage: {
+        height: 230,
         borderRadius: 14,
         backgroundColor: Colors.pageBg,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
         marginBottom: 16,
+    },
+
+    characterImage: {
+        width: 198,
+        height: 198,
+        borderRadius: 18,
     },
 
     resultScript: {

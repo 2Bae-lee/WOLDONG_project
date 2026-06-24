@@ -92,6 +92,23 @@ const parseIdleImage = (value?: string) => {
     }
 };
 
+const getStoryImageUrl = (result?: SocialStoryResponse | null) => {
+    const imageUrl = result?.story_images?.find((url) => typeof url === 'string' && url.trim())
+        || result?.story_image
+        || '';
+
+    if (!imageUrl) return '';
+    if (/^(data:image\/|https?:\/\/|file:\/\/)/.test(imageUrl)) return imageUrl;
+
+    return toApiAssetUrl(imageUrl);
+};
+
+const getImageHeaders = (imageUrl: string) => (
+    imageUrl.includes('ngrok')
+        ? { 'ngrok-skip-browser-warning': 'true' }
+        : undefined
+);
+
 export default function SocialStoryScreen() {
     const params = useLocalSearchParams<{
         scheduleId?: string;
@@ -113,8 +130,10 @@ export default function SocialStoryScreen() {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
+    const [storyImageLoadFailed, setStoryImageLoadFailed] = useState(false);
     const floatY = useRef(new Animated.Value(0)).current;
     const audioUrl = toApiAssetUrl(result?.audio_url);
+    const storyImageUrl = getStoryImageUrl(result);
     const idleImageUrl = useMemo(
         () => parseIdleImage(params.characterImages),
         [params.characterImages]
@@ -158,6 +177,10 @@ export default function SocialStoryScreen() {
             floatY.setValue(0);
         };
     }, [floatY]);
+
+    useEffect(() => {
+        setStoryImageLoadFailed(false);
+    }, [storyImageUrl]);
 
     useEffect(() => {
         if (!audioUrl) {
@@ -338,16 +361,28 @@ export default function SocialStoryScreen() {
                     <View style={styles.resultCard}>
                         <Text style={styles.resultTitle}>완성된 이야기</Text>
 
-                        <View style={styles.characterStage}>
-                            <Animated.Image
-                                source={characterSource}
-                                style={[
-                                    styles.characterImage,
-                                    { transform: [{ translateY: floatY }] },
-                                ]}
-                                resizeMode="contain"
+                        {storyImageUrl && !storyImageLoadFailed ? (
+                            <Image
+                                source={{
+                                    uri: storyImageUrl,
+                                    headers: getImageHeaders(storyImageUrl),
+                                }}
+                                style={styles.storyImage}
+                                resizeMode="cover"
+                                onError={() => setStoryImageLoadFailed(true)}
                             />
-                        </View>
+                        ) : (
+                            <View style={styles.characterStage}>
+                                <Animated.Image
+                                    source={characterSource}
+                                    style={[
+                                        styles.characterImage,
+                                        { transform: [{ translateY: floatY }] },
+                                    ]}
+                                    resizeMode="contain"
+                                />
+                            </View>
+                        )}
                         <Text style={styles.resultScript}>{result.converted_script}</Text>
 
                         {result.predicted_warnings?.length ? (
@@ -536,6 +571,14 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         overflow: 'hidden',
+        marginBottom: 16,
+    },
+
+    storyImage: {
+        width: '100%',
+        aspectRatio: 1,
+        borderRadius: 14,
+        backgroundColor: Colors.pageBg,
         marginBottom: 16,
     },
 

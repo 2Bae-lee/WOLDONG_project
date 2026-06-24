@@ -29,6 +29,10 @@ def normalize_ai_asset_urls(payload: dict) -> dict:
             for url in story_images
         ]
 
+    story_image = normalized.get("story_image")
+    if isinstance(story_image, str) and story_image.startswith("/"):
+        normalized["story_image"] = f"{AI_SERVER_URL}{story_image}"
+
     character_images = normalized.get("character_images")
     if isinstance(character_images, dict):
         normalized["character_images"] = {

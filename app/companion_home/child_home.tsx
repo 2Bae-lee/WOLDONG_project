@@ -184,6 +184,9 @@ export default function CompanionChildHome() {
         profileSections?: string;
         guardian?: string;
         characterImages?: string;
+        characterTone?: string;
+        characterSpeed?: string;
+        characterVoice?: string;
         tab?: string;
         addedEventId?: string;
         addedEventYear?: string;
@@ -764,6 +767,9 @@ export default function CompanionChildHome() {
                                 script: storyScript,
                                 scheduleId,
                                 characterImages: params.characterImages ?? '',
+                                characterTone: params.characterTone ?? '',
+                                characterSpeed: params.characterSpeed ?? '',
+                                characterVoice: params.characterVoice ?? '',
                                 profileImage,
                                 checkedItems: JSON.stringify(storyCheckedItems),
                             },

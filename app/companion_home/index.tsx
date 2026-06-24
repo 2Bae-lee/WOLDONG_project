@@ -17,6 +17,9 @@ import {
     View,
 } from 'react-native';
 import {
+    CharacterSpeed,
+    CharacterTone,
+    CharacterVoice,
     CompanionChild,
     TodayScheduleSummary,
     getCompanionChildren,
@@ -40,6 +43,9 @@ type ChildItem = {
     profileImage?: string;
     profileSections?: string;
     characterImages?: CompanionChild['character_image_url'];
+    characterTone?: CharacterTone | null;
+    characterSpeed?: CharacterSpeed | null;
+    characterVoice?: CharacterVoice | null;
     guardian: string;
     schedules: number;
     permissions: string[];
@@ -301,6 +307,9 @@ export default function CompanionChildren() {
                 profileImage: child.profile_image_url ?? '',
                 profileSections: serializeChildProfileSections(child),
                 characterImages: child.character_image_url,
+                characterTone: child.character_tone ?? null,
+                characterSpeed: child.character_speed ?? null,
+                characterVoice: child.character_voice ?? null,
                 guardian: '연결된 보호자',
                 schedules: scheduleCountByChildId.get(child.child_id) ?? 0,
                 permissions: [
@@ -589,6 +598,9 @@ export default function CompanionChildren() {
                 profileSections: child.profileSections ?? '',
                 guardian: child.guardian,
                 characterImages: child.characterImages ? JSON.stringify(child.characterImages) : '',
+                characterTone: child.characterTone ?? '',
+                characterSpeed: child.characterSpeed ?? '',
+                characterVoice: child.characterVoice ?? '',
             },
         } as any);
     };

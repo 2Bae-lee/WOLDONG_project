@@ -1,14 +1,26 @@
-const generatedCharacterImages: Record<string, string> = {};
+import type { CharacterImages } from './Api';
 
-export const saveGeneratedCharacterImage = (imageUri: string) => {
+const generatedCharacterImages: Record<string, CharacterImages> = {};
+
+export const saveGeneratedCharacterImages = (images: CharacterImages) => {
     const key = `character-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    generatedCharacterImages[key] = imageUri;
+    generatedCharacterImages[key] = images;
 
     return key;
 };
 
-export const getGeneratedCharacterImage = (key?: string) => {
-    if (!key) return '';
+export const saveGeneratedCharacterImage = (imageUri: string) => (
+    saveGeneratedCharacterImages({ idle: imageUri })
+);
 
-    return generatedCharacterImages[key] ?? '';
+export const getGeneratedCharacterImages = (key?: string): CharacterImages | null => {
+    if (!key) return null;
+
+    return generatedCharacterImages[key] ?? null;
+};
+
+export const getGeneratedCharacterImage = (key?: string) => {
+    const images = getGeneratedCharacterImages(key);
+
+    return images?.idle ?? '';
 };

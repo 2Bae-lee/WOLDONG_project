@@ -16,7 +16,7 @@ import {
 import BackButton from '../../../components/BackButton';
 import PrimaryButton from '../../../components/PrimaryButton';
 import RequiredMark from '../../../components/RequiredMark';
-import { getGeneratedCharacterImage } from '../../../constants/CharacterImageStore';
+import { getGeneratedCharacterImages } from '../../../constants/CharacterImageStore';
 import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
 
@@ -97,7 +97,8 @@ export default function MakeCharacterCustomize() {
 
     const childName = params.name || '아이';
     const profileImage = params.profileImage ?? '';
-    const characterImageUri = getGeneratedCharacterImage(params.characterImageKey);
+    const characterImages = getGeneratedCharacterImages(params.characterImageKey);
+    const characterImageUri = characterImages?.idle ?? '';
     const [characterName, setCharacterName] = useState('');
     const [gender, setGender] = useState<CharacterGender | null>(null);
     const [tone, setTone] = useState<VoiceTone | null>(null);

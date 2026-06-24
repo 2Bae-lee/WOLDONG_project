@@ -18,6 +18,9 @@ import {
 } from 'react-native';
 import {
     CharacterImages,
+    CharacterSpeed,
+    CharacterTone,
+    CharacterVoice,
     TodayScheduleSummary,
     deleteSchedule,
     getInviteRequests,
@@ -187,6 +190,10 @@ export default function ParentHome() {
         updatedChildName?: string;
         updatedProfileImage?: string;
         updatedProfileSections?: string;
+        updatedCharacterImages?: string;
+        updatedCharacterTone?: CharacterTone;
+        updatedCharacterSpeed?: CharacterSpeed;
+        updatedCharacterVoice?: CharacterVoice;
     }>();
     const todayTitle = useMemo(() => getTodayTitle(), []);
     const today = useMemo(() => new Date(), []);
@@ -232,6 +239,9 @@ export default function ParentHome() {
     const [childProfileImage, setChildProfileImage] = useState('');
     const [childProfileSections, setChildProfileSections] = useState('');
     const [childCharacterImages, setChildCharacterImages] = useState<CharacterImages | null>(null);
+    const [childCharacterTone, setChildCharacterTone] = useState<CharacterTone | undefined>();
+    const [childCharacterSpeed, setChildCharacterSpeed] = useState<CharacterSpeed | undefined>();
+    const [childCharacterVoice, setChildCharacterVoice] = useState<CharacterVoice | undefined>();
     const [selectedCalendarDay, setSelectedCalendarDay] = useState(todayDay);
     const [schedules, setSchedules] = useState(initialSchedules);
     const [handoffs, setHandoffs] = useState(initialHandoffs);
@@ -348,6 +358,9 @@ export default function ParentHome() {
                 if (firstChild?.character_image_url) {
                     setChildCharacterImages(firstChild.character_image_url);
                 }
+                setChildCharacterTone(firstChild?.character_tone ?? undefined);
+                setChildCharacterSpeed(firstChild?.character_speed ?? undefined);
+                setChildCharacterVoice(firstChild?.character_voice ?? undefined);
 
                 const apiSchedules = todaySchedulesResponse.data?.length
                     ? todaySchedulesResponse.data
@@ -389,6 +402,29 @@ export default function ParentHome() {
 
         if (typeof params.updatedProfileSections === 'string') {
             setChildProfileSections(params.updatedProfileSections);
+        }
+
+        if (typeof params.updatedCharacterImages === 'string' && params.updatedCharacterImages) {
+            try {
+                const parsedCharacterImages = JSON.parse(params.updatedCharacterImages);
+                if (parsedCharacterImages && typeof parsedCharacterImages === 'object') {
+                    setChildCharacterImages(parsedCharacterImages as CharacterImages);
+                }
+            } catch {
+                // 홈 재진입 시 API에서 다시 맞춰집니다.
+            }
+        }
+
+        if (params.updatedCharacterTone) {
+            setChildCharacterTone(params.updatedCharacterTone);
+        }
+
+        if (params.updatedCharacterSpeed) {
+            setChildCharacterSpeed(params.updatedCharacterSpeed);
+        }
+
+        if (params.updatedCharacterVoice) {
+            setChildCharacterVoice(params.updatedCharacterVoice);
         }
 
         const addedScheduleId = params.addedScheduleId;
@@ -523,6 +559,10 @@ export default function ParentHome() {
         params.tab,
         params.updatedChildId,
         params.updatedChildName,
+        params.updatedCharacterImages,
+        params.updatedCharacterSpeed,
+        params.updatedCharacterTone,
+        params.updatedCharacterVoice,
         params.updatedProfileImage,
         params.updatedProfileSections,
     ]);
@@ -1090,6 +1130,9 @@ export default function ParentHome() {
                                                 characterImages: childCharacterImages
                                                     ? JSON.stringify(childCharacterImages)
                                                     : '',
+                                                characterTone: childCharacterTone ?? '',
+                                                characterSpeed: childCharacterSpeed ?? '',
+                                                characterVoice: childCharacterVoice ?? '',
                                                 checkedItems: JSON.stringify([
                                                     `일정_${selectedStoryEvent.title}`,
                                                     ...selectedStoryEvent.todos

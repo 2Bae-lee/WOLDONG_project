@@ -7,11 +7,12 @@ import PrimaryButton from '../../../components/PrimaryButton';
 import {
     ApiError,
     CharacterSpeed,
+    CharacterImages,
     generateSocialStoryTts,
     toApiAssetUrl,
     updateChildProfile,
 } from '../../../constants/Api';
-import { getGeneratedCharacterImage } from '../../../constants/CharacterImageStore';
+import { getGeneratedCharacterImages } from '../../../constants/CharacterImageStore';
 import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
 
@@ -19,6 +20,21 @@ const speedMap: Record<string, CharacterSpeed> = {
     '느리게': 'slow',
     '중간': 'normal',
     '빠르게': 'fast',
+};
+
+const hasFinalConsonant = (value: string) => {
+    const lastChar = value.trim().charAt(value.trim().length - 1);
+    const code = lastChar.charCodeAt(0);
+
+    if (code < 0xac00 || code > 0xd7a3) return false;
+
+    return (code - 0xac00) % 28 !== 0;
+};
+
+const getCharacterGreetingScript = (characterName: string) => {
+    const nameSuffix = hasFinalConsonant(characterName) ? '이에요' : '예요';
+
+    return `안녕하세요. 저는 ${characterName}${nameSuffix}. 만나서 반가워요. 앞으로 우리 천천히 함께 해봐요.`;
 };
 
 export default function MakeCharacterComplete() {
@@ -37,7 +53,8 @@ export default function MakeCharacterComplete() {
 
     const childName = params.name || '아이';
     const characterName = params.characterName || '캐릭터';
-    const characterImageUri = getGeneratedCharacterImage(params.characterImageKey);
+    const characterImages = getGeneratedCharacterImages(params.characterImageKey);
+    const characterImageUri = characterImages?.idle ?? '';
     const [isSaving, setIsSaving] = useState(false);
     const [saveError, setSaveError] = useState('');
     const [voiceError, setVoiceError] = useState('');
@@ -105,8 +122,7 @@ export default function MakeCharacterComplete() {
             }
 
             setIsPreparingVoice(true);
-            const previewScript = params.story?.trim()
-                || `안녕 ${childName}. 나는 ${characterName}야. 오늘도 천천히 함께 해볼게.`;
+            const previewScript = getCharacterGreetingScript(characterName);
             const response = await generateSocialStoryTts({
                 script: previewScript,
                 tone: params.tone ?? 'kind',
@@ -141,8 +157,17 @@ export default function MakeCharacterComplete() {
 
         try {
             if (params.childId) {
+                const nextCharacterImages: CharacterImages | undefined = characterImages
+                    ? {
+                        ...characterImages,
+                        idle: characterImages.idle || characterImageUri,
+                    }
+                    : characterImageUri
+                        ? { idle: characterImageUri }
+                        : undefined;
+
                 await updateChildProfile(params.childId, {
-                    character_image_url: characterImageUri ? { idle: characterImageUri } : undefined,
+                    character_image_url: nextCharacterImages,
                     character_name: characterName,
                     character_tone: params.tone ?? 'kind',
                     character_speed: speedMap[params.speed ?? '중간'] ?? 'normal',
@@ -156,6 +181,12 @@ export default function MakeCharacterComplete() {
                     updatedChildName: childName,
                     updatedProfileImage: params.profileImage ?? '',
                     updatedProfileSections: params.profileSections ?? '',
+                    updatedCharacterImages: characterImages
+                        ? JSON.stringify(characterImages)
+                        : '',
+                    updatedCharacterTone: params.tone ?? 'kind',
+                    updatedCharacterSpeed: speedMap[params.speed ?? '중간'] ?? 'normal',
+                    updatedCharacterVoice: params.gender ?? 'female',
                 },
             } as any);
         } catch (error) {

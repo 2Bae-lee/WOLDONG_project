@@ -61,6 +61,8 @@ export type CharacterImages = {
     smile?: string;
 };
 
+const characterImageKeys = ['idle', 'blink', 'mouth_open', 'mouth_wide', 'smile'] as const;
+
 const MOCK_PARENT_LOGIN = {
     email: 'woldong',
     password: 'wd1!',
@@ -895,4 +897,157 @@ export const generateCharacterImage = async (traits: string) => {
     }
 
     return blobToDataUri(await response.blob());
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+    Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+);
+
+const looksLikeImageValue = (value: string) => (
+    /^(data:image\/|https?:\/\/|file:\/\/|\/)/.test(value) ||
+    /\.(png|jpe?g|webp|gif)(\?|$)/i.test(value)
+);
+
+const getStringFromFramePayload = (value: unknown) => {
+    if (typeof value === 'string' && value.trim()) return value;
+    if (!isRecord(value)) return '';
+
+    const candidateKeys = [
+        'url',
+        'uri',
+        'image_url',
+        'imageUrl',
+        'imageURL',
+        'frame_url',
+        'frameUrl',
+        'asset_url',
+        'public_url',
+        'data_url',
+        'dataUrl',
+        'image',
+        'src',
+        'path',
+        'file',
+        'filename',
+        'location',
+    ];
+    for (const key of candidateKeys) {
+        const candidate = value[key];
+        if (typeof candidate === 'string' && candidate.trim()) return candidate;
+    }
+
+    const mimeType = typeof value.mime_type === 'string'
+        ? value.mime_type
+        : typeof value.mimeType === 'string'
+            ? value.mimeType
+            : 'image/png';
+    const base64 = typeof value.base64 === 'string'
+        ? value.base64
+        : typeof value.b64 === 'string'
+            ? value.b64
+            : '';
+    if (base64) return `data:${mimeType};base64,${base64}`;
+
+    for (const candidate of Object.values(value)) {
+        if (typeof candidate === 'string' && looksLikeImageValue(candidate)) return candidate;
+    }
+
+    return '';
+};
+
+const normalizeCharacterImageArray = (payload: unknown[]): CharacterImages | null => {
+    const frameValues = payload.map(getStringFromFramePayload).filter(Boolean);
+    if (!frameValues.length) return null;
+
+    const [idle, mouthOpen, mouthWide, blink, smile] = frameValues;
+
+    return {
+        idle,
+        mouth_open: mouthOpen,
+        mouth_wide: mouthWide,
+        blink,
+        smile,
+    };
+};
+
+const normalizeCharacterImages = (payload: unknown): CharacterImages | null => {
+    if (Array.isArray(payload)) {
+        return normalizeCharacterImageArray(payload);
+    }
+
+    if (!isRecord(payload)) return null;
+
+    const images: Partial<CharacterImages> = {};
+    const frameAliases: Record<keyof CharacterImages, string[]> = {
+        idle: ['idle', 'default', 'neutral', 'closed', 'frame_0', 'frame0', 'image_0', 'image0'],
+        mouth_open: ['mouth_open', 'mouthOpen', 'open', 'talk', 'talking', 'speaking', 'frame_1', 'frame1', 'image_1', 'image1'],
+        mouth_wide: ['mouth_wide', 'mouthWide', 'wide', 'talking_wide', 'speaking_wide', 'frame_2', 'frame2', 'image_2', 'image2'],
+        blink: ['blink', 'blinking', 'eyes_closed', 'eye_closed', 'frame_3', 'frame3', 'image_3', 'image3'],
+        smile: ['smile', 'smiling', 'happy', 'frame_4', 'frame4', 'image_4', 'image4'],
+    };
+
+    characterImageKeys.forEach((key) => {
+        for (const alias of frameAliases[key]) {
+            const frameValue = getStringFromFramePayload(payload[alias]);
+            if (frameValue) {
+                images[key] = frameValue;
+                break;
+            }
+        }
+    });
+
+    const firstFrame = images.idle || images.mouth_open || images.mouth_wide || images.blink || images.smile;
+    if (firstFrame) {
+        return {
+            ...images,
+            idle: images.idle ?? firstFrame,
+        };
+    }
+
+    const nestedKeys = [
+        'images',
+        'image_urls',
+        'imageUrls',
+        'frame_urls',
+        'frameUrls',
+        'frames',
+        'character_images',
+        'characterImages',
+        'character_frames',
+        'characterFrames',
+        'items',
+        'urls',
+        'data',
+        'result',
+    ];
+    for (const key of nestedKeys) {
+        const nestedImages = normalizeCharacterImages(payload[key]);
+        if (nestedImages) return nestedImages;
+    }
+
+    return null;
+};
+
+export const generateCharacterFrames = async (traits: string) => {
+    const response = await apiRawJsonRequest<unknown>('/api/ai/generate-character-frames', {
+        method: 'POST',
+        body: JSON.stringify({ traits }),
+    });
+    const images = normalizeCharacterImages(response);
+
+    if (!images) {
+        throw new ApiError('캐릭터 말하기 이미지를 만들지 못했어요.', 500);
+    }
+
+    const frameCount = characterImageKeys.filter((key) => Boolean(images[key])).length;
+    if (frameCount < 5) {
+        throw new ApiError(`캐릭터 말하기 이미지가 ${frameCount}장만 생성됐어요. 5장이 필요해요.`, 500);
+    }
+
+    const uniqueFrameCount = new Set(characterImageKeys.map((key) => images[key]).filter(Boolean)).size;
+    if (uniqueFrameCount < 5) {
+        throw new ApiError(`캐릭터 말하기 이미지가 ${uniqueFrameCount}종류만 생성됐어요. 서로 다른 5장이 필요해요.`, 500);
+    }
+
+    return images;
 };

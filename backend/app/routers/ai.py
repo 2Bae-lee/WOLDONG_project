@@ -41,6 +41,22 @@ def normalize_ai_asset_urls(payload: dict) -> dict:
     return normalized
 
 
+def normalize_character_frame_urls(payload):
+    if isinstance(payload, str) and payload.startswith("/"):
+        return f"{AI_SERVER_URL}{payload}"
+
+    if isinstance(payload, list):
+        return [normalize_character_frame_urls(item) for item in payload]
+
+    if isinstance(payload, dict):
+        return {
+            key: normalize_character_frame_urls(value)
+            for key, value in payload.items()
+        }
+
+    return payload
+
+
 # ─── 요청 스키마 ────────────────────────────────────────
 class PredictWarningRequest(BaseModel):
     checked_items: list[str]
@@ -145,7 +161,7 @@ async def generate_character_frames(body: GenerateCharacterRequest, user: User =
                 timeout=600.0,
             )
         response.raise_for_status()
-        return success(normalize_ai_asset_urls(response.json()), "캐릭터 프레임 생성 완료")
+        return success(normalize_character_frame_urls(response.json()), "캐릭터 프레임 생성 완료")
     except httpx.ConnectError:
         return error("AI 서버에 연결할 수 없습니다", 503)
     except httpx.TimeoutException:

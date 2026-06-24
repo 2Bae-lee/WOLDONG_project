@@ -15,8 +15,8 @@ import {
 import BackButton from '../../../components/BackButton';
 import PrimaryButton from '../../../components/PrimaryButton';
 import RequiredMark from '../../../components/RequiredMark';
-import { generateCharacterImage } from '../../../constants/Api';
-import { saveGeneratedCharacterImage } from '../../../constants/CharacterImageStore';
+import { generateCharacterFrames } from '../../../constants/Api';
+import { saveGeneratedCharacterImages } from '../../../constants/CharacterImageStore';
 import { Colors } from '../../../constants/Colors';
 import { Fonts } from '../../../constants/Fonts';
 
@@ -49,8 +49,8 @@ export default function MakeCharacterStory() {
         setIsGenerating(true);
 
         try {
-            const characterImageUri = await generateCharacterImage(trimmedStory);
-            const characterImageKey = saveGeneratedCharacterImage(characterImageUri);
+            const characterImages = await generateCharacterFrames(trimmedStory);
+            const characterImageKey = saveGeneratedCharacterImages(characterImages);
 
             router.push({
                 pathname: '/childprofile/makecharacter/customize',

@@ -20,6 +20,9 @@ import PrimaryButton from '../components/PrimaryButton';
 import {
     ApiError,
     CharacterImages,
+    CharacterSpeed,
+    CharacterTone,
+    CharacterVoice,
     SocialStoryResponse,
     generateScheduleSocialStory,
     generateSocialStoryTts,
@@ -73,11 +76,12 @@ const toImageSource = (value?: string): ImageSourcePropType | null => {
     return { uri: toApiAssetUrl(value) };
 };
 
-const characterFrameKeys: Array<keyof Pick<CharacterImages, 'idle' | 'mouth_open' | 'mouth_wide' | 'blink'>> = [
+const characterFrameKeys: Array<keyof CharacterImages> = [
     'idle',
     'mouth_open',
     'mouth_wide',
     'blink',
+    'smile',
 ];
 
 export default function SocialStoryScreen() {
@@ -88,6 +92,9 @@ export default function SocialStoryScreen() {
         script?: string;
         checkedItems?: string;
         characterImages?: string;
+        characterTone?: CharacterTone;
+        characterSpeed?: CharacterSpeed;
+        characterVoice?: CharacterVoice;
     }>();
     const checkedItems = useMemo(() => parseCheckedItems(params.checkedItems), [params.checkedItems]);
     const [selectedInfoItems, setSelectedInfoItems] = useState<string[]>(checkedItems);
@@ -175,9 +182,15 @@ export default function SocialStoryScreen() {
             const response = params.scheduleId && !hasSelectableInfo
                 ? await generateScheduleSocialStory(params.scheduleId, {
                     script: trimmedScript,
+                    tone: params.characterTone,
+                    speed: params.characterSpeed,
+                    voice: params.characterVoice,
                 })
                 : await generateSocialStoryTts({
                     script: trimmedScript,
+                    tone: params.characterTone,
+                    speed: params.characterSpeed,
+                    voice: params.characterVoice,
                     checked_items: selectedInfoItems,
                     threshold: 0.5,
                 });
